@@ -1,0 +1,11 @@
+{
+  "id": "plugin.video.demo",
+  "name": "Video di prova",
+  "version": "1.0.0",
+  "author": "Salotto",
+  "summary": "Filmati open source per provare il lettore",
+  "description": "Cortometraggi open source (Blender Foundation) e stream HLS di test. È anche l'esempio più semplice da cui partire per scrivere un add-on.",
+  "provides": ["video"],
+  "icon": "icon.svg",
+  "main": "main.js"
+}

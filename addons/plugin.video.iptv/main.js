@@ -1,0 +1,233 @@
+// Live TV from M3U playlists + XMLTV programme guide.
+// Paths: ""                  -> playlists
+//        "p/<i>"             -> groups of playlist i (or channels)
+//        "p/<i>/g/<group>"   -> channels of a group
+
+const cache = new Map();          // url -> { at, data }
+const TTL = 30 * 60 * 1000;
+
+// Public playlists of Italian free-to-air channels, usable with no setup.
+// Both projects list only streams that broadcasters make freely available.
+const PRESETS = [
+  { name: 'Digitale terrestre Italia (Free-TV)', url: 'https://raw.githubusercontent.com/Free-TV/IPTV/master/playlists/playlist_italy.m3u8', note: 'Solo canali gratuiti in chiaro, stream ufficiali' },
+  { name: 'Canali italiani (iptv-org)', url: 'https://iptv-org.github.io/iptv/countries/it.m3u', note: 'Elenco più ampio, include canali regionali e locali' },
+];
+
+function playlistsFromSettings(ctx) {
+  const presets = ctx.settings.presets === false ? [] : PRESETS;
+  return [...presets, ...userPlaylists(ctx)];
+}
+
+function userPlaylists(ctx) {
+  return String(ctx.settings.playlists || '')
+    .split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+    .map((l, i) => {
+      const parts = l.split('|').map(s => s.trim());
+      const url = parts.length > 1 ? parts.slice(1).join('|') : parts[0];
+      const name = parts.length > 1 ? parts[0] : `La mia playlist ${i + 1}`;
+      return { name, url };
+    });
+}
+
+async function cached(key, fn) {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < TTL) return hit.data;
+  const data = await fn();
+  cache.set(key, { at: Date.now(), data });
+  return data;
+}
+
+function attrs(s) {
+  const out = {};
+  const re = /([\w-]+)="([^"]*)"/g;
+  let m;
+  while ((m = re.exec(s))) out[m[1].toLowerCase()] = m[2];
+  return out;
+}
+
+/** Parse an extended M3U playlist. */
+function parseM3U(text) {
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+  const header = lines[0] && lines[0].startsWith('#EXTM3U') ? attrs(lines[0]) : {};
+  const channels = [];
+  let cur = null;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#EXTINF')) {
+      const comma = line.lastIndexOf(',');
+      const meta = attrs(line.slice(0, comma > 0 ? comma : line.length));
+      cur = {
+        name: (comma > 0 ? line.slice(comma + 1) : '').trim() || meta['tvg-name'] || 'Canale',
+        id: meta['tvg-id'] || '',
+        logo: meta['tvg-logo'] || '',
+        group: meta['group-title'] || 'Altri',
+        headers: {},
+      };
+    } else if (line.startsWith('#EXTVLCOPT:') && cur) {
+      const [k, ...v] = line.slice(11).split('=');
+      const val = v.join('=');
+      if (/http-referr?er/i.test(k)) cur.headers.Referer = val;
+      if (/http-user-agent/i.test(k)) cur.headers['User-Agent'] = val;
+    } else if (line.startsWith('#EXTGRP:') && cur) {
+      cur.group = line.slice(8).trim() || cur.group;
+    } else if (!line.startsWith('#')) {
+      const ch = cur || { name: line.split('/').pop(), id: '', logo: '', group: 'Altri', headers: {} };
+      ch.url = line;
+      channels.push(ch);
+      cur = null;
+    }
+  }
+  return { epg: header['url-tvg'] || header['x-tvg-url'] || '', channels };
+}
+
+async function loadPlaylist(url, ctx) {
+  return cached('m3u:' + url, async () => parseM3U(await ctx.http.text(url)));
+}
+
+// ---------------------------------------------------------------- EPG
+function xmltvDate(s) {
+  // 20261119153000 +0100
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?/.exec(s || '');
+  if (!m) return 0;
+  const [, y, mo, d, h, mi, se = '00', tz = '+0000'] = m;
+  const off = (tz[0] === '-' ? -1 : 1) * (Number(tz.slice(1, 3)) * 60 + Number(tz.slice(3)));
+  return Date.UTC(+y, +mo - 1, +d, +h, +mi, +se) - off * 60000;
+}
+
+async function fetchMaybeGz(url, ctx) {
+  const res = await ctx.http.get(url, { type: 'response', timeout: 45000 });
+  const gz = /\.gz(\?|$)/i.test(url);
+  if (gz && typeof DecompressionStream === 'function') {
+    return new Response(res.body.pipeThrough(new DecompressionStream('gzip'))).text();
+  }
+  return res.text();
+}
+
+async function loadEpg(url, ctx) {
+  if (!url) return null;
+  return cached('epg:' + url, async () => {
+    const src = await fetchMaybeGz(url, ctx);
+    const now = Date.now();
+    const horizon = now + 6 * 3600 * 1000;
+    const byChannel = new Map();
+    const re = /<programme\s([^>]*)>([\s\S]*?)<\/programme>/g;
+    let m;
+    while ((m = re.exec(src))) {
+      const a = ctx.xml.attrs(m[1]);
+      const stop = xmltvDate(a.stop);
+      const start = xmltvDate(a.start);
+      if (stop < now || start > horizon) continue;
+      const list = byChannel.get(a.channel) || [];
+      list.push({ start, stop, title: ctx.xml.text(m[2], 'title'), desc: ctx.xml.text(m[2], 'desc') });
+      byChannel.set(a.channel, list);
+    }
+    for (const l of byChannel.values()) l.sort((x, y) => x.start - y.start);
+    return byChannel;
+  }).catch(e => { ctx.log('EPG non disponibile', e.message); return null; });
+}
+
+function hhmm(t) { return new Date(t).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); }
+
+function nowNext(epg, id) {
+  if (!epg || !id) return null;
+  const list = epg.get(id);
+  if (!list) return null;
+  const now = Date.now();
+  const i = list.findIndex(p => p.start <= now && p.stop > now);
+  if (i < 0) return null;
+  return { now: list[i], next: list[i + 1] };
+}
+
+function toItem(ch, epg) {
+  const nn = nowNext(epg, ch.id);
+  const sub = nn
+    ? `Ora: ${nn.now.title} (fino alle ${hhmm(nn.now.stop)})` + (nn.next ? ` · Poi: ${nn.next.title}` : '')
+    : ch.group;
+  return {
+    label: ch.name,
+    subtitle: sub,
+    thumb: /^https:/.test(ch.logo) ? ch.logo : '',
+    url: ch.url,
+    headers: Object.keys(ch.headers).length ? ch.headers : undefined,
+    playable: true,
+    live: true,
+    type: /\.(mp3|aac|ogg)(\?|$)/i.test(ch.url) ? 'audio' : 'video',
+    info: { plot: nn ? nn.now.desc : '' },
+    resolve: Object.keys(ch.headers).length > 0,
+  };
+}
+
+async function context(i, ctx) {
+  const pls = playlistsFromSettings(ctx);
+  const pl = pls[i];
+  if (!pl) throw new Error('Playlist non trovata');
+  const data = await loadPlaylist(pl.url, ctx);
+  const epg = await loadEpg(ctx.settings.epg || data.epg, ctx);
+  return { pl, data, epg };
+}
+
+addon.register({
+  async list(path, ctx) {
+    const pls = playlistsFromSettings(ctx);
+    if (!path) {
+      if (!pls.length) {
+        return {
+          view: 'list',
+          message: 'Nessuna playlist configurata. Apri le impostazioni dell\'add-on e incolla l\'indirizzo di una playlist M3U.',
+          items: [{ label: 'Impostazioni dell\'add-on', action: 'settings' }],
+        };
+      }
+      if (pls.length === 1) path = 'p/0';
+      else {
+        return {
+          view: 'list',
+          items: [
+            ...pls.map((p, i) => ({ label: p.name, subtitle: p.note || p.url, path: 'p/' + i })),
+            { label: 'Aggiungi una playlist…', subtitle: 'Impostazioni dell\'add-on', action: 'settings' },
+          ],
+        };
+      }
+    }
+    const parts = path.split('/');
+    const i = Number(parts[1]);
+    const { data, epg } = await context(i, ctx);
+    const group = parts[2] === 'g' ? decodeURIComponent(parts.slice(3).join('/')) : null;
+    if (group === null && ctx.settings.groups !== false) {
+      const groups = new Map();
+      for (const ch of data.channels) {
+        for (const g of ch.group.split(';')) groups.set(g.trim() || 'Altri', (groups.get(g.trim() || 'Altri') || 0) + 1);
+      }
+      if (groups.size > 1) {
+        return {
+          view: 'list',
+          items: [
+            { label: 'Cerca un canale…', action: 'search' },
+            { label: 'Tutti i canali', subtitle: data.channels.length + ' canali', path: `p/${i}/g/*` },
+            ...[...groups].sort((a, b) => a[0].localeCompare(b[0])).map(([g, n]) => ({ label: g, subtitle: n + ' canali', path: `p/${i}/g/${encodeURIComponent(g)}` })),
+          ],
+        };
+      }
+    }
+    const chans = group && group !== '*'
+      ? data.channels.filter(c => c.group.split(';').map(s => s.trim() || 'Altri').includes(group))
+      : data.channels;
+    return { view: 'list', items: chans.map(c => toItem(c, epg)) };
+  },
+
+  async search(text, ctx) {
+    const q = text.toLowerCase();
+    const pls = playlistsFromSettings(ctx);
+    const out = [];
+    for (let i = 0; i < pls.length; i++) {
+      const { data, epg } = await context(i, ctx);
+      for (const c of data.channels) if (c.name.toLowerCase().includes(q)) out.push(toItem(c, epg));
+    }
+    return { view: 'list', items: out };
+  },
+
+  // Channels that need special headers (Referer, User-Agent) must go through the proxy.
+  async resolve(item) {
+    return { url: item.url, headers: item.headers, proxy: !!item.headers };
+  },
+});

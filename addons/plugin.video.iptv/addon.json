@@ -1,0 +1,44 @@
+{
+  "id": "plugin.video.iptv",
+  "name": "TV in diretta",
+  "version": "1.1.0",
+  "author": "Salotto",
+  "summary": "Canali live da playlist M3U con guida TV (XMLTV)",
+  "description": "Guarda canali TV e radio in diretta da una o più playlist M3U/M3U8, con loghi, gruppi e guida dei programmi XMLTV (anche .gz). Usa playlist di canali che hai il diritto di guardare, ad esempio i canali in chiaro trasmessi in streaming dalle emittenti.",
+  "provides": [
+    "live",
+    "video"
+  ],
+  "icon": "icon.svg",
+  "main": "main.js",
+  "settings": [
+    {
+      "id": "presets",
+      "type": "bool",
+      "label": "Mostra le playlist pubbliche dei canali italiani in chiaro",
+      "default": true,
+      "hint": "Free-TV/IPTV e iptv-org. Alcuni canali Rai funzionano solo da connessioni italiane."
+    },
+    {
+      "id": "playlists",
+      "type": "textarea",
+      "label": "Le mie playlist M3U",
+      "default": "",
+      "placeholder": "Canali in chiaro | https://esempio.it/canali.m3u",
+      "hint": "Una playlist per riga, nome facoltativo prima della barra verticale."
+    },
+    {
+      "id": "epg",
+      "type": "url",
+      "label": "Guida TV XMLTV (facoltativa)",
+      "default": "",
+      "hint": "URL di un file XMLTV (.xml o .xml.gz). Se vuoto si usa quello indicato nella playlist (url-tvg), se presente."
+    },
+    {
+      "id": "groups",
+      "type": "bool",
+      "label": "Raggruppa i canali per categoria",
+      "default": true
+    }
+  ]
+}

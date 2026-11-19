@@ -1,0 +1,45 @@
+{
+  "name": "Repository ufficiale Salotto",
+  "addons": [
+    {
+      "id": "plugin.video.demo",
+      "name": "Video di prova",
+      "version": "1.0.0",
+      "description": "Cortometraggi open source e stream HLS di test",
+      "manifest": "plugin.video.demo/addon.json",
+      "icon": "plugin.video.demo/icon.svg"
+    },
+    {
+      "id": "plugin.video.archive",
+      "name": "Internet Archive",
+      "version": "1.0.0",
+      "description": "Film di pubblico dominio e cartoni classici da archive.org",
+      "manifest": "plugin.video.archive/addon.json",
+      "icon": "plugin.video.archive/icon.svg"
+    },
+    {
+      "id": "plugin.video.iptv",
+      "name": "TV in diretta",
+      "version": "1.1.0",
+      "description": "Canali italiani del digitale terrestre e playlist M3U, con guida TV",
+      "manifest": "plugin.video.iptv/addon.json",
+      "icon": "plugin.video.iptv/icon.svg"
+    },
+    {
+      "id": "plugin.audio.radiobrowser",
+      "name": "Radio dal mondo",
+      "version": "1.0.0",
+      "description": "Migliaia di radio in diretta da radio-browser.info",
+      "manifest": "plugin.audio.radiobrowser/addon.json",
+      "icon": "plugin.audio.radiobrowser/icon.svg"
+    },
+    {
+      "id": "plugin.audio.podcast",
+      "name": "Podcast",
+      "version": "1.0.0",
+      "description": "Podcast da feed RSS o dalla ricerca",
+      "manifest": "plugin.audio.podcast/addon.json",
+      "icon": "plugin.audio.podcast/icon.svg"
+    }
+  ]
+}

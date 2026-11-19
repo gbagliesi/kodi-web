@@ -121,7 +121,7 @@ async function uiTests() {
     });
     await page.reload();
     await page.waitForSelector('.hero');
-    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.2.0');
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.2.1');
     console.log('✓ outdated bundled add-ons are updated at start-up');
     assert.ok(await page.evaluate(() => window.salotto.addons.getProxy().includes('/proxy?url=')), 'proxy auto-detected');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/home.png' });

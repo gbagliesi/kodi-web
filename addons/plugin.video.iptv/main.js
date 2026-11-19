@@ -163,6 +163,8 @@ function toItem(ch, epg) {
     playable: true,
     live: true,
     type: /\.(mp3|aac|ogg)(\?|$)/i.test(ch.url) ? 'audio' : 'video',
+    // IPTV links without a media extension (e.g. broadcaster redirectors) are almost always HLS
+    mime: /\.(mp4|m4v|webm|mp3|aac|ogg|ts)(\?|$)/i.test(ch.url) ? undefined : 'application/vnd.apple.mpegurl',
     info: { plot: nn ? nn.now.desc : '' },
     resolve: Object.keys(ch.headers).length > 0,
   };
@@ -238,6 +240,6 @@ addon.register({
 
   // Channels that need special headers (Referer, User-Agent) must go through the proxy.
   async resolve(item) {
-    return { url: item.url, headers: item.headers, proxy: !!item.headers };
+    return { url: item.url, mime: item.mime, headers: item.headers, proxy: !!item.headers };
   },
 });

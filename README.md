@@ -43,8 +43,14 @@ node server.js            # http://localhost:8787 e indirizzo per la rete locale
 Apri l'indirizzo mostrato (es. `http://192.168.1.20:8787`) da Chrome o Safari
 sull'iPad. `server.js` non ha dipendenze e richiede Node.js 18 o superiore.
 
-In alternativa si può pubblicare la cartella su un hosting statico qualsiasi
-(GitHub Pages, Netlify…). In quel caso l'app funziona lo stesso, ma senza
+### Online con GitHub Pages
+
+Il workflow `.github/workflows/pages.yml` pubblica l'app a ogni push su
+`main`. Va attivato una sola volta: *Settings → Pages → Build and deployment →
+Source: GitHub Actions*. L'app sarà su `https://<utente>.github.io/kodi-web/`
+e si può installare sull'iPad dalla schermata Home, senza nessun computer acceso.
+
+Su GitHub Pages, come su qualsiasi hosting statico, l'app funziona ma senza
 proxy: gli add-on che leggono siti senza CORS (molti feed RSS, alcune
 playlist) e i canali che richiedono header particolari non funzioneranno,
 finché non si indica un proxy in *Impostazioni*.

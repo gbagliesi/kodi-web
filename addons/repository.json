@@ -20,7 +20,7 @@
     {
       "id": "plugin.video.iptv",
       "name": "TV in diretta",
-      "version": "1.2.1",
+      "version": "1.3.0",
       "description": "Canali italiani del digitale terrestre e playlist M3U, con guida TV",
       "manifest": "plugin.video.iptv/addon.json",
       "icon": "plugin.video.iptv/icon.svg"

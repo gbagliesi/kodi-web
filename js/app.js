@@ -205,7 +205,7 @@ function renderHome() {
       h('button', { class: 'tile focusable', onclick: openUrlDialog },
         h('span', { class: 'tile-ico' }, '🔗'), h('span', { class: 'tile-name' }, 'Apri URL'), h('span', { class: 'tile-sub' }, 'MP4, WebM, MP3, HLS (.m3u8)'))),
     favs.length ? h('div', { class: 'section-title' }, 'Preferiti') : null,
-    favs.length ? renderItems(favs.map(f => f.item), { onPick: (it, i) => openFavourite(favs[i]) }) : null,
+    favs.length ? renderItems(favs.map(f => f.item), { onPick: (it, i) => openFavourite(favs[i], favs) }) : null,
     h('div', { class: 'section-title' }, 'Add-on'),
     installed.length
       ? h('div', { class: 'tiles' }, ...installed.map(a => addonTile(a, () => { location.hash = browseHash(a.manifest.id); })))
@@ -320,7 +320,8 @@ async function renderBrowse(id, path, params) {
     route();
   };
 
-  const onPick = (it) => pick(id, it, titleTrail);
+  const channels = channelList(id, listing.items);
+  const onPick = (it) => pick(id, it, titleTrail, channels);
   fill(view, 
     listing.message ? h('p', { class: 'empty' }, listing.message) : null,
     listing.items.length ? renderItems(listing.items, { onPick, listing }) : h('div', { class: 'empty' }, 'Nessun elemento.'),
@@ -328,7 +329,24 @@ async function renderBrowse(id, path, params) {
   focusFirst();
 }
 
-async function pick(addonId, it, trail = []) {
+// What the player needs to open an entry: the resolved stream plus the favourite key.
+async function openEntry(addonId, it) {
+  const stream = await addons.resolveItem(addonId, it);
+  return { item: { ...it, ...(stream.item || {}) }, stream, favEntry: { key: addonId + '|' + (it.path || it.url || it.id || it.label), addonId, item: it } };
+}
+
+// Live channels of a listing, in order: the player zaps through them without closing.
+function channelList(addonId, items) {
+  return items.filter(x => x.live && x.playable && !x.external && !x.action).map(x => ({ item: x, open: () => openEntry(addonId, x) }));
+}
+
+function channelsFor(it, list) {
+  if (!it.live || !list || list.length < 2) return undefined;
+  const index = list.findIndex(c => c.item === it);
+  return index >= 0 ? { list, index } : undefined;
+}
+
+async function pick(addonId, it, trail = [], channels) {
   if (it.action === 'search') {
     const q = await prompt(it.label, { placeholder: 'Cerca…' });
     if (q) location.hash = browseHash(addonId, '', { q, t: [...trail, 'Ricerca: ' + q].join('␟') });
@@ -346,20 +364,27 @@ async function pick(addonId, it, trail = []) {
   }
   toast('Apertura di «' + it.label + '»…', 1500);
   try {
-    const stream = await addons.resolveItem(addonId, it);
-    const merged = { ...it, ...(stream.item || {}) };
-    player.play(merged, stream, { favEntry: { key: addonId + '|' + (it.path || it.url || it.id || it.label), addonId, item: it } });
+    const r = await openEntry(addonId, it);
+    player.play(r.item, r.stream, { favEntry: r.favEntry, channels: channelsFor(it, channels) });
   } catch (e) {
     toast(e.message, 5000);
   }
 }
 
-function openFavourite(f) {
+function favouriteChannels(favs) {
+  return favs.filter(f => f.item?.live && !f.item.external && (f.addonId ? addons.getInstalled(f.addonId) : f.item.url)).map(f => ({
+    item: f.item,
+    open: async () => f.addonId ? openEntry(f.addonId, f.item) : { item: f.item, stream: { url: f.item.url, mime: f.item.mime }, favEntry: f },
+  }));
+}
+
+function openFavourite(f, favs = []) {
+  const channels = favouriteChannels(favs);
   if (f.addonId) {
     if (!addons.getInstalled(f.addonId)) { toast('Add-on non più installato'); return; }
-    pick(f.addonId, f.item);
+    pick(f.addonId, f.item, [], channels);
   } else {
-    player.play(f.item, { url: f.item.url }, { favEntry: f });
+    player.play(f.item, { url: f.item.url }, { favEntry: f, channels: channelsFor(f.item, channels) });
   }
 }
 
@@ -372,7 +397,7 @@ function renderFavourites() {
   }
   fill(view, renderItems(favs.map(f => ({ ...f.item, subtitle: addons.getInstalled(f.addonId)?.manifest.name || f.item.subtitle })), {
     mode: 'list',
-    onPick: (it, i) => openFavourite(favs[i]),
+    onPick: (it, i) => openFavourite(favs[i], favs),
   }));
   focusFirst();
 }

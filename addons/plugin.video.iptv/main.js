@@ -61,6 +61,7 @@ function parseM3U(text) {
         name: (comma > 0 ? line.slice(comma + 1) : '').trim() || meta['tvg-name'] || 'Canale',
         id: meta['tvg-id'] || '',
         logo: meta['tvg-logo'] || '',
+        chno: meta['tvg-chno'] || meta['channel-number'] || '',
         group: meta['group-title'] || 'Altri',
         headers: {},
       };
@@ -139,6 +140,24 @@ function nowNext(epg, id) {
   return { now: list[i], next: list[i + 1] };
 }
 
+// Italian DTT channel numbers (LCN), used when the playlist has no tvg-chno, so that
+// "5" on the remote is Canale 5 as on a TV set.
+const LCN = {
+  'rai 1': 1, 'rai 2': 2, 'rai 3': 3, 'rete 4': 4, 'rete4': 4, 'canale 5': 5, 'canale5': 5, 'italia 1': 6, 'italia1': 6,
+  'la7': 7, 'la 7': 7, 'tv8': 8, 'tv 8': 8, 'nove': 9, '20': 20, '20 mediaset': 20, 'mediaset 20': 20,
+  'rai 4': 21, 'iris': 22, 'rai 5': 23, 'rai movie': 24, 'rai premium': 25, 'cielo': 26, 'twentyseven': 27, '27 twentyseven': 27,
+  'tv2000': 28, 'tv 2000': 28, 'la7 cinema': 29, 'la7d': 29, 'la 5': 30, 'la5': 30, 'real time': 31, 'cine34': 34, 'cine 34': 34,
+  'focus': 35, 'top crime': 39, 'boing': 40, 'rai gulp': 42, 'rai yoyo': 43, 'rai news 24': 48, 'rainews24': 48, 'rai news24': 48,
+  'dmax': 52, 'rai storia': 54, 'rai scuola': 57, 'rai sport': 58,
+};
+
+function channelNumber(ch) {
+  const n = parseInt(ch.chno, 10);
+  if (n > 0) return n;
+  const key = ch.name.replace(/[ⒼⓎ]/g, '').replace(/\s*\((?:\d{3,4}p|hd|sd|fhd)\)|\s+(?:hd|fhd|sd)$/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return LCN[key] || undefined;
+}
+
 const YOUTUBE = /^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//i;
 
 function toItem(ch, epg) {
@@ -156,6 +175,7 @@ function toItem(ch, epg) {
   }
   return {
     label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(),
+    number: channelNumber(ch),
     subtitle: sub,
     thumb: /^https:/.test(ch.logo) ? ch.logo : '',
     url: ch.url,

@@ -333,6 +333,11 @@ async function pick(addonId, it, trail = []) {
     return;
   }
   if (it.action === 'settings') { go('addons/' + addonId); return; }
+  if (it.external) {
+    // Content that only plays on its own site (e.g. YouTube live channels)
+    if (/^https:\/\//i.test(it.external)) window.open(it.external, '_blank', 'noopener');
+    return;
+  }
   if (!it.playable) {
     location.hash = browseHash(addonId, it.path ?? '', { t: [...trail, it.label].join('␟') });
     return;

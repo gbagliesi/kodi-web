@@ -167,12 +167,18 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-/** First run: install the add-ons shipped with the app. */
+/**
+ * Installs the add-ons shipped with the app on first run, and on later runs
+ * updates any add-on from the official repository that has a newer version.
+ */
 export async function ensureBundledAddons() {
-  if (load('bundled-installed', false)) return;
+  const firstRun = !load('bundled-installed', false);
   try {
     const repo = await fetchRepository('addons/repository.json');
     for (const a of repo.addons) {
+      const inst = getInstalled(a.id);
+      const install = firstRun ? !inst : inst && inst.source === 'repo' && compareVersions(a.version, inst.manifest.version) > 0;
+      if (!install) continue;
       try { await installFromManifestUrl(a.manifest, { source: 'repo' }); } catch (e) { console.warn('bundled add-on failed', a.id, e); }
     }
     save('bundled-installed', true);

@@ -18,8 +18,10 @@ const SHOTS = process.env.SHOTS || '';
 const M3U = `#EXTM3U
 #EXTINF:-1 tvg-id="Rai1.it" tvg-logo="https://example.org/rai1.png" group-title="Generalisti",Rai 1
 https://example.org/live/rai1.m3u8
-#EXTINF:-1 tvg-id="La7.it" group-title="Generalisti",La7
+#EXTINF:-1 tvg-id="La7.it" group-title="Generalisti",La7 Ⓖ
 https://example.org/live/la7.m3u8
+#EXTINF:-1 tvg-id="" group-title="Generalisti",Euronews Ⓨ
+https://www.youtube.com/user/euronewsit/live
 #EXTINF:-1 tvg-id="" group-title="News",Notizie 24
 #EXTVLCOPT:http-referrer=https://example.org/
 https://example.org/live/news.m3u8
@@ -110,6 +112,15 @@ async function uiTests() {
     const installed = await page.evaluate(() => window.salotto.addons.listInstalled().map(a => a.manifest.id));
     assert.equal(installed.length, 5, 'bundled add-ons installed: ' + installed);
     console.log('✓ app boots and installs bundled add-ons:', installed.join(', '));
+    // An outdated add-on from the official repository is updated on the next start
+    await page.evaluate(() => {
+      const k = 'salotto:addons'; const m = JSON.parse(localStorage.getItem(k));
+      m['plugin.video.iptv'].manifest.version = '1.0.0'; localStorage.setItem(k, JSON.stringify(m));
+    });
+    await page.reload();
+    await page.waitForSelector('.hero');
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.2.0');
+    console.log('✓ outdated bundled add-ons are updated at start-up');
     assert.ok(await page.evaluate(() => window.salotto.addons.getProxy().includes('/proxy?url=')), 'proxy auto-detected');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/home.png' });
 
@@ -145,6 +156,12 @@ async function uiTests() {
     await page.waitForSelector('.row:has-text("Rai 1")');
     const sub = await page.locator('.row:has-text("Rai 1") .row-sub').textContent();
     assert.match(sub, /Ora: Telegiornale di prova .* Poi: Film della sera/);
+    assert.match(await page.locator('.row:has-text("La7") .row-sub').textContent(), /Solo dall'Italia/);
+    assert.equal((await page.locator('.row:has-text("La7") .row-label').textContent()).trim(), 'La7');
+    await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+    await page.click('.row:has-text("Euronews")');
+    assert.deepEqual(await page.evaluate(() => window.__opened), ['https://www.youtube.com/user/euronewsit/live']);
+    assert.equal(await page.evaluate(() => document.getElementById('player').hidden), true);
     if (SHOTS) await page.screenshot({ path: SHOTS + '/live.png' });
     await page.click('.row:has-text("Rai 1")');
     await page.waitForSelector('#player:not([hidden])');
@@ -153,7 +170,7 @@ async function uiTests() {
     assert.match(src, /rai1\.m3u8/);
     if (SHOTS) await page.screenshot({ path: SHOTS + '/player.png' });
     await page.click('#pl-close');
-    console.log('✓ live TV: Italian presets, groups, EPG now/next, HLS playback');
+    console.log('✓ live TV: Italian presets, groups, EPG now/next, geo/YouTube marks, HLS playback');
 
     // Channel with Referer goes through the proxy
     await page.goBack();

@@ -1,6 +1,6 @@
 // Service worker: makes the app installable and lets the shell load offline.
 // Network-first for the app's own files, never touches media or add-on traffic.
-const CACHE = 'salotto-v1';
+const CACHE = 'salotto-v2';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/app.js', 'js/addons.js', 'js/addon-runtime.js', 'js/player.js', 'js/nav.js', 'js/storage.js',

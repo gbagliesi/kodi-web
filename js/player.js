@@ -324,12 +324,24 @@ el.seek.addEventListener('change', () => {
   if (isFinite(v.duration)) v.currentTime = (el.seek.value / 1000) * v.duration;
   seeking = false;
 });
-el.root.addEventListener('pointermove', wake);
-el.root.addEventListener('pointerdown', wake);
-el.root.querySelector('.player-stage').addEventListener('click', () => {
-  if (el.ui.classList.contains('idle')) wake(); else togglePlay();
-});
-el.ui.addEventListener('click', (e) => {
-  if (e.target === el.ui) { if (el.ui.classList.contains('idle')) wake(); else togglePlay(); }
-});
+// Tapping the picture: on touch screens it shows/hides the controls (like a TV
+// remote overlay); with a mouse a click toggles play/pause as on desktop players.
+let lastPointer = 'mouse';
+el.root.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType || 'mouse'; }, { capture: true, passive: true });
+el.root.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') wake(); }, { passive: true });
+for (const bar of el.ui.querySelectorAll('.player-top, .player-bottom')) bar.addEventListener('pointerdown', wake, { passive: true });
+
+function hideControls() {
+  clearTimeout(idleTimer);
+  el.ui.classList.add('idle');
+  if (el.ui.contains(document.activeElement)) document.activeElement.blur();
+}
+
+function onBackgroundTap() {
+  const hidden = el.ui.classList.contains('idle');
+  if (lastPointer === 'mouse') { if (hidden) wake(); else togglePlay(); return; }
+  if (hidden) wake(); else hideControls();
+}
+el.root.querySelector('.player-stage').addEventListener('click', onBackgroundTap);
+el.ui.addEventListener('click', (e) => { if (e.target === el.ui) onBackgroundTap(); });
 window.addEventListener('pagehide', () => saveResume(true));

@@ -204,6 +204,7 @@ button { cursor: pointer; }
   transition: opacity .3s;
 }
 .player-ui.idle { opacity: 0; }
+.player-ui.idle .player-top, .player-ui.idle .player-bottom { pointer-events: none; }
 .player-ui.idle * { cursor: none; }
 .player-top { display: flex; align-items: center; gap: 12px; }
 .player-title { flex: 1; font-size: 20px; font-weight: 600; text-shadow: 0 1px 4px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -224,7 +225,7 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
 .toast {
   position: fixed; left: 50%; bottom: calc(24px + var(--safe-bottom)); transform: translateX(-50%); z-index: 70;
   background: var(--panel-hi); padding: 12px 20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
-  max-width: 90vw;
+  max-width: 90vw; pointer-events: none;
 }
 
 /* ---------- Portrait / small screens: sidebar becomes a bottom bar ---------- */

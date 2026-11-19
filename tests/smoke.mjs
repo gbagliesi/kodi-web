@@ -43,8 +43,8 @@ const RADIO = [{ stationuuid: 'u1', name: 'Radio Prova', url_resolved: 'https://
   { stationuuid: 'u2', name: 'Solo HTTP', url_resolved: 'http://example.org/radio.mp3', country: 'Italy', tags: '', bitrate: 64, favicon: '' }];
 
 async function mock(context) {
-  await context.route(/^https:\/\/(raw\.githubusercontent\.com|iptv-org\.github\.io)\//, r => r.fulfill({ status: 200, contentType: 'audio/x-mpegurl', body: M3U.replace('#EXTM3U', `#EXTM3U url-tvg="https://epg.example.org/guide.xml"`), headers: { 'access-control-allow-origin': '*' } }));
-  await context.route('https://epg.example.org/**', r => r.fulfill({ status: 200, contentType: 'application/xml', body: EPG, headers: { 'access-control-allow-origin': '*' } }));
+  await context.route(/^https:\/\/(raw\.githubusercontent\.com|iptv-org\.github\.io)\//, r => r.fulfill({ status: 200, contentType: 'audio/x-mpegurl', body: M3U.replace('#EXTM3U', `#EXTM3U x-tvg-url="https://epg.example.org/epg_DE1.xml.gz, https://epg.example.org/epg_IT1.xml, https://epg.example.org/epg_US1.xml.gz"`), headers: { 'access-control-allow-origin': '*' } }));
+  await context.route('https://epg.example.org/**', r => r.request().url().endsWith('/epg_IT1.xml') ? r.fulfill({ status: 200, contentType: 'application/xml', body: EPG, headers: { 'access-control-allow-origin': '*' } }) : r.fulfill({ status: 404, body: '' }));
   await context.route('https://de1.api.radio-browser.info/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(RADIO), headers: { 'access-control-allow-origin': '*' } }));
   await context.route('https://archive.org/advancedsearch.php**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ response: { numFound: 1, docs: [{ identifier: 'film1', title: 'Film di prova', year: 1950, description: '<b>Trama</b>' }] } }) }));
   await context.route('https://archive.org/metadata/**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ d1: 'ia800.example.org', dir: '/1/items/film1', files: [{ name: 'film1.ogv' }, { name: 'film1_512kb.mp4', format: 'h.264' }] }) }));
@@ -153,7 +153,7 @@ async function uiTests() {
     });
     await page.reload();
     await page.waitForSelector('.hero');
-    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.3.1');
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.3.2');
     console.log('✓ outdated bundled add-ons are updated at start-up');
     assert.ok(await page.evaluate(() => window.salotto.addons.getProxy().includes('/proxy?url=')), 'proxy auto-detected');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/home.png' });

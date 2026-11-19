@@ -2,6 +2,7 @@ import * as store from './storage.js';
 import * as addons from './addons.js';
 import * as player from './player.js';
 import { handleNavKey, focusables } from './nav.js';
+import { versionLabel } from './version.js';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -209,6 +210,7 @@ function renderHome() {
     installed.length
       ? h('div', { class: 'tiles' }, ...installed.map(a => addonTile(a, () => { location.hash = browseHash(a.manifest.id); })))
       : h('div', { class: 'empty' }, 'Nessun add-on installato. ', h('button', { class: 'btn focusable', onclick: () => go('addons/repo') }, 'Sfoglia il repository')),
+    h('p', { class: 'hint', style: { textAlign: 'center', marginTop: '28px', color: 'var(--muted)', fontSize: '12px' } }, 'Salotto ' + versionLabel()),
   );
   focusFirst();
 }
@@ -580,6 +582,10 @@ function renderSettings() {
         }
       } }, 'Ripristina tutto')),
     h('div', { class: 'section-title' }, 'Informazioni'),
+    h('div', { class: 'field' },
+      h('label', {}, 'Versione: ', h('span', { id: 'settings-version' }, versionLabel())),
+      h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: forceUpdate }, 'Forza aggiornamento')),
+      h('div', { class: 'hint' }, 'Scarica di nuovo l\'app ignorando la cache, se una correzione non compare. Add-on, preferiti e impostazioni restano.')),
     h('p', { class: 'hint' }, 'Salotto è un media center leggero ispirato ai media center da salotto, che gira interamente nel browser. Gli add-on sono script JavaScript eseguiti in isolamento (Web Worker). Usa solo fonti di cui hai i diritti.'),
   ));
   focusFirst();
@@ -605,10 +611,23 @@ window.addEventListener('hashchange', route);
 addons.setNotifyHandler((msg, m) => toast(`${m.name}: ${msg}`, 4000));
 addons.onAddonsChanged(() => { /* listings may depend on installed set */ });
 
+async function forceUpdate() {
+  toast('Aggiornamento…');
+  try {
+    if ('serviceWorker' in navigator) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+    if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+  } catch (e) { console.warn(e); }
+  const u = new URL(location.href);
+  u.searchParams.set('r', Date.now());
+  location.replace(u.href);
+}
+
 function tickClock() {
   $('clock').textContent = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 }
 setInterval(tickClock, 15000); tickClock();
+$('app-version').textContent = versionLabel();
+console.info('Salotto', versionLabel());
 
 // ---------------------------------------------------------------- boot
 (async function boot() {

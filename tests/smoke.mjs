@@ -97,6 +97,38 @@ async function proxyTests() {
   } finally { srv2.kill(); }
 }
 
+async function workerTests() {
+  const { default: worker } = await import(path.join(ROOT, 'cloudflare/worker.js'));
+  const up = http.createServer((req, res) => {
+    if (req.url.startsWith('/live/index.m3u8')) {
+      res.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl' });
+      res.end('#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:6,\nseg1.ts\n');
+    } else { res.writeHead(206, { 'content-type': 'video/mp2t', 'content-range': 'bytes 0-3/10' }); res.end('ref=' + (req.headers.referer || '') + ';range=' + (req.headers.range || '')); }
+  }).listen(0);
+  await new Promise(r => up.once('listening', r));
+  const port = up.address().port;
+  const W = 'https://salotto-proxy.example.workers.dev';
+  const env = { TOKEN: 's3cret', ALLOWED_ORIGINS: 'https://gbagliesi.github.io' };
+  const call = (q, headers = {}) => worker.fetch(new Request(W + q, { headers }), env);
+  try {
+    assert.equal(await (await call('/proxy/health')).text(), 'ok');
+    const target = encodeURIComponent(`http://127.0.0.1:${port}/live/index.m3u8`);
+    assert.equal((await call('/proxy?url=' + target)).status, 401);
+    assert.equal((await call('/proxy?token=s3cret&url=' + target, { Origin: 'https://evil.example' })).status, 403);
+    const pl = await call('/proxy?token=s3cret&url=' + target, { Origin: 'https://gbagliesi.github.io' });
+    assert.equal(pl.headers.get('access-control-allow-origin'), '*');
+    const body = await pl.text();
+    assert.match(body, /URI="proxy\?url=http%3A%2F%2F127\.0\.0\.1%3A\d+%2Flive%2Finit\.mp4&token=s3cret"/);
+    assert.match(body, /\nproxy\?url=http%3A%2F%2F127\.0\.0\.1%3A\d+%2Flive%2Fseg1\.ts&token=s3cret/);
+    const h = encodeURIComponent(JSON.stringify({ Referer: 'https://www.raiplay.it/' }));
+    const seg = await call(`/proxy?token=s3cret&headers=${h}&url=` + encodeURIComponent(`http://127.0.0.1:${port}/live/seg1.ts`), { Range: 'bytes=0-3' });
+    assert.equal(seg.status, 206);
+    assert.equal(seg.headers.get('content-range'), 'bytes 0-3/10');
+    assert.equal(await seg.text(), 'ref=https://www.raiplay.it/;range=bytes=0-3');
+    console.log('✓ Cloudflare worker: token, origin allow-list, HLS rewrite, headers and ranges');
+  } finally { up.close(); }
+}
+
 async function uiTests() {
   const server = spawn(process.execPath, [path.join(ROOT, 'server.js'), '--port', String(PORT), '--host', '127.0.0.1'], { stdio: 'ignore' });
   const browser = await chromium.launch();
@@ -200,6 +232,17 @@ async function uiTests() {
     assert.match(saved, /Mia \|/);
     console.log('✓ add-on settings are saved');
 
+    // Proxy settings: a bare Cloudflare address plus token become a full proxy URL
+    await page.goto(BASE + '#/settings');
+    await page.waitForSelector('#proxy');
+    await page.fill('#proxy', 'https://salotto-proxy.example.workers.dev/');
+    await page.fill('#proxy-token', 'abc');
+    await page.click('.btn:has-text("Salva")');
+    await waitFor(() => page.evaluate(() => window.salotto.addons.getProxy() === 'https://salotto-proxy.example.workers.dev/proxy?token=abc&url='));
+    await page.evaluate(() => window.salotto.store.setSettings({ proxyUrl: '', proxyToken: '' }));
+    await page.evaluate(() => window.salotto.addons.detectProxy());
+    console.log('✓ proxy settings accept a Cloudflare address and token');
+
     // Keyboard / remote navigation
     await page.goto(BASE + '#/');
     await page.waitForSelector('.hero');
@@ -240,5 +283,6 @@ async function uiTests() {
 }
 
 await proxyTests();
+await workerTests();
 await uiTests();
 console.log('\nTutti i test sono passati.');

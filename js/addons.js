@@ -13,8 +13,32 @@ export function onAddonsChanged(fn) { listeners.add(fn); return () => listeners.
 function emit() { for (const fn of listeners) { try { fn(); } catch (e) { console.error(e); } } }
 
 // ---------------------------------------------------------------- proxy
+/** Turn what the user typed (base address or full URL) into "<…>/proxy?[token=…&]url=". */
+export function buildProxyUrl(configured, token = '') {
+  configured = String(configured || '').trim();
+  if (!configured) return '';
+  const tok = String(token || '').trim();
+  if (/[?&]url=$/.test(configured)) {
+    if (tok && !/[?&]token=/.test(configured)) return configured.replace(/url=$/, 'token=' + encodeURIComponent(tok) + '&url=');
+    return configured;
+  }
+  let base = configured.split('?')[0].replace(/\/+$/, '');
+  if (!/\/proxy$/.test(base)) base += '/proxy';
+  return base + '?' + (tok ? 'token=' + encodeURIComponent(tok) + '&' : '') + 'url=';
+}
+
+/** Ask the proxy's health endpoint whether it is reachable. */
+export async function checkProxy(url = proxyUrl) {
+  if (!url) return false;
+  try {
+    const res = await fetch(url.split('?')[0] + '/health', { cache: 'no-store' });
+    return res.ok && (await res.text()).trim() === 'ok';
+  } catch { return false; }
+}
+
 export async function detectProxy() {
-  const configured = getSettings().proxyUrl.trim();
+  const s = getSettings();
+  const configured = buildProxyUrl(s.proxyUrl, s.proxyToken);
   if (configured) {
     proxyUrl = configured;
   } else {

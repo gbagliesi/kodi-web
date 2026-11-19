@@ -26,7 +26,8 @@ export function remove(key) {
 
 // ---- App settings ----
 const DEFAULT_SETTINGS = {
-  proxyUrl: '',          // e.g. http://192.168.1.10:8080/proxy?url=  (empty = auto-detect)
+  proxyUrl: '',          // proxy base (https://x.workers.dev) or full ...proxy?url= (empty = auto-detect)
+  proxyToken: '',        // optional token required by the proxy
   autoResume: true,
   viewMode: 'auto',      // auto | grid | list
   repositories: ['addons/repository.json'],

@@ -234,6 +234,24 @@ function toggleFullscreen() {
   }
 }
 
+// Phones: full screen video goes landscape, leaving full screen goes back to portrait.
+// Screen Orientation lock works on Android (Chrome, Edge, Samsung Internet) while
+// in full screen; on iPhone the system player rotates by itself.
+const isPhone = () => matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
+
+function onFullscreenChange() {
+  const fs = document.fullscreenElement || document.webkitFullscreenElement;
+  const o = screen.orientation;
+  if (!o) return;
+  if (fs && current && !current.audio && isPhone() && typeof o.lock === 'function') {
+    o.lock('landscape').catch(() => { /* not supported (e.g. iOS): ignore */ });
+  } else if (!fs && typeof o.unlock === 'function') {
+    try { o.unlock(); } catch { /* ignore */ }
+  }
+}
+document.addEventListener('fullscreenchange', onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
 /** Keyboard / remote handling while the player is open. Returns true if handled. */
 export function handleKey(e) {
   if (!isOpen()) return false;

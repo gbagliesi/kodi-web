@@ -291,8 +291,26 @@ async function uiTests() {
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       await pp.waitForTimeout(200);
       assert.ok(await pp.evaluate(() => document.getElementById('view').scrollTop) > 0, `${name}: list scrolls`);
+      if (name === 'Pixel 7') {
+        // Full screen video locks landscape; leaving full screen unlocks it
+        await pp.evaluate(() => {
+          window.__orient = [];
+          const o = screen.orientation;
+          o.lock = (v) => { window.__orient.push('lock:' + v); return Promise.resolve(); };
+          o.unlock = () => { window.__orient.push('unlock'); };
+        });
+        await pp.goto(BASE + '#/browse/plugin.video.demo?p=films');
+        await pp.waitForSelector('.card');
+        await pp.locator('.card').first().click();
+        await pp.waitForSelector('#player:not([hidden])');
+        await pp.click('#pl-fs');
+        await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:landscape')));
+        await pp.evaluate(() => document.exitFullscreen());
+        await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
+      }
       await phone.close();
     }
+    console.log('✓ phones: full screen video locks landscape and unlocks on exit');
     console.log('✓ phones (Android, iPhone): lists scroll with a swipe');
     console.log('✓ portrait layout uses a bottom menu bar');
 

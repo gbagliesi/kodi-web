@@ -273,6 +273,27 @@ async function uiTests() {
     const dir = await p2.evaluate(() => getComputedStyle(document.getElementById('app')).flexDirection);
     assert.equal(dir, 'column-reverse');
     if (SHOTS) await p2.screenshot({ path: SHOTS + '/portrait.png' });
+
+    // Phones: the list area must scroll with a finger swipe (bug seen on Android)
+    for (const name of ['Pixel 7', 'iPhone 13']) {
+      const phone = await browser.newContext({ ...devices[name], serviceWorkers: 'block' });
+      await mock(phone);
+      const pp = await phone.newPage();
+      await pp.goto(BASE);
+      await pp.waitForSelector('.hero');
+      const dims = await pp.evaluate(() => { const v = document.getElementById('view'); return [v.clientHeight, v.scrollHeight, document.getElementById('sidebar').getBoundingClientRect().bottom <= innerHeight + 1]; });
+      assert.ok(dims[1] > dims[0], `${name}: content taller than the viewport (${dims})`);
+      assert.ok(dims[2], `${name}: bottom menu visible`);
+      const cdp = await phone.newCDPSession(pp);
+      const y0 = Math.round(await pp.evaluate(() => innerHeight * 0.6));
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: y0 }] });
+      for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 180, y: y0 - i * 25 }] }); await pp.waitForTimeout(16); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await pp.waitForTimeout(200);
+      assert.ok(await pp.evaluate(() => document.getElementById('view').scrollTop) > 0, `${name}: list scrolls`);
+      await phone.close();
+    }
+    console.log('✓ phones (Android, iPhone): lists scroll with a swipe');
     console.log('✓ portrait layout uses a bottom menu bar');
 
     assert.deepEqual(errors, [], 'no page errors');

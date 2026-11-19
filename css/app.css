@@ -64,6 +64,7 @@ button { cursor: pointer; }
 .menu-item:hover { background: var(--panel); color: var(--text); }
 .menu-item.active { background: var(--panel-hi); color: var(--text); }
 .menu-item.active .ico { color: var(--accent); }
+.app-version { color: var(--muted); font-size: 12px; padding: 0 8px; opacity: .7; }
 .clock { color: var(--muted); font-size: 28px; font-weight: 300; padding: 8px; font-variant-numeric: tabular-nums; }
 
 /* ---------- Main ---------- */
@@ -233,7 +234,7 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
     width: 100%; flex-direction: row; padding: 6px calc(6px + var(--safe-right)) calc(6px + var(--safe-bottom)) calc(6px + var(--safe-left));
     border-right: 0; border-top: 1px solid rgba(255, 255, 255, .06);
   }
-  .brand, .clock { display: none; }
+  .brand, .clock, .app-version { display: none; }
   #menu { flex-direction: row; justify-content: space-around; overflow-x: auto; }
   .menu-item { flex-direction: column; gap: 2px; min-height: 56px; padding: 6px 8px; font-size: 11px; justify-content: center; }
   .menu-item .ico { font-size: 22px; }

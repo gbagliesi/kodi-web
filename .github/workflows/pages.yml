@@ -27,6 +27,9 @@ jobs:
         run: |
           mkdir _site
           cp -r index.html manifest.webmanifest sw.js css js icons addons docs README.md _site/
+          BUILD="$(git rev-parse --short HEAD) $(TZ=Europe/Rome date +'%d/%m %H:%M')"
+          sed -i "s|__BUILD__|${BUILD}|" _site/js/version.js
+          sed -i "s|__BUILD__|$(git rev-parse --short HEAD)|g" _site/sw.js _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

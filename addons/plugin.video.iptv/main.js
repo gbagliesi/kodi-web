@@ -93,6 +93,16 @@ async function loadPlaylist(url, ctx) {
 }
 
 // ---------------------------------------------------------------- EPG
+const EPG_WAIT = 5000;
+
+// url-tvg / x-tvg-url may hold a comma separated list (Free-TV lists ~100 guides, one per
+// country): use one, preferring the Italian guide.
+function pickEpgUrl(value) {
+  const urls = String(value || '').split(/[,\s]+/).map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
+  if (urls.length <= 1) return urls[0] || '';
+  return urls.find(u => /(^|[_\-/.])it\d*\.xml/i.test(u.split('/').pop())) || urls.find(u => /ital/i.test(u)) || urls[0];
+}
+
 function xmltvDate(s) {
   // 20261119153000 +0100
   const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?/.exec(s || '');
@@ -201,7 +211,11 @@ async function context(i, ctx) {
   const pl = pls[i];
   if (!pl) throw new Error('Playlist non trovata');
   const data = await loadPlaylist(pl.url, ctx);
-  const epg = await loadEpg(ctx.settings.epg || data.epg, ctx);
+  // The guide is a bonus: never keep the channel list waiting for it. If it is not
+  // ready within a few seconds the list shows without it and the guide keeps loading
+  // in the background for the next visit.
+  const epgUrl = pickEpgUrl(ctx.settings.epg || data.epg);
+  const epg = await Promise.race([loadEpg(epgUrl, ctx), new Promise(r => setTimeout(() => r(null), EPG_WAIT))]);
   return { pl, data, epg };
 }
 

@@ -22,6 +22,8 @@ https://example.org/live/rai1.m3u8
 https://example.org/live/la7.m3u8
 #EXTINF:-1 tvg-id="" group-title="Generalisti",Euronews Ⓨ
 https://www.youtube.com/user/euronewsit/live
+#EXTINF:-1 tvg-id="Rai1.it" group-title="Generalisti",Rai 1 Ⓖ
+https://mediapolis.example.org/relinker/relinkerServlet.htm?cont=2606803&output=7
 #EXTINF:-1 tvg-id="" group-title="News",Notizie 24
 #EXTVLCOPT:http-referrer=https://example.org/
 https://example.org/live/news.m3u8
@@ -154,7 +156,7 @@ async function uiTests() {
     await page.waitForSelector('.row:has-text("Generalisti")');
     await page.click('.row:has-text("Generalisti")');
     await page.waitForSelector('.row:has-text("Rai 1")');
-    const sub = await page.locator('.row:has-text("Rai 1") .row-sub').textContent();
+    const sub = await page.locator('.row:has-text("Rai 1") .row-sub').first().textContent();
     assert.match(sub, /Ora: Telegiornale di prova .* Poi: Film della sera/);
     assert.match(await page.locator('.row:has-text("La7") .row-sub').textContent(), /Solo dall'Italia/);
     assert.equal((await page.locator('.row:has-text("La7") .row-label').textContent()).trim(), 'La7');
@@ -163,7 +165,7 @@ async function uiTests() {
     assert.deepEqual(await page.evaluate(() => window.__opened), ['https://www.youtube.com/user/euronewsit/live']);
     assert.equal(await page.evaluate(() => document.getElementById('player').hidden), true);
     if (SHOTS) await page.screenshot({ path: SHOTS + '/live.png' });
-    await page.click('.row:has-text("Rai 1")');
+    await page.locator('.row:has-text("Rai 1")').first().click();
     await page.waitForSelector('#player:not([hidden])');
     await waitFor(() => page.evaluate(() => window.__hlsSrc || document.getElementById('video').src));
     const src = await page.evaluate(() => window.__hlsSrc || document.getElementById('video').src);
@@ -207,6 +209,17 @@ async function uiTests() {
     const f2 = await page.evaluate(() => document.activeElement.textContent);
     assert.ok(f1 && f2 && f1 !== f2, `focus moved: ${f1} -> ${f2}`);
     console.log('✓ arrow-key navigation moves focus');
+
+    // Desktop Chrome: extension-less broadcaster links go through hls.js
+    const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+    await mock(desktop);
+    const p3 = await desktop.newPage();
+    await p3.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
+    await p3.waitForSelector('.row:has-text("Solo dall\'Italia")');
+    await p3.click('.row:has-text("Rai 1"):has-text("Solo dall\'Italia")');
+    await waitFor(() => p3.evaluate(() => (window.__hlsSrc || '').includes('relinkerServlet')));
+    await desktop.close();
+    console.log('✓ desktop: extension-less live links are played with hls.js');
 
     // Portrait layout (bottom bar)
     const portrait = await browser.newContext({ ...devices['iPad Mini'], serviceWorkers: 'block' });

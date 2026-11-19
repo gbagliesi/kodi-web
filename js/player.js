@@ -3,6 +3,11 @@
 import { getResume, setResume, getSettings, isFavourite, toggleFavourite } from './storage.js';
 import { getProxy, proxify } from './addons.js';
 
+const UA = navigator.userAgent;
+const APPLE = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+  (/Safari\//.test(UA) && !/Chrome|Chromium|CriOS|FxiOS|Edg|Android/.test(UA));
+const hasMse = () => !!(window.MediaSource || window.ManagedMediaSource);
+
 const HLS_CDN = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js';
 
 const $ = (id) => document.getElementById(id);
@@ -20,6 +25,7 @@ let seeking = false;
 let lastSave = 0;
 let onCloseCb = null;
 let triedProxy = false;
+let triedHls = false;
 
 export const isOpen = () => !el.root.hidden;
 
@@ -72,10 +78,15 @@ async function attach(stream) {
   destroyHls();
   const v = el.video;
   const url = buildUrl(stream);
-  const native = v.canPlayType('application/vnd.apple.mpegurl');
+  // Apple devices play HLS natively (and without CORS limits); elsewhere hls.js
+  // is more reliable than the browser's own support, when Media Source is available.
+  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && (APPLE || !hasMse());
   if (looksHls(stream.url, stream.mime) && !native) {
     await loadScript(HLS_CDN);
-    if (!window.Hls || !window.Hls.isSupported()) throw new Error('HLS non supportato da questo browser');
+    if (!window.Hls || !window.Hls.isSupported()) {
+      if (v.canPlayType('application/vnd.apple.mpegurl')) { v.src = url; return; }
+      throw new Error('HLS non supportato da questo browser');
+    }
     hls = new window.Hls({ enableWorker: true, lowLatencyMode: !!current?.item.live });
     hls.on(window.Hls.Events.ERROR, (_, data) => {
       if (!data.fatal) return;
@@ -86,7 +97,10 @@ async function attach(stream) {
         return;
       }
       if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
-      showMsg('Errore di riproduzione (' + data.details + '). Lo stream potrebbe essere offline o bloccato (CORS).');
+      const cors = data.type === window.Hls.ErrorTypes.NETWORK_ERROR && !getProxy();
+      showMsg(cors
+        ? 'Questo stream non permette la riproduzione da un sito web in questo browser (CORS). Su iPad e Safari di solito funziona; altrove serve il proxy (Impostazioni).'
+        : 'Errore di riproduzione (' + data.details + '). Lo stream potrebbe essere offline.');
     });
     hls.loadSource(url);
     hls.attachMedia(v);
@@ -160,6 +174,7 @@ function updateFavBtn() {
  */
 export async function play(item, stream, opts = {}) {
   triedProxy = false;
+  triedHls = false;
   const audio = item.type === 'audio' || /^audio\//.test(stream.mime || '');
   current = { item, stream, key: stream.url, audio, favEntry: opts.favEntry };
   onCloseCb = opts.onClose || null;
@@ -256,8 +271,18 @@ v.addEventListener('pause', () => { el.play.innerHTML = '&#9654;'; wake(); saveR
 v.addEventListener('waiting', () => showMsg('Buffering…'));
 v.addEventListener('ended', () => { if (current) setResume(current.key, 0, 0); el.play.innerHTML = '&#9654;'; });
 v.addEventListener('error', () => {
-  if (hls) return; // hls.js reports its own errors
+  if (hls || !current) return; // hls.js reports its own errors
   const code = v.error?.code;
+  // Many live URLs (redirectors, extension-less links) are HLS in disguise:
+  // when the browser cannot play them natively, retry with the HLS engine.
+  if (code === 4 && !triedHls && !looksHls(current.stream.url, current.stream.mime)) {
+    triedHls = true;
+    showMsg('Provo come stream HLS…');
+    const stream = { ...current.stream, mime: 'application/vnd.apple.mpegurl' };
+    current.stream = stream;
+    attach(stream).then(() => v.play().catch(() => {})).catch(e => showMsg(e.message));
+    return;
+  }
   const reasons = { 1: 'interrotto', 2: 'errore di rete', 3: 'errore di decodifica', 4: 'formato non supportato o stream non raggiungibile' };
   showMsg('Impossibile riprodurre: ' + (reasons[code] || 'errore sconosciuto'));
 });

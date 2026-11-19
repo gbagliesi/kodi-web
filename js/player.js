@@ -16,6 +16,8 @@ const el = {
   close: $('pl-close'), fav: $('pl-fav'), play: $('pl-play'), rew: $('pl-rew'), fwd: $('pl-fwd'),
   seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'),
   msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
+  chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
+  osdName: $('pl-osd-name'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
 };
 
 let hls = null;
@@ -26,6 +28,7 @@ let lastSave = 0;
 let onCloseCb = null;
 let triedProxy = false;
 let triedHls = false;
+let channels = null;      // { list: [{ item, open() }], index } when zapping between live channels
 
 export const isOpen = () => !el.root.hidden;
 
@@ -133,6 +136,8 @@ function setupMediaSession(item) {
     navigator.mediaSession.setActionHandler('pause', () => el.video.pause());
     navigator.mediaSession.setActionHandler('seekbackward', () => skip(-10));
     navigator.mediaSession.setActionHandler('seekforward', () => skip(30));
+    navigator.mediaSession.setActionHandler('nexttrack', channels ? () => zap(1) : null);
+    navigator.mediaSession.setActionHandler('previoustrack', channels ? () => zap(-1) : null);
   } catch { /* unsupported actions */ }
 }
 
@@ -170,11 +175,16 @@ function updateFavBtn() {
  * Open the player.
  * @param item   listing item (label, thumb, type, live...)
  * @param stream { url, mime?, headers?, subtitles?, proxy? }
- * @param opts   { favEntry?, onClose? }
+ * @param opts   { favEntry?, onClose?, channels? }  channels = { list: [{ item, open }], index }
+ *               lets the viewer switch live channel (CH +/−, swipe, arrows, number) without leaving.
  */
 export async function play(item, stream, opts = {}) {
   triedProxy = false;
   triedHls = false;
+  channels = opts.channels && opts.channels.list.length > 1 ? opts.channels : null;
+  if (channels && !channels.numbers) channels.numbers = numberChannels(channels.list);
+  pendingIndex = -1;
+  updateChannelUi();
   const audio = item.type === 'audio' || /^audio\//.test(stream.mime || '');
   current = { item, stream, key: stream.url, audio, favEntry: opts.favEntry };
   onCloseCb = opts.onClose || null;
@@ -200,7 +210,7 @@ export async function play(item, stream, opts = {}) {
   } catch (e) {
     showMsg(e.message);
   }
-  el.play.focus({ preventScroll: true });
+  if (!opts.keepFocus || !el.root.contains(document.activeElement)) el.play.focus({ preventScroll: true });
 }
 
 export function close() {
@@ -217,6 +227,9 @@ export function close() {
   }
   el.root.hidden = true;
   current = null;
+  channels = null;
+  clearTimeout(zapTimer); clearTimeout(digitTimer); digits = ''; zapToken++;
+  el.osd.hidden = true; el.panel.hidden = true;
   const cb = onCloseCb; onCloseCb = null;
   if (cb) cb();
 }
@@ -255,7 +268,30 @@ document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 /** Keyboard / remote handling while the player is open. Returns true if handled. */
 export function handleKey(e) {
   if (!isOpen()) return false;
+  if (document.activeElement === el.chNum) {
+    if (e.key === 'Escape') { closePanel(); return true; }
+    if (e.key === 'Enter') { const n = parseInt(el.chNum.value, 10); if (n) { closePanel(); jumpTo(n); } return true; }
+    return false; // typing in the channel number box
+  }
   wake();
+  if (channels) {
+    if (/^[0-9]$/.test(e.key)) { typeDigit(e.key); return true; }
+    if (e.key === 'Enter' && digits) { commitDigits(); return true; }
+    const a = document.activeElement;
+    const inPanel = !el.panel.hidden && el.panel.contains(a);
+    switch (e.key) {
+      case 'ArrowUp': case 'ArrowDown':
+        if (inPanel || a === el.vol) return false;
+        zap(e.key === 'ArrowUp' ? 1 : -1); return true;
+      case 'PageUp': case 'ChannelUp': case 'MediaTrackNext': zap(1); return true;
+      case 'PageDown': case 'ChannelDown': case 'MediaTrackPrevious': zap(-1); return true;
+      case 'Escape': case 'Backspace': case 'BrowserBack':
+        if (!el.panel.hidden) { closePanel(); return true; }
+        break;
+      case 'c': togglePanel(); return true;
+      default: break;
+    }
+  }
   switch (e.key) {
     case ' ': case 'MediaPlayPause': case 'k': togglePlay(); return true;
     case 'Escape': case 'Backspace': case 'BrowserBack': close(); return true;
@@ -271,6 +307,143 @@ export function handleKey(e) {
     default: return false;
   }
 }
+
+// ---------------------------------------------------------------- live channels
+let pendingIndex = -1;   // channel shown on the OSD while the viewer is still pressing CH +/−
+let zapTimer = 0, osdTimer = 0, digitTimer = 0, zapToken = 0;
+let digits = '';
+
+// Numbers shown and typed: the broadcast number when the add-on knows it (first copy wins),
+// the others follow after the highest one; a list with no numbers at all is numbered 1, 2, 3…
+function numberChannels(list) {
+  const used = new Set();
+  const out = list.map((c) => {
+    const n = parseInt(c.item.number, 10);
+    if (n > 0 && !used.has(n)) { used.add(n); return n; }
+    return 0;
+  });
+  let next = used.size ? Math.max(...used) + 1 : 1;
+  return out.map(n => n || next++);
+}
+const chNumber = (_it, i) => String(channels?.numbers?.[i] ?? i + 1);
+
+function updateChannelUi() {
+  const on = !!channels;
+  el.chUp.hidden = el.chDown.hidden = el.chList.hidden = !on;
+  // live TV cannot be rewound: the channel buttons take the place of ⟲10 / 30⟳
+  el.rew.hidden = el.fwd.hidden = on;
+  if (!on) { el.panel.hidden = true; return; }
+  if (!el.panel.hidden) renderPanel();
+}
+
+function showOsd(index, text) {
+  const it = channels?.list[index]?.item;
+  el.osdNum.textContent = text != null ? text : it ? chNumber(it, index) : '';
+  el.osdName.textContent = text != null ? '' : it ? it.label : '';
+  el.osd.hidden = false;
+  clearTimeout(osdTimer);
+  osdTimer = setTimeout(() => { el.osd.hidden = true; }, 2500);
+}
+
+/** Channel up (+1) / down (−1). Quick repeated presses only tune the last one. */
+export function zap(delta) {
+  if (!channels) return false;
+  const n = channels.list.length;
+  const from = pendingIndex >= 0 ? pendingIndex : channels.index;
+  pendingIndex = ((from + delta) % n + n) % n;
+  showOsd(pendingIndex);
+  clearTimeout(zapTimer);
+  zapTimer = setTimeout(() => tune(pendingIndex), 450);
+  return true;
+}
+
+// Number typed by the viewer = the number shown in the channel list (broadcast number when known, else position).
+function findByNumber(num) {
+  return channels.list.findIndex((c, i) => chNumber(c.item, i) === String(num));
+}
+
+export function jumpTo(num) {
+  if (!channels) return false;
+  const i = findByNumber(num);
+  if (i < 0) { showOsd(-1, String(num)); showMsg('Canale ' + num + ' non presente in questo elenco', 2500); return false; }
+  pendingIndex = i;
+  showOsd(i);
+  clearTimeout(zapTimer);
+  tune(i);
+  return true;
+}
+
+function typeDigit(d) {
+  digits = (digits + d).slice(-4);
+  showOsd(-1, digits + '–');
+  clearTimeout(digitTimer);
+  digitTimer = setTimeout(commitDigits, 1500);
+}
+
+function commitDigits() {
+  clearTimeout(digitTimer);
+  const n = parseInt(digits, 10);
+  digits = '';
+  if (n) jumpTo(n);
+}
+
+async function tune(index) {
+  if (!channels) return;
+  const list = channels.list;
+  const entry = list[index];
+  const token = ++zapToken;
+  const keepClose = onCloseCb;
+  if (index === channels.index && current) { pendingIndex = -1; return; }
+  showMsg('Sintonizzo ' + entry.item.label + '…');
+  try {
+    const r = await entry.open();
+    if (token !== zapToken || !isOpen()) return;
+    await play(r.item, r.stream, { favEntry: r.favEntry, onClose: keepClose, channels: { list, index, numbers: channels.numbers }, keepFocus: true });
+    showOsd(index);
+  } catch (e) {
+    if (token !== zapToken) return;
+    pendingIndex = -1;
+    showMsg(e.message || String(e), 4000);
+  }
+}
+
+function renderPanel() {
+  const cur = channels.index;
+  el.chItems.replaceChildren(...channels.list.map((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'ch-row focusable' + (i === cur ? ' current' : '');
+    const num = document.createElement('span'); num.className = 'ch-num'; num.textContent = chNumber(c.item, i);
+    const name = document.createElement('span'); name.className = 'ch-name'; name.textContent = c.item.label;
+    b.append(num, name);
+    b.addEventListener('click', () => { closePanel(); if (i !== channels.index) { pendingIndex = i; showOsd(i); tune(i); } });
+    return b;
+  }));
+}
+
+function openPanel() {
+  if (!channels) return;
+  renderPanel();
+  el.panel.hidden = false;
+  el.chNum.value = '';
+  const row = el.chItems.children[channels.index];
+  if (row) { row.scrollIntoView({ block: 'center' }); row.focus({ preventScroll: true }); }
+}
+
+function closePanel() {
+  if (el.panel.hidden) return;
+  el.panel.hidden = true;
+  if (document.activeElement && el.panel.contains(document.activeElement)) document.activeElement.blur();
+  el.chList.focus({ preventScroll: true });
+  wake();
+}
+
+function togglePanel() { if (el.panel.hidden) openPanel(); else closePanel(); }
+
+el.chUp.addEventListener('click', () => zap(1));
+el.chDown.addEventListener('click', () => zap(-1));
+el.chList.addEventListener('click', togglePanel);
+el.chClose.addEventListener('click', closePanel);
+el.chNum.addEventListener('input', () => { el.chNum.value = el.chNum.value.replace(/\D/g, '').slice(0, 4); });
 
 // ---------------------------------------------------------------- wiring
 const v = el.video;
@@ -327,7 +500,24 @@ el.seek.addEventListener('change', () => {
 // Tapping the picture: on touch screens it shows/hides the controls (like a TV
 // remote overlay); with a mouse a click toggles play/pause as on desktop players.
 let lastPointer = 'mouse';
-el.root.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType || 'mouse'; }, { capture: true, passive: true });
+let swipe = null;          // touch start, for vertical swipes = channel up/down
+let swallowClick = false;
+el.root.addEventListener('pointerdown', (e) => {
+  lastPointer = e.pointerType || 'mouse';
+  const onBackground = !e.target.closest('.player-top, .player-bottom, .player-channels');
+  swipe = channels && e.pointerType === 'touch' && onBackground ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
+}, { capture: true, passive: true });
+el.root.addEventListener('pointerup', (e) => {
+  const s = swipe; swipe = null;
+  if (!s || !channels) return;
+  const dx = e.clientX - s.x, dy = e.clientY - s.y;
+  if (Math.abs(dy) > 60 && Math.abs(dy) > 1.5 * Math.abs(dx) && Date.now() - s.t < 1000) {
+    swallowClick = true;
+    setTimeout(() => { swallowClick = false; }, 400);
+    zap(dy < 0 ? 1 : -1); // swipe up = next channel
+  }
+}, { passive: true });
+el.root.addEventListener('pointercancel', () => { swipe = null; }, { passive: true });
 el.root.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') wake(); }, { passive: true });
 for (const bar of el.ui.querySelectorAll('.player-top, .player-bottom')) bar.addEventListener('pointerdown', wake, { passive: true });
 
@@ -338,6 +528,8 @@ function hideControls() {
 }
 
 function onBackgroundTap() {
+  if (swallowClick) { swallowClick = false; return; }
+  if (!el.panel.hidden) { closePanel(); return; }
   const hidden = el.ui.classList.contains('idle');
   if (lastPointer === 'mouse') { if (hidden) wake(); else togglePlay(); return; }
   if (hidden) wake(); else hideControls();

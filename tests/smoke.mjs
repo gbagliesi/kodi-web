@@ -153,7 +153,7 @@ async function uiTests() {
     });
     await page.reload();
     await page.waitForSelector('.hero');
-    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.2.1');
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.3.0');
     console.log('✓ outdated bundled add-ons are updated at start-up');
     assert.ok(await page.evaluate(() => window.salotto.addons.getProxy().includes('/proxy?url=')), 'proxy auto-detected');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/home.png' });
@@ -203,8 +203,39 @@ async function uiTests() {
     const src = await page.evaluate(() => window.__hlsSrc || document.getElementById('video').src);
     assert.match(src, /rai1\.m3u8/);
     if (SHOTS) await page.screenshot({ path: SHOTS + '/player.png' });
-    await page.click('#pl-close');
     console.log('✓ live TV: Italian presets, groups, EPG now/next, geo/YouTube marks, HLS playback');
+
+    // Zapping: CH +/−, arrows, typed numbers and the channel list, without leaving the player
+    const nowSrc = () => page.evaluate(() => window.__hlsSrc || document.getElementById('video').src);
+    const title = () => page.evaluate(() => document.getElementById('pl-title').textContent);
+    assert.equal(await page.isVisible('#pl-chup'), true, 'CH + visible for live channels');
+    assert.equal(await page.isVisible('#pl-rew'), false, 'rewind hidden for live channels');
+    await page.keyboard.press('ArrowUp');
+    await waitFor(async () => /la7\.m3u8/.test(await nowSrc()));
+    assert.equal(await title(), 'La7');
+    assert.equal(await page.isVisible('#player'), true);
+    await page.click('#pl-chdown');
+    await waitFor(async () => /rai1\.m3u8/.test(await nowSrc()));
+    await page.keyboard.press('7'); // La7 is channel 7 on Italian TV
+    assert.match(await page.textContent('#pl-osd'), /7/);
+    await waitFor(async () => /la7\.m3u8/.test(await nowSrc()));
+    await page.keyboard.press('1');
+    await waitFor(async () => /rai1\.m3u8/.test(await nowSrc()));
+    await page.click('#pl-chlist');
+    await page.waitForSelector('#pl-channels:not([hidden])');
+    const rows = await page.locator('.ch-row').allTextContents();
+    assert.deepEqual(rows, ['1Rai 1', '7La7', '8Rai 1'], 'channel list: broadcast numbers, YouTube channels left out');
+    if (SHOTS) await page.screenshot({ path: SHOTS + '/channels.png' });
+    await page.click('.ch-row:has-text("8")');
+    await waitFor(async () => /relinkerServlet/.test(await nowSrc()));
+    assert.equal(await page.isVisible('#pl-channels'), false);
+    await page.click('#pl-chlist');
+    await page.fill('#pl-chnum', '7');
+    await page.keyboard.press('Enter');
+    await waitFor(async () => /la7\.m3u8/.test(await nowSrc()));
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isVisible('#player'), false);
+    console.log('✓ live TV: change channel inside the player (CH +/−, arrows, number, channel list)');
 
     // Channel with Referer goes through the proxy
     await page.goBack();
@@ -303,6 +334,7 @@ async function uiTests() {
         await pp.waitForSelector('.card');
         await pp.locator('.card').first().click();
         await pp.waitForSelector('#player:not([hidden])');
+        await pp.waitForTimeout(500); // let the player's own start-up play() happen first
         // Tapping the picture shows/hides the controls without pausing
         await pp.evaluate(() => {
           window.__media = [];
@@ -327,10 +359,27 @@ async function uiTests() {
         await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:landscape')));
         await pp.evaluate(() => document.exitFullscreen());
         await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
+        await pp.click('#pl-close');
+        // Live TV: a vertical swipe on the picture changes channel
+        await pp.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
+        await pp.waitForSelector('.row:has-text("La7")');
+        await pp.locator('.row:has-text("Rai 1")').first().click();
+        await pp.waitForSelector('#player:not([hidden])');
+        const before = (await pp.evaluate(() => window.__media)).length;
+        const swipeUp = async () => {
+          const x = 180, y = Math.round(await pp.evaluate(() => innerHeight * 0.65));
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+          for (let i = 1; i <= 8; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - i * 20 }] }); await pp.waitForTimeout(16); }
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        };
+        await swipeUp();
+        await waitFor(() => pp.evaluate(() => document.getElementById('pl-title').textContent === 'La7'));
+        assert.ok(await pp.isVisible('#pl-chup'));
+        assert.equal((await pp.evaluate(() => window.__media)).slice(before).filter(m => m === 'pause').length, 0, 'swipe does not pause');
       }
       await phone.close();
     }
-    console.log('✓ phones: tap shows/hides player controls; full screen locks landscape');
+    console.log('✓ phones: tap shows/hides player controls; swipe changes live channel; full screen locks landscape');
     console.log('✓ phones (Android, iPhone): lists scroll with a swipe');
     console.log('✓ portrait layout uses a bottom menu bar');
 

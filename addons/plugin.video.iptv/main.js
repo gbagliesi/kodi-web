@@ -139,13 +139,23 @@ function nowNext(epg, id) {
   return { now: list[i], next: list[i + 1] };
 }
 
+const YOUTUBE = /^https?:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//i;
+
 function toItem(ch, epg) {
   const nn = nowNext(epg, ch.id);
-  const sub = nn
-    ? `Ora: ${nn.now.title} (fino alle ${hhmm(nn.now.stop)})` + (nn.next ? ` · Poi: ${nn.next.title}` : '')
-    : ch.group;
+  // Free-TV marks: Ⓖ = geo-blocked (Italy only), Ⓨ = YouTube live channel
+  const geo = /Ⓖ/.test(ch.name);
+  const youtube = /Ⓨ/.test(ch.name) || YOUTUBE.test(ch.url);
+  const notes = [geo ? 'Solo dall\'Italia' : '', youtube ? 'Si apre in YouTube' : ''].filter(Boolean);
+  const sub = [
+    ...notes,
+    nn ? `Ora: ${nn.now.title} (fino alle ${hhmm(nn.now.stop)})` + (nn.next ? ` · Poi: ${nn.next.title}` : '') : (notes.length ? '' : ch.group),
+  ].filter(Boolean).join(' · ');
+  if (youtube) {
+    return { label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(), subtitle: sub, thumb: /^https:/.test(ch.logo) ? ch.logo : '', external: ch.url, playable: true, live: true, type: 'video' };
+  }
   return {
-    label: ch.name,
+    label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(),
     subtitle: sub,
     thumb: /^https:/.test(ch.logo) ? ch.logo : '',
     url: ch.url,
@@ -221,7 +231,7 @@ addon.register({
     const out = [];
     for (let i = 0; i < pls.length; i++) {
       const { data, epg } = await context(i, ctx);
-      for (const c of data.channels) if (c.name.toLowerCase().includes(q)) out.push(toItem(c, epg));
+      for (const c of data.channels) if (c.name.toLowerCase().replace(/[ⒼⓎ]/g, '').includes(q)) out.push(toItem(c, epg));
     }
     return { view: 'list', items: out };
   },

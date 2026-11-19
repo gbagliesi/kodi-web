@@ -13,6 +13,12 @@ const PRESETS = [
   { name: 'Canali italiani (iptv-org)', url: 'https://iptv-org.github.io/iptv/countries/it.m3u', note: 'Elenco più ampio, include canali regionali e locali' },
 ];
 
+// Regional news (TGR) has no open feed: these open the edition page on rainews.it.
+const TGR = [
+  { label: 'TGR Toscana', url: 'https://www.rainews.it/tgr/toscana' },
+  { label: 'TGR Puglia', url: 'https://www.rainews.it/tgr/puglia' },
+];
+
 function playlistsFromSettings(ctx) {
   const presets = ctx.settings.presets === false ? [] : PRESETS;
   return [...presets, ...userPlaylists(ctx)];
@@ -202,6 +208,9 @@ async function context(i, ctx) {
 addon.register({
   async list(path, ctx) {
     const pls = playlistsFromSettings(ctx);
+    if (path === 'tgr') {
+      return { view: 'list', items: TGR.map(t => ({ label: t.label, subtitle: 'Ultima edizione · si apre su rainews.it', external: t.url, playable: true, type: 'video' })) };
+    }
     if (!path) {
       if (!pls.length) {
         return {
@@ -216,6 +225,7 @@ addon.register({
           view: 'list',
           items: [
             ...pls.map((p, i) => ({ label: p.name, subtitle: p.note || p.url, path: 'p/' + i })),
+            ...(ctx.settings.presets === false ? [] : [{ label: 'TGR regionali (Rai)', subtitle: TGR.map(t => t.label.replace('TGR ', '')).join(', ') + ' · ultime edizioni', path: 'tgr' }]),
             { label: 'Aggiungi una playlist…', subtitle: 'Impostazioni dell\'add-on', action: 'settings' },
           ],
         };

@@ -153,7 +153,7 @@ async function uiTests() {
     });
     await page.reload();
     await page.waitForSelector('.hero');
-    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.3.0');
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.3.1');
     console.log('✓ outdated bundled add-ons are updated at start-up');
     assert.ok(await page.evaluate(() => window.salotto.addons.getProxy().includes('/proxy?url=')), 'proxy auto-detected');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/home.png' });
@@ -183,6 +183,13 @@ async function uiTests() {
     // Live TV with presets, groups, EPG and HLS
     await page.goto(BASE + '#/live');
     await page.click('.tile:has-text("TV in diretta")');
+    await page.waitForSelector('.row:has-text("Digitale terrestre Italia")');
+    await page.click('.row:has-text("TGR regionali")');
+    await page.waitForSelector('.row:has-text("TGR Puglia")');
+    await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+    await page.click('.row:has-text("TGR Toscana")');
+    assert.deepEqual(await page.evaluate(() => window.__opened), ['https://www.rainews.it/tgr/toscana']);
+    await page.goBack();
     await page.waitForSelector('.row:has-text("Digitale terrestre Italia")');
     await page.click('.row:has-text("Digitale terrestre Italia")');
     await page.waitForSelector('.row:has-text("Generalisti")');

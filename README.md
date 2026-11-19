@@ -57,6 +57,9 @@ finché non si indica un proxy in *Impostazioni*.
 
 ### Il proxy
 
+Per l'app pubblicata online il modo più semplice è un proxy gratuito su
+Cloudflare Workers: guida passo passo in [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md).
+
 `server.js` espone `/proxy?url=…`, usato automaticamente dall'app quando il
 browser blocca una richiesta. Aggiunge gli header richiesti dagli stream
 (Referer, User-Agent) e riscrive le playlist HLS in modo che anche i segmenti

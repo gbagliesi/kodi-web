@@ -550,22 +550,27 @@ function renderAddonInfo(id) {
 function renderSettings() {
   setCrumbs(['Impostazioni']);
   const s = store.getSettings();
-  const proxy = h('input', { type: 'url', id: 'proxy', value: s.proxyUrl, placeholder: 'es. http://192.168.1.20:8787/proxy?url=', autocapitalize: 'off', spellcheck: 'false' });
+  const proxy = h('input', { type: 'url', id: 'proxy', value: s.proxyUrl, placeholder: 'es. https://salotto-proxy.tuonome.workers.dev', autocapitalize: 'off', spellcheck: 'false' });
+  const token = h('input', { type: 'text', id: 'proxy-token', value: s.proxyToken, placeholder: 'facoltativo', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false' });
   const resume = h('input', { type: 'checkbox', id: 'resume', checked: s.autoResume });
   const viewSel = h('select', { id: 'viewmode' }, ...[['auto', 'Automatica'], ['grid', 'Griglia'], ['list', 'Elenco']].map(([v, l]) => h('option', { value: v, selected: s.viewMode === v }, l)));
   const active = addons.getProxy();
   fill(view, h('div', { class: 'form' },
     h('div', { class: 'field' }, h('label', { for: 'proxy' }, 'Proxy per add-on e stream'), proxy,
-      h('div', { class: 'hint' }, 'Molti siti bloccano le richieste dirette dal browser (CORS). Avvia "node server.js" su un PC o NAS e incolla qui il suo indirizzo. Lascia vuoto per rilevarlo automaticamente.'),
-      h('div', { class: 'hint' }, 'Proxy attivo: ', active || 'nessuno')),
+      h('div', { class: 'hint' }, 'Molti siti bloccano le richieste dirette dal browser (CORS). Incolla l\'indirizzo del tuo proxy Cloudflare (vedi la guida docs/CLOUDFLARE.md) oppure di "node server.js" su un PC o NAS. Lascia vuoto per rilevarlo automaticamente.'),
+      location.protocol === 'https:' && /^http:/i.test(s.proxyUrl) ? h('div', { class: 'hint', style: { color: 'var(--danger)' } }, 'Questa pagina è in HTTPS: il browser bloccherà un proxy in HTTP. Usa un proxy HTTPS, come quello su Cloudflare.') : null,
+      h('div', { class: 'hint' }, 'Proxy attivo: ', active ? active.replace(/token=[^&]+/, 'token=•••') : 'nessuno')),
+    h('div', { class: 'field' }, h('label', { for: 'proxy-token' }, 'Token del proxy'), token,
+      h('div', { class: 'hint' }, 'Lo stesso valore impostato come TOKEN nel proxy. Impedisce ad altri di usarlo.')),
     h('div', { class: 'field check' }, resume, h('label', { for: 'resume' }, 'Riprendi i video dal punto in cui li hai lasciati')),
     h('div', { class: 'field' }, h('label', { for: 'viewmode' }, 'Vista degli elenchi'), viewSel),
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary focusable', onclick: async () => {
-        store.setSettings({ proxyUrl: proxy.value.trim(), autoResume: resume.checked, viewMode: viewSel.value });
+        store.setSettings({ proxyUrl: proxy.value.trim(), proxyToken: token.value.trim(), autoResume: resume.checked, viewMode: viewSel.value });
         listingCache.clear();
         const p = await addons.detectProxy();
-        toast('Salvato' + (p ? ' · proxy: ' + p : ''));
+        if (!p) toast('Salvato');
+        else toast((await addons.checkProxy(p)) ? 'Salvato · proxy raggiungibile ✓' : 'Salvato, ma il proxy non risponde: controlla l\'indirizzo', 5000);
         renderSettings();
       } }, 'Salva'),
       h('button', { class: 'btn danger focusable', onclick: async () => {

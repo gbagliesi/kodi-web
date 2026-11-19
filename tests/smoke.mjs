@@ -303,6 +303,26 @@ async function uiTests() {
         await pp.waitForSelector('.card');
         await pp.locator('.card').first().click();
         await pp.waitForSelector('#player:not([hidden])');
+        // Tapping the picture shows/hides the controls without pausing
+        await pp.evaluate(() => {
+          window.__media = [];
+          HTMLMediaElement.prototype.play = function () { window.__media.push('play'); return Promise.resolve(); };
+          HTMLMediaElement.prototype.pause = function () { window.__media.push('pause'); };
+        });
+        const ui = () => pp.evaluate(() => document.getElementById('player-ui').classList.contains('idle'));
+        assert.equal(await ui(), false);
+        await pp.touchscreen.tap(180, 300);
+        assert.equal(await ui(), true, 'tap hides controls');
+        await pp.touchscreen.tap(180, 300);
+        assert.equal(await ui(), false, 'second tap shows controls');
+        assert.deepEqual(await pp.evaluate(() => window.__media), [], 'taps do not pause or play');
+        await pp.touchscreen.tap(180, 300);
+        const box = await pp.locator('#pl-play').boundingBox();
+        await pp.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+        assert.equal(await ui(), false, 'tapping where the hidden play button is only shows the controls');
+        assert.deepEqual(await pp.evaluate(() => window.__media), []);
+        await pp.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+        assert.equal((await pp.evaluate(() => window.__media)).length, 1, 'play button works once visible');
         await pp.click('#pl-fs');
         await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:landscape')));
         await pp.evaluate(() => document.exitFullscreen());
@@ -310,7 +330,7 @@ async function uiTests() {
       }
       await phone.close();
     }
-    console.log('✓ phones: full screen video locks landscape and unlocks on exit');
+    console.log('✓ phones: tap shows/hides player controls; full screen locks landscape');
     console.log('✓ phones (Android, iPhone): lists scroll with a swipe');
     console.log('✓ portrait layout uses a bottom menu bar');
 

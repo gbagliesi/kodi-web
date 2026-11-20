@@ -13,6 +13,7 @@ const { chromium, devices } = require('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8799;
 const BASE = `http://127.0.0.1:${PORT}/`;
+const SHOTS = process.env.SHOTS || '';
 
 const M3U = `#EXTM3U
 #EXTINF:-1 tvg-id="Rai1.it" tvg-logo="https://example.org/rai1.png" group-title="Generalisti",Rai 1
@@ -468,6 +469,12 @@ async function uiTests() {
       assert.equal(await tv.evaluate(() => innerWidth), 1280, 'TV: page laid out on 1280 px');
       await tv.evaluate(() => window.salottoBack());
       assert.equal(await tv.isHidden('#pl-channels'), true);
+      // full screen / volume buttons make no sense on the TV; ▶ on the position bar reaches LIVE
+      assert.equal(await tv.isHidden('#pl-fs'), true, 'TV: no full screen button');
+      assert.equal(await tv.isHidden('#pl-vol'), true, 'TV: no volume slider');
+      await tv.evaluate(() => { const s = document.getElementById('pl-seek'); s.disabled = false; s.focus(); });
+      await tv.keyboard.press('ArrowRight');
+      assert.equal(await focusedTag(), 'pl-dur', 'TV: ▶ on the position bar goes to the LIVE button');
       await tvc.close();
       console.log('✓ Fire TV app: no auto-focused text field, arrows leave fields, player controls reachable, Back hides controls, menu column, quiet zapping');
     }

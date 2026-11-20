@@ -443,6 +443,14 @@ export function handleKey(e) {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { skip(e.key === 'ArrowLeft' ? -10 : 30); return true; }
       if (e.key === 'Enter') { wake(); el.play.focus({ preventScroll: true }); return true; }
     }
+    // Position bar: ◀ goes back 10 s, ▶ jumps to the LIVE button on live TV (OK returns to the
+    // live broadcast) or forward 30 s on a video; the bar's own 1/1000 steps are useless on a remote
+    if (document.activeElement === el.seek && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      wake();
+      if (e.key === 'ArrowRight' && isLive()) el.dur.focus({ preventScroll: true });
+      else skip(e.key === 'ArrowLeft' ? -10 : 30);
+      return true;
+    }
     if (e.key.startsWith('Arrow')) { wake(); return false; } // spatial navigation among the controls
   }
   wake();

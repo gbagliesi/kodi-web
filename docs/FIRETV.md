@@ -28,9 +28,12 @@ tienilo premuto con il tasto ☰ per spostarlo in prima fila.
   perché le impostazioni non sono condivise con gli altri dispositivi.
 - **Telecomando nel lettore:** con i comandi nascosti ▲▼ cambiano canale, ◀▶
   vanno indietro/avanti, OK mostra i comandi. Con i comandi visibili le frecce si
-  muovono tra i pulsanti (anche quelli in alto, come l'elenco canali). Il tasto ☰
+  muovono tra i pulsanti (anche quelli in alto, come l'elenco canali). Cambiando
+  canale i comandi restano nascosti: compaiono solo con OK. Il tasto ☰
   apre l'elenco canali. Indietro: chiude l'elenco, poi nasconde i comandi, poi
   chiude il lettore.
+- **Menu a sinistra:** ▲▼ restano nel menu; per passare alla pagina usa ▶ e per
+  tornare al menu ◀.
 - **Campi di testo (Opzioni):** OK per scrivere; le frecce ◀▶ escono dal campo
   quando il cursore è all'inizio o alla fine.
 - **Aggiornamenti:** il contenuto si aggiorna da solo. Una nuova versione

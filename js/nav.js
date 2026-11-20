@@ -13,7 +13,12 @@ function scope() {
   const modal = document.getElementById('modal');
   if (!modal.hidden) return modal;
   const player = document.getElementById('player');
-  if (!player.hidden) return player;
+  if (!player.hidden) {
+    // the channel list covers part of the controls: while it has the focus, stay inside it
+    const panel = document.getElementById('pl-channels');
+    if (panel && !panel.hidden && panel.contains(document.activeElement)) return panel;
+    return player;
+  }
   return document.getElementById('app');
 }
 
@@ -58,7 +63,7 @@ function sameRegion(cur, dir, list) {
   return list.filter(el => region.contains(el));
 }
 
-export function move(dir) {
+export function move(dir, repeating = false) {
   const list = focusables();
   if (!list.length) return false;
   const cur = document.activeElement;
@@ -69,7 +74,9 @@ export function move(dir) {
   const next = best(cur, dir, sameRegion(cur, dir, list));
   if (next) {
     next.focus({ preventScroll: true });
-    next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    // Instant scrolling: a smooth scroll restarted on every key repeat makes long lists stutter
+    // while the remote's arrow is held down
+    next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: repeating || document.body.classList.contains('tv') ? 'auto' : 'smooth' });
     return true;
   }
   return false;
@@ -98,7 +105,7 @@ export function handleNavKey(e) {
   // OK opens the list and the arrows move between fields
   if (a && a.tagName === 'SELECT' && (dir === 'up' || dir === 'down') && !document.body.classList.contains('tv')) return false;
   document.body.classList.add('kbd-nav');
-  return move(dir);
+  return move(dir, e.repeat);
 }
 
 document.addEventListener('pointerdown', () => document.body.classList.remove('kbd-nav'), { passive: true });

@@ -651,7 +651,7 @@ function renderSettings() {
         const p = await addons.detectProxy();
         if (!p) toast('Salvato');
         else toast((await addons.checkProxy(p)) ? 'Salvato · proxy raggiungibile ✓' : 'Salvato, ma il proxy non risponde: controlla l\'indirizzo', 5000);
-        renderSettings();
+        if (location.hash === '#/settings') renderSettings(); // not if the user already moved on
       } }, 'Salva'),
       h('button', { class: 'btn danger focusable', onclick: async () => {
         if (await confirmBox('Ripristina', 'Cancellare add-on, preferiti e impostazioni?', 'Cancella tutto', true)) {

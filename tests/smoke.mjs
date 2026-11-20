@@ -13,7 +13,6 @@ const { chromium, devices } = require('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8799;
 const BASE = `http://127.0.0.1:${PORT}/`;
-const SHOTS = process.env.SHOTS || '';
 
 const M3U = `#EXTM3U
 #EXTINF:-1 tvg-id="Rai1.it" tvg-logo="https://example.org/rai1.png" group-title="Generalisti",Rai 1
@@ -417,7 +416,7 @@ async function uiTests() {
 
     // Fire TV app (user agent "SalottoTV"): remote-control navigation
     {
-      const tvc = await browser.newContext({ viewport: { width: 960, height: 540 }, serviceWorkers: 'block',
+      const tvc = await browser.newContext({ viewport: { width: 960, height: 540 }, isMobile: true, serviceWorkers: 'block',
         userAgent: 'Mozilla/5.0 (Linux; Android 9; AFTSSS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36 SalottoTV/1' });
       await mock(tvc);
       const tv = await tvc.newPage();
@@ -466,6 +465,7 @@ async function uiTests() {
       // the menu key opens the channel list
       await tv.keyboard.press('ContextMenu');
       await tv.waitForSelector('#pl-channels:not([hidden])');
+      assert.equal(await tv.evaluate(() => innerWidth), 1280, 'TV: page laid out on 1280 px');
       await tv.evaluate(() => window.salottoBack());
       assert.equal(await tv.isHidden('#pl-channels'), true);
       await tvc.close();

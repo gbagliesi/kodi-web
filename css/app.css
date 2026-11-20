@@ -247,7 +247,7 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
 }
 .channels-head { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .channels-head input { flex: 1; min-width: 0; font-size: 18px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .15); background: rgba(255, 255, 255, .06); color: inherit; }
-.channels-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; }
+.channels-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 4px; margin: 0 -4px; } /* room for the focus ring */
 .ch-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 8px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .ch-row.current { background: rgba(255, 255, 255, .1); }
 .ch-row .ch-num { width: 34px; flex: none; text-align: right; font-variant-numeric: tabular-nums; color: var(--accent-2); font-weight: 700; }
@@ -304,8 +304,12 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
 .reorder-row { cursor: default; gap: 8px; }
 .reorder-row .icon-btn:disabled { opacity: .25; }
 
-/* ---------- TV app (Fire TV): the whole side menu fits at 960x540 ---------- */
-body.tv .brand { padding-bottom: 8px; }
-body.tv #menu { gap: 2px; }
-body.tv .menu-item { min-height: 42px; }
-body.tv .clock { font-size: 22px; padding: 4px 8px; }
+/* ---------- TV app (Fire TV): page laid out on 1280x720 (see index.html), denser tiles ---------- */
+body.tv .hero { padding: 18px 24px; border-radius: 16px; }
+body.tv .hero h1 { font-size: 24px; }
+body.tv .tiles { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+body.tv .tile { min-height: 104px; padding: 50px 14px 12px; }
+body.tv .tile .tile-ico { top: 10px; left: 14px; font-size: 24px; }
+body.tv .tile img.tile-icon { top: 10px; left: 12px; width: 34px; height: 34px; border-radius: 8px; }
+body.tv .tile .tile-name { font-size: 16px; }
+body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }

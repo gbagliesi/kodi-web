@@ -355,12 +355,28 @@ async function uiTests() {
     // Desktop Chrome: extension-less broadcaster links go through hls.js
     const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
     await mock(desktop);
+    // Picture-in-picture stub (headless Chromium has no real floating window)
+    await desktop.addInitScript(() => {
+      Object.defineProperty(Document.prototype, 'pictureInPictureEnabled', { get: () => true, configurable: true });
+      let pipEl = null; window.__pip = 0;
+      Object.defineProperty(Document.prototype, 'pictureInPictureElement', { get: () => pipEl, configurable: true });
+      HTMLVideoElement.prototype.requestPictureInPicture = function () { pipEl = this; window.__pip++; this.dispatchEvent(new Event('enterpictureinpicture')); return Promise.resolve({}); };
+      Document.prototype.exitPictureInPicture = function () { const e = pipEl; pipEl = null; e && e.dispatchEvent(new Event('leavepictureinpicture')); return Promise.resolve(); };
+    });
     const p3 = await desktop.newPage();
     await p3.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
     await p3.waitForSelector('.row:has-text("Solo dall\'Italia")');
     await p3.click('.row:has-text("Rai 1"):has-text("Solo dall\'Italia")');
     await waitFor(() => p3.evaluate(() => (window.__hlsSrc || '').includes('relinkerServlet')));
     console.log('✓ desktop: extension-less live links are played with hls.js');
+
+    // Floating window (picture-in-picture): button toggles it, closing the player leaves it
+    await p3.waitForSelector('#pl-pip:not([hidden])');
+    await p3.click('#pl-pip');
+    await waitFor(() => p3.evaluate(() => window.__pip === 1 && document.getElementById('pl-pip').classList.contains('active')));
+    await p3.click('#pl-pip');
+    await waitFor(() => p3.evaluate(() => !document.pictureInPictureElement && !document.getElementById('pl-pip').classList.contains('active')));
+    console.log('✓ picture-in-picture: the player button opens and closes the floating window');
 
     // Google Cast: the TV gets the proxied stream, zapping follows on the TV, controls drive it
     // (Rai 1 served as an fMP4 master playlist so the segment format is detected for the receiver)

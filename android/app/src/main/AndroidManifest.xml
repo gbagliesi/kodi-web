@@ -6,9 +6,11 @@
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
+    <!-- Fire TV shows sideloaded apps with android:icon fitted into a 16:9 tile, so the icon is the
+         wide banner (logo + name) instead of the square icon, which left grey bars at the sides -->
     <application
         android:label="Salotto"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/banner"
         android:banner="@drawable/banner"
         android:allowBackup="true"
         android:hardwareAccelerated="true"
@@ -17,6 +19,8 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:icon="@drawable/banner"
+            android:banner="@drawable/banner"
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode">

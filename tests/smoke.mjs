@@ -342,6 +342,25 @@ async function uiTests() {
     await page.evaluate(() => window.salotto.addons.detectProxy());
     console.log('✓ proxy settings accept a Cloudflare address and token');
 
+    // Start page: 📌 on a channel list, relaunch on Home → opens there, ← goes back to Home
+    await page.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
+    await page.waitForSelector('#pin-btn:not([hidden])');
+    await page.click('#pin-btn');
+    assert.equal(await page.evaluate(() => window.salotto.store.getSettings().startPage), '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
+    assert.equal(await page.evaluate(() => document.getElementById('pin-btn').classList.contains('active')), true);
+    await page.goto(BASE + '#/');
+    await page.reload();
+    await page.waitForSelector('.row:has-text("Rai 1")');
+    assert.match(page.url(), /#\/browse\/plugin\.video\.iptv/);
+    await page.click('#back-btn');
+    await page.waitForSelector('.hero');
+    await page.goto(BASE + '#/settings');
+    assert.equal(await page.inputValue('#startpage'), '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
+    await page.selectOption('#startpage', '');
+    await page.click('.actions .btn.primary');
+    await waitFor(() => page.evaluate(() => window.salotto.store.getSettings().startPage === ''));
+    console.log('✓ start page: 📌 sets it, the app opens there with Home behind, settings can reset it');
+
     // Keyboard / remote navigation
     await page.goto(BASE + '#/');
     await page.waitForSelector('.hero');

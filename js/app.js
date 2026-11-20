@@ -10,6 +10,7 @@ const crumbs = $('crumbs');
 const backBtn = $('back-btn');
 const searchBtn = $('search-btn');
 const viewBtn = $('view-btn');
+const pinBtn = $('pin-btn');
 
 // ---------------------------------------------------------------- helpers
 function fill(el, ...nodes) {
@@ -129,6 +130,32 @@ const pinPage = () => { if (window.scrollY || document.documentElement.scrollTop
 for (const ev of ['resize', 'orientationchange', 'fullscreenchange', 'webkitfullscreenchange', 'scroll']) window.addEventListener(ev, pinPage, { passive: true });
 document.addEventListener('fullscreenchange', () => setTimeout(pinPage, 300));
 
+// ---------------------------------------------------------------- start page (📌)
+function updatePinBtn() {
+  const on = store.getSettings().startPage === location.hash;
+  pinBtn.classList.toggle('active', on);
+  pinBtn.title = on ? 'È la pagina iniziale (tocca per tornare a Home)' : 'Imposta come pagina iniziale';
+  pinBtn.setAttribute('aria-label', pinBtn.title);
+}
+pinBtn.addEventListener('click', () => {
+  if (store.getSettings().startPage === location.hash) {
+    store.setSettings({ startPage: '', startLabel: '' });
+    toast('Pagina iniziale: Home');
+  } else {
+    const label = [...crumbs.querySelectorAll('span:not(.sep)')].map(e => e.textContent).join(' › ');
+    store.setSettings({ startPage: location.hash, startLabel: label });
+    toast('Pagina iniziale: ' + label);
+  }
+  updatePinBtn();
+});
+
+/** Address to open at launch, or '' for Home. */
+function startPage() {
+  const s = store.getSettings();
+  const p = s.startPage === 'last' ? store.load('lastPage', '') : s.startPage;
+  return p && p !== '#/' && p.startsWith('#/') ? p : '';
+}
+
 // ---------------------------------------------------------------- router
 function go(route) { location.hash = '#/' + route; }
 
@@ -152,6 +179,10 @@ async function route() {
   backBtn.hidden = !(section === 'browse' || section === 'addon' || (section === 'addons' && rest.length));
   searchBtn.hidden = true; viewBtn.hidden = true;
   searchBtn.onclick = null;
+  // pages that can be the start page (📌): sections and add-on folders
+  pinBtn.hidden = !['video', 'music', 'live', 'files', 'favourites', 'browse'].includes(section);
+  updatePinBtn();
+  if (section !== 'settings') store.save('lastPage', location.hash);
   try {
     switch (section) {
       case '': renderHome(); break;
@@ -595,6 +626,9 @@ function renderSettings() {
   const token = h('input', { type: 'text', id: 'proxy-token', value: s.proxyToken, placeholder: 'facoltativo', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false' });
   const resume = h('input', { type: 'checkbox', id: 'resume', checked: s.autoResume });
   const autoPip = h('input', { type: 'checkbox', id: 'autopip', checked: s.autoPip });
+  const starts = [['', 'Home'], ['#/live', 'TV in diretta'], ['#/video', 'Video'], ['#/music', 'Musica'], ['#/favourites', 'Preferiti'], ['last', 'L\'ultima pagina aperta']];
+  if (s.startPage && !starts.some(([v]) => v === s.startPage)) starts.push([s.startPage, s.startLabel || 'Pagina scelta con 📌']);
+  const startSel = h('select', { id: 'startpage' }, ...starts.map(([v, l]) => h('option', { value: v, selected: s.startPage === v }, l)));
   const viewSel = h('select', { id: 'viewmode' }, ...[['auto', 'Automatica'], ['grid', 'Griglia'], ['list', 'Elenco']].map(([v, l]) => h('option', { value: v, selected: s.viewMode === v }, l)));
   const active = addons.getProxy();
   fill(view, h('div', { class: 'form' },
@@ -606,10 +640,13 @@ function renderSettings() {
       h('div', { class: 'hint' }, 'Lo stesso valore impostato come TOKEN nel proxy. Impedisce ad altri di usarlo.')),
     h('div', { class: 'field check' }, resume, h('label', { for: 'resume' }, 'Riprendi i video dal punto in cui li hai lasciati')),
     /Android/i.test(navigator.userAgent) ? h('div', { class: 'field check' }, autoPip, h('label', { for: 'autopip' }, 'Finestra mobile automatica: i video si aprono a schermo intero, così uscendo dall\'app continuano in una finestra mobile')) : null,
+    h('div', { class: 'field' }, h('label', { for: 'startpage' }, 'Pagina iniziale'), startSel,
+      h('div', { class: 'hint' }, 'Per partire da una pagina qualsiasi (per esempio un elenco di canali), aprila e tocca 📌 in alto.')),
     h('div', { class: 'field' }, h('label', { for: 'viewmode' }, 'Vista degli elenchi'), viewSel),
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary focusable', onclick: async () => {
-        store.setSettings({ proxyUrl: proxy.value.trim(), proxyToken: token.value.trim(), autoResume: resume.checked, autoPip: autoPip.checked, viewMode: viewSel.value });
+        store.setSettings({ proxyUrl: proxy.value.trim(), proxyToken: token.value.trim(), autoResume: resume.checked, autoPip: autoPip.checked, viewMode: viewSel.value, startPage: startSel.value,
+          startLabel: startSel.value === s.startPage ? s.startLabel : '' });
         listingCache.clear();
         const p = await addons.detectProxy();
         if (!p) toast('Salvato');
@@ -676,6 +713,9 @@ console.info('Salotto', versionLabel());
   loading('Avvio…');
   await addons.detectProxy();
   await addons.ensureBundledAddons();
+  // launched on Home: go to the chosen start page, with Home behind it (so ← goes back to Home)
+  const start = (!location.hash || location.hash === '#/') ? startPage() : '';
+  if (start) { history.replaceState(null, '', '#/'); history.pushState(null, '', start); }
   route();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));

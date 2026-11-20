@@ -30,6 +30,8 @@ const DEFAULT_SETTINGS = {
   proxyToken: '',        // optional token required by the proxy
   autoResume: true,
   autoPip: true,         // Android: videos open full screen so leaving the app moves them to a floating window
+  startPage: '',         // '' = Home, 'last' = last page visited, or a page address ('#/live', '#/browse/…')
+  startLabel: '',        // name of a page chosen with the 📌 button
   viewMode: 'auto',      // auto | grid | list
   repositories: ['addons/repository.json'],
 };

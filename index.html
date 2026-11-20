@@ -3,6 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    // Fire TV app: lay the page out on 1280 px instead of 960, so text and icons are TV-sized
+    // instead of oversized (the app's WebView scales the wider page down to fit the screen)
+    if (/SalottoTV/.test(navigator.userAgent)) document.querySelector('meta[name=viewport]').content = 'width=1280, viewport-fit=cover';
+  </script>
   <meta name="theme-color" content="#0d1117">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">

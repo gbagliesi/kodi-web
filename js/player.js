@@ -467,17 +467,30 @@ function updatePipBtn() { el.pip.hidden = !pipSupported() || !!current?.audio; }
 async function enterPip(fromButton = false) {
   const v = el.video;
   if (inPip() || !current || current.audio) return;
-  try {
-    // leaving full screen for the window only when asked with the button: if the request below
-    // fails (no tap, e.g. when the app goes to the background) the video must stay full screen
-    if (fromButton && (document.fullscreenElement || document.webkitFullscreenElement)) {
-      await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-    }
-    if (v.requestPictureInPicture && document.pictureInPictureEnabled) await v.requestPictureInPicture();
-    else if (v.webkitSetPresentationMode) v.webkitSetPresentationMode('picture-in-picture');
-  } catch (e) {
-    if (fromButton) showMsg('Finestra mobile non disponibile' + (v.readyState < 1 ? ': attendi che il video parta.' : '.'), 3000);
+  // Safari (iPad, iPhone) only opens the window straight inside the tap: nothing may be awaited
+  // before the request, and its own presentation-mode API is the most reliable there.
+  const webkitPip = typeof v.webkitSupportsPresentationMode === 'function' && v.webkitSupportsPresentationMode('picture-in-picture');
+  // leave full screen only when asked with the button (a background attempt may fail and the
+  // video must then stay full screen); not awaited, so the tap still counts for the request
+  if (fromButton && (document.fullscreenElement || document.webkitFullscreenElement)) {
+    try { (document.exitFullscreen || document.webkitExitFullscreen).call(document)?.catch?.(() => {}); } catch { /* ignore */ }
   }
+  let err = null;
+  try {
+    if (webkitPip) {
+      v.webkitSetPresentationMode('picture-in-picture');
+      await new Promise(r => setTimeout(r, 600));
+      if (inPip()) return;
+    }
+    if (v.requestPictureInPicture && document.pictureInPictureEnabled) { await v.requestPictureInPicture(); return; }
+    if (!webkitPip) throw new Error('non supportata');
+  } catch (e) { err = e; }
+  if (inPip() || !fromButton) return;
+  const why = v.readyState < 1 ? ': attendi che il video parta.'
+    : (navigator.standalone || matchMedia('(display-mode: standalone)').matches) && APPLE
+      ? ': nell\'app aggiunta alla Home l\'iPad non la permette, apri Salotto in Safari.'
+      : '.';
+  showMsg('Finestra mobile non disponibile' + why + (err?.name && why === '.' ? ' (' + err.name + ')' : ''), 5000);
 }
 
 function exitPip() {

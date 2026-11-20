@@ -29,6 +29,8 @@ let lastSave = 0;
 let onCloseCb = null;
 let triedProxy = false;
 let triedHls = false;
+let triedMse = false; // TV app: native HLS failed, hls.js used instead
+const TV_APP = /SalottoTV/.test(navigator.userAgent);
 let casting = false;      // a Google Cast session is playing the current item
 let localAttached = false; // the local <video> has the stream loaded
 let airplayAvailable = false;
@@ -156,7 +158,9 @@ async function attach(stream) {
   if (!casting) showRoute(localRoute === 'proxy');
   // Apple devices play HLS natively (and without CORS limits); elsewhere hls.js
   // is more reliable than the browser's own support, when Media Source is available.
-  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && (APPLE || !hasMse());
+  // The Fire TV app also tries the WebView's own HLS player first: it keeps audio and video in
+  // sync better than hls.js on the Stick's slow processor (falls back to hls.js on error).
+  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && (APPLE || !hasMse() || (TV_APP && !triedMse));
   if (looksHls(stream.url, stream.mime) && !native) {
     await loadScript(HLS_CDN);
     if (!window.Hls || !window.Hls.isSupported()) {
@@ -271,6 +275,7 @@ function updateFavBtn() {
 export async function play(item, stream, opts = {}) {
   triedProxy = false;
   triedHls = false;
+  triedMse = false;
   channels = opts.channels && opts.channels.list.length > 1 ? opts.channels : null;
   if (channels && !channels.numbers) channels.numbers = numberChannels(channels.list);
   pendingIndex = -1;
@@ -508,6 +513,8 @@ function statsRows() {
   } else if (!current?.audio) {
     rows.push(['Bitrate', hls ? '—' : 'non disponibile in questo browser']);
   }
+  const vq = v.getVideoPlaybackQuality?.();
+  if (vq && vq.totalVideoFrames) rows.push(['Fotogrammi persi', vq.droppedVideoFrames + ' su ' + vq.totalVideoFrames]);
   const b = v.buffered;
   let ahead = 0;
   for (let i = 0; i < (b?.length || 0); i++) if (b.start(i) <= v.currentTime + 0.5 && b.end(i) > v.currentTime) ahead = b.end(i) - v.currentTime;
@@ -812,6 +819,11 @@ v.addEventListener('ended', () => { if (current) setResume(current.key, 0, 0); e
 v.addEventListener('error', () => {
   if (hls || !current) return; // hls.js reports its own errors
   const code = v.error?.code;
+  if (TV_APP && !triedMse && looksHls(current.stream.url, current.stream.mime)) {
+    triedMse = true;
+    attach(current.stream).then(() => v.play().catch(() => {})).catch(e => showMsg(e.message));
+    return;
+  }
   // Many live URLs (redirectors, extension-less links) are HLS in disguise:
   // when the browser cannot play them natively, retry with the HLS engine.
   if (code === 4 && !triedHls && !looksHls(current.stream.url, current.stream.mime)) {

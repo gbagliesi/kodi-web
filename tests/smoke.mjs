@@ -361,6 +361,8 @@ async function uiTests() {
       let pipEl = null; window.__pip = 0;
       Object.defineProperty(Document.prototype, 'pictureInPictureElement', { get: () => pipEl, configurable: true });
       HTMLVideoElement.prototype.requestPictureInPicture = function () { pipEl = this; window.__pip++; this.dispatchEvent(new Event('enterpictureinpicture')); return Promise.resolve({}); };
+      const play0 = HTMLMediaElement.prototype.play; window.__plays = 0;
+      HTMLMediaElement.prototype.play = function () { window.__plays++; return play0.call(this); };
       Document.prototype.exitPictureInPicture = function () { const e = pipEl; pipEl = null; e && e.dispatchEvent(new Event('leavepictureinpicture')); return Promise.resolve(); };
     });
     const p3 = await desktop.newPage();
@@ -374,9 +376,13 @@ async function uiTests() {
     await p3.waitForSelector('#pl-pip:not([hidden])');
     await p3.click('#pl-pip');
     await waitFor(() => p3.evaluate(() => window.__pip === 1 && document.getElementById('pl-pip').classList.contains('active')));
+    // back to the app from the window: the browser pauses the video, the app resumes it
+    const plays0 = await p3.evaluate(() => { const v = document.getElementById('video'); v.pause(); document.exitPictureInPicture(); return window.__plays; });
+    await waitFor(() => p3.evaluate((n) => window.__plays > n && !document.getElementById('pl-pip').classList.contains('active'), plays0));
+    await p3.click('#pl-pip');
     await p3.click('#pl-pip');
     await waitFor(() => p3.evaluate(() => !document.pictureInPictureElement && !document.getElementById('pl-pip').classList.contains('active')));
-    console.log('✓ picture-in-picture: the player button opens and closes the floating window');
+    console.log('✓ picture-in-picture: the player button opens and closes the floating window, playback resumes when returning to the app');
 
     // Google Cast: the TV gets the proxied stream, zapping follows on the TV, controls drive it
     // (Rai 1 served as an fMP4 master playlist so the segment format is detected for the receiver)

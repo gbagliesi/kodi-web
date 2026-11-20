@@ -4,6 +4,7 @@
  * Same API as the /proxy endpoint of server.js:
  *   GET /proxy/health                      -> "ok"
  *   GET /proxy?url=<enc>[&headers=<json>]  -> the resource, with CORS headers;
+ *   GET /proxy/live.m3u8?url=…             -> same, with a file name for players that need one;
  *                                             HLS playlists are rewritten so
  *                                             every segment also goes through here.
  *
@@ -54,7 +55,8 @@ async function handle(request, env) {
   const u = new URL(request.url);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (u.pathname.endsWith('/proxy/health')) return text('ok');
-  if (!u.pathname.endsWith('/proxy')) return text('Salotto proxy: usa /proxy?url=…', 404);
+  // /proxy/<name> (e.g. /proxy/live.m3u8) works too: some native players pick the format from the extension
+  if (!/\/proxy(\/[\w.-]+)?$/.test(u.pathname)) return text('Salotto proxy: usa /proxy?url=…', 404);
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('metodo non consentito', 405);
 
   const token = env.TOKEN || '';

@@ -50,9 +50,37 @@ dispositivo (Mac, iPad…).
 
 ## Aggiornare il Worker
 
-Quando questo file `cloudflare/worker.js` cambia (per esempio per il
-Chromecast), apri il Worker → **Edit code**, sostituisci tutto il codice con
-quello nuovo e clicca **Deploy**. Le variabili e il token restano.
+### Automatico (consigliato)
+
+Il repository pubblica da solo `cloudflare/worker.js` sul tuo Worker ogni
+volta che cambia. Va configurato una volta sola:
+
+1. **Token API Cloudflare.** Su dash.cloudflare.com clicca l'icona del
+   profilo in alto a destra → **Profile** → **API Tokens** → **Create Token**
+   → **Custom token** → **Get started**.
+   - Nome: `salotto-github`.
+   - Permissions: **Account** → **Workers Scripts** → **Edit**.
+   - Account Resources: **Include** → il tuo account.
+   - **Continue to summary** → **Create Token**, poi copia il token (si vede
+     una volta sola).
+2. **Account ID.** Nella home del tuo account Cloudflare (oppure in
+   **Workers & Pages**), nella colonna a destra c'è **Account ID**: copialo.
+3. **Secret su GitHub.** Nel repository → **Settings** → **Secrets and
+   variables** → **Actions** → **New repository secret**, due volte:
+   - `CLOUDFLARE_API_TOKEN` = il token del punto 1;
+   - `CLOUDFLARE_ACCOUNT_ID` = l'Account ID del punto 2.
+4. **Prima pubblicazione.** Nel repository → **Actions** → **Aggiorna il
+   Worker Cloudflare** → **Run workflow**. Deve finire con la spunta verde.
+
+Il Worker deve chiamarsi `salotto-proxy`. Se l'hai chiamato diversamente,
+aggiungi in **Settings → Secrets and variables → Actions → Variables** la
+variabile `CF_WORKER_NAME` con il suo nome. Il token `TOKEN` e le variabili
+già impostate su Cloudflare restano come sono.
+
+### A mano
+
+Apri il Worker → **Edit code**, sostituisci tutto il codice con quello di
+`cloudflare/worker.js` e clicca **Deploy**. Le variabili e il token restano.
 
 ## Da sapere
 

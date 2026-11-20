@@ -33,8 +33,10 @@ Senza token chiunque conosca l'indirizzo potrebbe usare il tuo proxy.
 1. Torna alla pagina del Worker → **Settings** → **Variables and Secrets** → **Add**.
 2. Tipo **Secret**, nome `TOKEN`, valore: una parola segreta inventata da te
    (es. `girasole-blu-42`). Clicca **Deploy**.
-3. Facoltativo: aggiungi anche una variabile di tipo **Text** chiamata
-   `ALLOWED_ORIGINS` con valore `https://gbagliesi.github.io`.
+3. Facoltativo, solo se **non** usi il token: una variabile di tipo **Text**
+   chiamata `ALLOWED_ORIGINS` con valore `https://gbagliesi.github.io`.
+   Con il token impostato viene ignorata, perché il Chromecast scarica lo
+   stream da un indirizzo Google diverso dal sito di Salotto.
 
 ## 4. Collegalo a Salotto
 
@@ -46,7 +48,16 @@ Senza token chiunque conosca l'indirizzo potrebbe usare il tuo proxy.
 Le impostazioni sono salvate nel browser: ripeti il punto 4 su ogni
 dispositivo (Mac, iPad…).
 
+## Aggiornare il Worker
+
+Quando questo file `cloudflare/worker.js` cambia (per esempio per il
+Chromecast), apri il Worker → **Edit code**, sostituisci tutto il codice con
+quello nuovo e clicca **Deploy**. Le variabili e il token restano.
+
 ## Da sapere
+
+- Chromecast: la TV scarica lo stream passando dal tuo Worker. Se sulla TV
+  compare solo il logo, aggiorna il codice del Worker (sezione sopra).
 
 - Il piano gratuito include 100.000 richieste al giorno. Uno stream HLS fa
   circa una richiesta ogni 2-6 secondi, quindi bastano per molte ore di

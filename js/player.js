@@ -291,7 +291,7 @@ export async function play(item, stream, opts = {}) {
     if (resume) {
       el.video.addEventListener('loadedmetadata', () => { el.video.currentTime = resume; showMsg('Ripresa da ' + fmt(resume), 2000); }, { once: true });
     }
-    await el.video.play().catch(() => showMsg('Tocca ▶ per avviare'));
+    await el.video.play().catch(() => { if (!casting) showMsg('Tocca ▶ per avviare'); });
   } catch (e) {
     showMsg(e.message);
   }
@@ -434,6 +434,7 @@ function updateCastBtn() {
 
 cast.initCast({
   onState: updateCastBtn,
+  onError: () => { if (isOpen()) showMsg('La TV non riesce a riprodurre questo stream. Se usi il proxy Cloudflare, aggiorna il codice del Worker (vedi guida) o prova un altro canale.', 7000); },
   onSession: (active) => {
     casting = active;
     updateCastBtn();

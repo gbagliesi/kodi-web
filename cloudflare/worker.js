@@ -10,7 +10,10 @@
  * Settings (Worker → Settings → Variables and Secrets):
  *   TOKEN            secret, recommended: every call must carry ?token=<TOKEN>
  *   ALLOWED_ORIGINS  optional, comma separated, e.g. https://gbagliesi.github.io
- *                    (requests from other web sites are refused)
+ *                    (requests from other web sites are refused). Ignored when TOKEN
+ *                    is set (the token already protects the proxy), and Chromecast
+ *                    receivers (*.gstatic.com) are always allowed, since the TV
+ *                    fetches the stream itself when casting.
  *
  * Setup guide: docs/CLOUDFLARE.md
  */
@@ -59,7 +62,8 @@ async function handle(request, env) {
 
   const allowed = String(env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
   const origin = request.headers.get('Origin');
-  if (allowed.length && origin && !allowed.includes(origin)) return text('origine non consentita', 403);
+  const castReceiver = /^https:\/\/([a-z0-9-]+\.)*gstatic\.com$/i.test(origin || '');
+  if (!token && allowed.length && origin && !allowed.includes(origin) && !castReceiver) return text('origine non consentita', 403);
 
   let target;
   try { target = new URL(u.searchParams.get('url') || ''); } catch { return text('url mancante o non valido', 400); }

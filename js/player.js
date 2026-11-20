@@ -29,7 +29,8 @@ let lastSave = 0;
 let onCloseCb = null;
 let triedProxy = false;
 let triedHls = false;
-let triedMse = false; // TV app: native HLS failed, hls.js used instead
+// TV app: 0 = native HLS direct, 1 = native HLS through the proxy, 2 = hls.js (native failed)
+let nativeStage = 0, nativeErr = 0;
 const TV_APP = /SalottoTV/.test(navigator.userAgent);
 let casting = false;      // a Google Cast session is playing the current item
 let localAttached = false; // the local <video> has the stream loaded
@@ -160,7 +161,7 @@ async function attach(stream) {
   // is more reliable than the browser's own support, when Media Source is available.
   // The Fire TV app also tries the WebView's own HLS player first: it keeps audio and video in
   // sync better than hls.js on the Stick's slow processor (falls back to hls.js on error).
-  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && (APPLE || !hasMse() || (TV_APP && !triedMse));
+  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && (APPLE || !hasMse() || (TV_APP && nativeStage < 2));
   if (looksHls(stream.url, stream.mime) && !native) {
     await loadScript(HLS_CDN);
     if (!window.Hls || !window.Hls.isSupported()) {
@@ -275,7 +276,7 @@ function updateFavBtn() {
 export async function play(item, stream, opts = {}) {
   triedProxy = false;
   triedHls = false;
-  triedMse = false;
+  nativeStage = 0; nativeErr = 0;
   channels = opts.channels && opts.channels.list.length > 1 ? opts.channels : null;
   if (channels && !channels.numbers) channels.numbers = numberChannels(channels.list);
   pendingIndex = -1;
@@ -500,7 +501,7 @@ function statsRows() {
   const v = el.video, rows = [];
   rows.push(['Percorso', routeLabel || '—']);
   if (casting) { rows.push(['Riproduzione', 'sulla TV (' + cast.deviceName() + ')']); return rows; }
-  rows.push(['Motore', hls ? 'hls.js' : (looksHls(current?.stream.url || '', current?.stream.mime) ? 'HLS nativo del browser' : 'lettore del browser')]);
+  rows.push(['Motore', hls ? 'hls.js' + (nativeErr ? ' (HLS nativo non riuscito, errore ' + nativeErr + ')' : '') : (looksHls(current?.stream.url || '', current?.stream.mime) ? 'HLS nativo del browser' : 'lettore del browser')]);
   rows.push(['Risoluzione', v.videoWidth ? v.videoWidth + '×' + v.videoHeight : (current?.audio ? 'solo audio' : '—')]);
   if (hls && hls.levels?.length) {
     const lv = hls.levels[hls.currentLevel] || hls.levels[hls.loadLevel];
@@ -819,9 +820,14 @@ v.addEventListener('ended', () => { if (current) setResume(current.key, 0, 0); e
 v.addEventListener('error', () => {
   if (hls || !current) return; // hls.js reports its own errors
   const code = v.error?.code;
-  if (TV_APP && !triedMse && looksHls(current.stream.url, current.stream.mime)) {
-    triedMse = true;
-    attach(current.stream).then(() => v.play().catch(() => {})).catch(e => showMsg(e.message));
+  if (TV_APP && nativeStage < 2 && looksHls(current.stream.url, current.stream.mime)) {
+    nativeErr = code || 0;
+    // the proxy resolves redirectors and serves the playlist with the HLS type, which the
+    // native player may need; if that fails too, use hls.js
+    const viaProxy = nativeStage === 0 && getProxy() && !current.stream.proxy;
+    nativeStage = viaProxy ? 1 : 2;
+    const stream = viaProxy ? { ...current.stream, proxy: true } : current.stream;
+    attach(stream).then(() => v.play().catch(() => {})).catch(e => showMsg(e.message));
     return;
   }
   // Many live URLs (redirectors, extension-less links) are HLS in disguise:

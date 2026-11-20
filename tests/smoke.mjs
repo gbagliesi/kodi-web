@@ -478,7 +478,7 @@ async function uiTests() {
         await pp.waitForSelector('#player:not([hidden])');
         await pp.waitForTimeout(500); // let the player's own start-up play() happen first
         // Android: the video opens full screen by itself (for the automatic floating window), still portrait
-        assert.equal(await pp.evaluate(() => document.fullscreenElement?.id), 'player', 'Android opens videos full screen');
+        assert.equal(await pp.evaluate(() => document.fullscreenElement === document.documentElement), true, 'Android opens videos full screen');
         assert.ok(!(await pp.evaluate(() => window.__orient.includes('lock:landscape'))), 'automatic full screen keeps the orientation');
         // Tapping the picture shows/hides the controls without pausing
         await pp.evaluate(() => {
@@ -502,7 +502,7 @@ async function uiTests() {
         assert.equal((await pp.evaluate(() => window.__media)).length, 1, 'play button works once visible');
         await pp.click('#pl-fs');
         await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:landscape')));
-        assert.equal(await pp.evaluate(() => document.fullscreenElement?.id), 'player', 'the full screen button turns it landscape, stays full screen');
+        assert.equal(await pp.evaluate(() => !!document.fullscreenElement), true, 'the full screen button turns it landscape, stays full screen');
         assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Ruota in verticale');
         await pp.click('#pl-fs');
         await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:portrait')));
@@ -511,8 +511,10 @@ async function uiTests() {
         await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
         // full screen lost: a tap on the picture brings the automatic full screen back
         await pp.touchscreen.tap(180, 300);
-        await waitFor(() => pp.evaluate(() => document.fullscreenElement?.id === 'player'));
+        await waitFor(() => pp.evaluate(() => document.fullscreenElement === document.documentElement));
         await pp.click('#pl-close');
+        // automatic mode: the app stays full screen after closing the video (Chrome's notice shows once)
+        assert.equal(await pp.evaluate(() => document.fullscreenElement === document.documentElement), true, 'stays full screen between videos');
         // Live TV: a vertical swipe on the picture changes channel
         await pp.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
         await pp.waitForSelector('.row:has-text("La7")');

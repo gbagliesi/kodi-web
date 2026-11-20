@@ -467,6 +467,12 @@ async function uiTests() {
       await tv.keyboard.press('ContextMenu');
       await tv.waitForSelector('#pl-channels:not([hidden])');
       assert.equal(await tv.evaluate(() => innerWidth), 1280, 'TV: page laid out on 1280 px');
+      // ▲ from the first channel reaches the channel-number box
+      await tv.evaluate(() => document.querySelector('.ch-row').focus());
+      await tv.keyboard.press('ArrowUp');
+      assert.equal(await focusedTag(), 'pl-chnum', 'TV: ▲ from the first channel reaches the number box');
+      await tv.keyboard.press('ArrowDown');
+      assert.equal(await tv.evaluate(() => document.activeElement.classList.contains('ch-row')), true, 'TV: ▼ from the number box goes back to the list');
       await tv.evaluate(() => window.salottoBack());
       assert.equal(await tv.isHidden('#pl-channels'), true);
       // full screen / volume buttons make no sense on the TV; ▶ on the position bar reaches LIVE

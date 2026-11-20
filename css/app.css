@@ -217,6 +217,8 @@ button { cursor: pointer; }
 input[type=range] { accent-color: var(--accent); height: 32px; }
 .player-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 80%; padding: 16px 22px; border-radius: 14px; background: rgba(0, 0, 0, .75); text-align: center; }
 .player-stage, .player-ui { touch-action: none; } /* vertical swipes change channel */
+#pl-cast.active { color: var(--accent); }
+.player.casting video { opacity: .25; }
 .ch-btn { min-width: 64px; font-weight: 700; font-size: 15px; }
 .player-osd {
   position: absolute; top: calc(76px + var(--safe-top)); left: calc(20px + var(--safe-left)); z-index: 2; pointer-events: none;

@@ -12,6 +12,9 @@ con browser. Supporta gli **add-on**, scritti in JavaScript.
 - Lettore video e audio con HLS (`.m3u8`): nativo su Safari e su tutti i
   browser iPad, tramite hls.js altrove. Riprende i video dal punto lasciato,
   controlli dalla schermata di blocco (Media Session)
+- Trasmissione a TV e altoparlanti: Google Cast (Chromecast, Google TV, Nest)
+  da Chrome su Android, Mac e PC; AirPlay da iPad, iPhone e Safari sul Mac.
+  Per i canali che richiedono il proxy, la TV riceve l'indirizzo del proxy
 - File locali (dall'app File di iPad, iCloud, chiavette USB), senza caricarli
   da nessuna parte
 - Apri URL diretti di stream

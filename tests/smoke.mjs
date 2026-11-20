@@ -42,6 +42,32 @@ const EPG = `<?xml version="1.0"?><tv>
 const RADIO = [{ stationuuid: 'u1', name: 'Radio Prova', url_resolved: 'https://example.org/radio.mp3', country: 'Italy', tags: 'pop', bitrate: 128, favicon: '' },
   { stationuuid: 'u2', name: 'Solo HTTP', url_resolved: 'http://example.org/radio.mp3', country: 'Italy', tags: '', bitrate: 64, favicon: '' }];
 
+// Fake Google Cast SDK: records what would be sent to the TV
+const FAKE_CAST = `(() => {
+  let sess = null; const ctxL = []; window.__castLoads = []; window.__castPP = 0; window.__castStopped = 0;
+  window.chrome = window.chrome || {};
+  window.chrome.cast = { AutoJoinPolicy: { ORIGIN_SCOPED: 'o' }, Image: function (u) { this.url = u; }, media: {
+    DEFAULT_MEDIA_RECEIVER_APP_ID: 'CC1AD845', StreamType: { LIVE: 'LIVE', BUFFERED: 'BUFFERED' },
+    MediaInfo: function (u, t) { this.contentId = u; this.contentType = t; },
+    GenericMediaMetadata: function () {}, MusicTrackMediaMetadata: function () {}, LoadRequest: function (m) { this.media = m; } } };
+  const fire = (st) => { for (const [t, f] of ctxL) if (t === 'session') f({ sessionState: st }); };
+  const ctx = { setOptions() {}, addEventListener(t, f) { ctxL.push([t, f]); }, getCastState: () => 'NOT_CONNECTED', getCurrentSession: () => sess,
+    requestSession() {
+      sess = { getCastDevice: () => ({ friendlyName: 'TV Salotto' }),
+        loadMedia: async (r) => { window.__castLoads.push([r.media.contentId, r.media.contentType, r.media.streamType, r.media.metadata.title]); },
+        getMediaSession: () => ({ stop() { window.__castStopped++; } }) };
+      fire('SESSION_STARTED'); return Promise.resolve();
+    } };
+  window.cast = { framework: { CastContext: { getInstance: () => ctx },
+    CastContextEventType: { CAST_STATE_CHANGED: 'state', SESSION_STATE_CHANGED: 'session' },
+    SessionState: { SESSION_STARTED: 'SESSION_STARTED', SESSION_RESUMED: 'SESSION_RESUMED', SESSION_ENDED: 'SESSION_ENDED' },
+    RemotePlayer: function () { this.currentTime = 0; this.duration = 0; this.isPaused = false; },
+    RemotePlayerController: function () { this.addEventListener = () => {}; this.playOrPause = () => { window.__castPP++; }; this.seek = () => {}; },
+    RemotePlayerEventType: {} } };
+  window.__endCast = () => { sess = null; fire('SESSION_ENDED'); };
+  setTimeout(() => window.__onGCastApiAvailable(true), 0);
+})();`;
+
 async function mock(context) {
   await context.route(/^https:\/\/(raw\.githubusercontent\.com|iptv-org\.github\.io)\//, r => r.fulfill({ status: 200, contentType: 'audio/x-mpegurl', body: M3U.replace('#EXTM3U', `#EXTM3U x-tvg-url="https://epg.example.org/epg_DE1.xml.gz, https://epg.example.org/epg_IT1.xml, https://epg.example.org/epg_US1.xml.gz"`), headers: { 'access-control-allow-origin': '*' } }));
   await context.route('https://epg.example.org/**', r => r.request().url().endsWith('/epg_IT1.xml') ? r.fulfill({ status: 200, contentType: 'application/xml', body: EPG, headers: { 'access-control-allow-origin': '*' } }) : r.fulfill({ status: 404, body: '' }));
@@ -50,7 +76,9 @@ async function mock(context) {
   await context.route('https://archive.org/metadata/**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ d1: 'ia800.example.org', dir: '/1/items/film1', files: [{ name: 'film1.ogv' }, { name: 'film1_512kb.mp4', format: 'h.264' }] }) }));
   // media + images: tiny empty responses
   await context.route(/^https:\/\/(example\.org|ia800\.example\.org|commondatastorage\.googleapis\.com|archive\.org\/services)\//, r => r.fulfill({ status: 404, body: '' }));
-  await context.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.Hls={isSupported:()=>true,Events:{ERROR:"e"},ErrorTypes:{},prototype:{}};window.Hls=Object.assign(function(){return{on(){},loadSource(u){window.__hlsSrc=u},attachMedia(){},destroy(){}}},window.Hls);' }));
+  await context.addInitScript(() => { window.chrome = window.chrome || {}; });
+  await context.route('https://www.gstatic.com/cv/js/sender/**', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE_CAST }));
+  await context.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.Hls={isSupported:()=>true,Events:{ERROR:"e"},ErrorTypes:{},prototype:{}};window.Hls=Object.assign(function(){return{on(){},loadSource(u){window.__hlsSrc=u},attachMedia(){},destroy(){},stopLoad(){},startLoad(){}}},window.Hls);' }));
 }
 
 async function waitFor(fn, ms = 8000) {
@@ -299,8 +327,28 @@ async function uiTests() {
     await p3.waitForSelector('.row:has-text("Solo dall\'Italia")');
     await p3.click('.row:has-text("Rai 1"):has-text("Solo dall\'Italia")');
     await waitFor(() => p3.evaluate(() => (window.__hlsSrc || '').includes('relinkerServlet')));
-    await desktop.close();
     console.log('✓ desktop: extension-less live links are played with hls.js');
+
+    // Google Cast: the TV gets the proxied stream, zapping follows on the TV, controls drive it
+    await p3.waitForSelector('#pl-cast:not([hidden])');
+    await p3.click('#pl-cast');
+    await waitFor(() => p3.evaluate(() => window.__castLoads.length === 1));
+    let loads = await p3.evaluate(() => window.__castLoads);
+    assert.match(loads[0][0], /^http:\/\/127\.0\.0\.1:\d+\/proxy\?url=.*relinkerServlet/, 'cast URL goes through the proxy, absolute');
+    assert.deepEqual(loads[0].slice(1), ['application/x-mpegurl', 'LIVE', 'Rai 1']);
+    assert.match(await p3.textContent('#pl-msg'), /In riproduzione su TV Salotto/);
+    assert.equal(await p3.evaluate(() => document.getElementById('player').classList.contains('casting')), true);
+    await p3.click('#pl-chdown');
+    await waitFor(() => p3.evaluate(() => window.__castLoads.length === 2));
+    loads = await p3.evaluate(() => window.__castLoads);
+    assert.match(loads[1][3], /La7/, 'zapping sends the new channel to the TV');
+    await p3.click('#pl-play');
+    assert.equal(await p3.evaluate(() => window.__castPP), 1, 'play/pause drives the TV');
+    await p3.click('#pl-close');
+    assert.equal(await p3.evaluate(() => window.__castStopped), 1, 'closing stops the TV');
+    await p3.evaluate(() => window.__endCast());
+    assert.equal(await p3.evaluate(() => document.getElementById('player').classList.contains('casting')), false);
+    console.log('✓ Google Cast: proxied stream sent to the TV, zapping and controls follow');
 
     // Portrait layout (bottom bar)
     const portrait = await browser.newContext({ ...devices['iPad Mini'], serviceWorkers: 'block' });
@@ -311,6 +359,22 @@ async function uiTests() {
     const dir = await p2.evaluate(() => getComputedStyle(document.getElementById('app')).flexDirection);
     assert.equal(dir, 'column-reverse');
     if (SHOTS) await p2.screenshot({ path: SHOTS + '/portrait.png' });
+    // AirPlay: WebKit's picker opens from the cast button
+    await p2.goto(BASE + '#/browse/plugin.video.demo?p=films');
+    // the listener is attached at start-up only when WebKit has AirPlay: emulate a fresh start with it
+    await p2.addInitScript(() => { window.WebKitPlaybackTargetAvailabilityEvent = function () {}; });
+    await p2.reload();
+    await p2.waitForSelector('.card');
+    await p2.locator('.card').first().click();
+    await p2.waitForSelector('#player:not([hidden])');
+    await p2.evaluate(() => {
+      const v = document.getElementById('video');
+      window.__picker = 0; v.webkitShowPlaybackTargetPicker = () => { window.__picker++; };
+      const e = new Event('webkitplaybacktargetavailabilitychanged'); e.availability = 'available'; v.dispatchEvent(e);
+    });
+    await p2.click('#pl-cast');
+    assert.equal(await p2.evaluate(() => window.__picker), 1, 'AirPlay picker opens');
+    console.log('✓ AirPlay: the cast button opens the AirPlay picker on Apple devices');
 
     // Phones: the list area must scroll with a finger swipe (bug seen on Android)
     for (const name of ['Pixel 7', 'iPhone 13']) {

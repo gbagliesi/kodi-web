@@ -17,7 +17,7 @@ const el = {
   close: $('pl-close'), fav: $('pl-fav'), play: $('pl-play'), rew: $('pl-rew'), fwd: $('pl-fwd'),
   seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'), pip: $('pl-pip'),
   msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
-  cast: $('pl-cast'), route: $('pl-route'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
+  cast: $('pl-cast'), route: $('pl-route'), stats: $('pl-stats'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
   osdName: $('pl-osd-name'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
 };
 
@@ -137,13 +137,14 @@ function buildUrl(stream) {
 }
 
 // "Diretto" / "Proxy" badge next to the title: how the stream reaches this device (or the TV)
-let localRoute = '';
+let localRoute = '', routeLabel = '';
 const isProxied = (u) => { const p = getProxy(); return !!p && String(u).startsWith(p.split('?')[0]); };
 function showRoute(proxied, where = '') {
   const label = (where ? where + ' · ' : '') + (proxied ? 'Proxy' : 'Diretto');
-  el.route.textContent = label;
+  el.route.textContent = label + ' ⓘ';
+  routeLabel = label;
   el.route.classList.toggle('proxy', proxied);
-  el.route.title = proxied ? 'Lo stream passa dal tuo proxy (Cloudflare o server locale)' : 'Lo stream arriva direttamente dal sito del canale, senza proxy';
+  el.route.title = (proxied ? 'Lo stream passa dal tuo proxy (Cloudflare o server locale)' : 'Lo stream arriva direttamente dal sito del canale, senza proxy') + '. Tocca per i dettagli tecnici.';
   el.route.hidden = false;
 }
 
@@ -340,6 +341,7 @@ export function close() {
   channels = null;
   clearTimeout(zapTimer); clearTimeout(digitTimer); digits = ''; zapToken++;
   el.osd.hidden = true; el.panel.hidden = true;
+  toggleStats(false);
   const cb = onCloseCb; onCloseCb = null;
   if (cb) cb();
 }
@@ -455,6 +457,52 @@ export function handleKey(e) {
     case 'MediaTrackNext': skip(30); return true;
     default: return false;
   }
+}
+
+// ---------------------------------------------------------------- stream details (tap the Diretto/Proxy badge)
+let statsTimer = 0;
+const kbps = (b) => !b ? '—' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' Mbit/s' : Math.round(b / 1e3) + ' kbit/s';
+function statsRows() {
+  const v = el.video, rows = [];
+  rows.push(['Percorso', routeLabel || '—']);
+  if (casting) { rows.push(['Riproduzione', 'sulla TV (' + cast.deviceName() + ')']); return rows; }
+  rows.push(['Motore', hls ? 'hls.js' : (looksHls(current?.stream.url || '', current?.stream.mime) ? 'HLS nativo del browser' : 'lettore del browser')]);
+  rows.push(['Risoluzione', v.videoWidth ? v.videoWidth + '×' + v.videoHeight : (current?.audio ? 'solo audio' : '—')]);
+  if (hls && hls.levels?.length) {
+    const lv = hls.levels[hls.currentLevel] || hls.levels[hls.loadLevel];
+    if (lv) {
+      rows.push(['Bitrate', kbps(lv.bitrate) + (lv.frameRate ? ' · ' + Math.round(lv.frameRate) + ' fps' : '')]);
+      if (lv.videoCodec || lv.audioCodec) rows.push(['Codec', [lv.videoCodec, lv.audioCodec].filter(Boolean).join(' + ')]);
+    }
+    rows.push(['Qualità', (hls.currentLevel + 1) + ' di ' + hls.levels.length + (hls.autoLevelEnabled ? ' (automatica)' : '')]);
+    if (hls.bandwidthEstimate) rows.push(['Banda stimata', kbps(hls.bandwidthEstimate)]);
+  } else if (!current?.audio) {
+    rows.push(['Bitrate', hls ? '—' : 'non disponibile in questo browser']);
+  }
+  const b = v.buffered;
+  let ahead = 0;
+  for (let i = 0; i < (b?.length || 0); i++) if (b.start(i) <= v.currentTime + 0.5 && b.end(i) > v.currentTime) ahead = b.end(i) - v.currentTime;
+  rows.push(['Buffer', ahead.toFixed(1) + ' s']);
+  const w = isLive() ? liveWindow() : null;
+  if (isLive()) rows.push(['Finestra diretta', w ? Math.round(w.end - w.start) + ' s' : 'nessuna']);
+  const q = v.getVideoPlaybackQuality?.();
+  if (q && q.totalVideoFrames) rows.push(['Fotogrammi persi', q.droppedVideoFrames + ' di ' + q.totalVideoFrames]);
+  try { rows.push(['Server', new URL(current.stream.url).host]); } catch { /* ignore */ }
+  return rows;
+}
+function renderStats() {
+  if (el.stats.hidden || !current) return;
+  el.stats.replaceChildren(...statsRows().map(([k, val]) => {
+    const r = document.createElement('div');
+    const a = document.createElement('span'); a.textContent = k;
+    const b = document.createElement('b'); b.textContent = val;
+    r.append(a, b); return r;
+  }));
+}
+function toggleStats(show = el.stats.hidden) {
+  el.stats.hidden = !show;
+  clearInterval(statsTimer);
+  if (show) { renderStats(); statsTimer = setInterval(renderStats, 1000); }
 }
 
 // ---------------------------------------------------------------- picture-in-picture (floating window)
@@ -750,6 +798,8 @@ el.rew.addEventListener('click', () => skip(-10));
 el.fwd.addEventListener('click', () => skip(30));
 el.close.addEventListener('click', close);
 el.fs.addEventListener('click', toggleFullscreen);
+el.route.addEventListener('click', () => { toggleStats(); wake(); });
+el.stats.addEventListener('click', () => toggleStats(false));
 el.pip.addEventListener('click', () => { (inPip() ? exitPip() : enterPip(true)); wake(); });
 // Going back to the app from the floating window: some browsers pause the video on the way.
 // If it was playing and the app is visible again (not closed with the window's ✕), carry on.

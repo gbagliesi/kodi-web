@@ -286,6 +286,12 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
   * { transition: none !important; animation: none !important; }
 }
 
-.route-badge { flex: none; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 3px 8px; border-radius: 999px;
+.route-badge { flex: none; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 3px 8px; border-radius: 999px;
   color: #cfe9e4; background: rgba(61, 184, 164, .18); border: 1px solid rgba(61, 184, 164, .45); white-space: nowrap; }
 .route-badge.proxy { color: #ffe2b8; background: rgba(255, 170, 60, .16); border-color: rgba(255, 170, 60, .5); }
+
+.player-stats { position: absolute; left: 16px; top: 84px; z-index: 3; max-width: calc(100% - 32px); padding: 10px 14px;
+  border-radius: 12px; background: rgba(0, 0, 0, .78); font-size: 13px; line-height: 1.55; font-variant-numeric: tabular-nums; }
+.player-stats div { display: flex; gap: 14px; justify-content: space-between; }
+.player-stats span { color: var(--dim, #9aa4b2); }
+.player-stats b { font-weight: 600; text-align: right; overflow-wrap: anywhere; }

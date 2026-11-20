@@ -2,6 +2,7 @@
 // (Safari / every iPad browser) or hls.js (desktop Chrome, Firefox, Android).
 import { getResume, setResume, getSettings, isFavourite, toggleFavourite } from './storage.js';
 import { getProxy, proxify } from './addons.js';
+import * as cast from './cast.js';
 
 const UA = navigator.userAgent;
 const APPLE = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
@@ -16,7 +17,7 @@ const el = {
   close: $('pl-close'), fav: $('pl-fav'), play: $('pl-play'), rew: $('pl-rew'), fwd: $('pl-fwd'),
   seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'),
   msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
-  chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
+  cast: $('pl-cast'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
   osdName: $('pl-osd-name'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
 };
 
@@ -28,6 +29,9 @@ let lastSave = 0;
 let onCloseCb = null;
 let triedProxy = false;
 let triedHls = false;
+let casting = false;      // a Google Cast session is playing the current item
+let localAttached = false; // the local <video> has the stream loaded
+let airplayAvailable = false;
 let channels = null;      // { list: [{ item, open() }], index } when zapping between live channels
 
 export const isOpen = () => !el.root.hidden;
@@ -143,6 +147,7 @@ function setupMediaSession(item) {
 
 function skip(s) {
   const v = el.video;
+  if (casting) { if (!current?.item.live) cast.seek(cast.remoteTime() + s); wake(); return; }
   if (isLive()) return;
   v.currentTime = Math.max(0, Math.min((v.duration || 0) - 1, v.currentTime + s));
   wake();
@@ -150,6 +155,13 @@ function skip(s) {
 
 function togglePlay() {
   const v = el.video;
+  if (casting) { cast.playOrPause(); wake(); return; }
+  if (!localAttached && current) {
+    localAttached = true;
+    attach(current.stream).then(() => v.play()).catch(e => showMsg(e.message));
+    wake();
+    return;
+  }
   if (v.paused) v.play().catch(err => showMsg('Tocca ▶ per avviare (' + err.message + ')', 3000));
   else v.pause();
   wake();
@@ -200,7 +212,15 @@ export async function play(item, stream, opts = {}) {
   showMsg('Caricamento…');
   setupMediaSession(item);
   wake();
+  localAttached = false;
+  if (casting) {
+    const resume = getSettings().autoResume && !item.live ? getResume(current.key) : 0;
+    await sendToCast(resume);
+    if (!opts.keepFocus || !el.root.contains(document.activeElement)) el.play.focus({ preventScroll: true });
+    return;
+  }
   try {
+    localAttached = true;
     await attach(stream);
     const resume = getSettings().autoResume && !item.live ? getResume(current.key) : 0;
     if (resume) {
@@ -216,6 +236,7 @@ export async function play(item, stream, opts = {}) {
 export function close() {
   if (!isOpen()) return;
   saveResume(true);
+  if (casting) cast.stopMedia();
   const v = el.video;
   v.pause();
   destroyHls();
@@ -307,6 +328,82 @@ export function handleKey(e) {
     default: return false;
   }
 }
+
+// ---------------------------------------------------------------- casting (Google Cast, AirPlay)
+// The TV/speaker fetches the stream itself, so it gets the proxied address when a proxy is
+// configured (it adds the CORS headers Cast receivers require and the channel's headers).
+function castUrl(stream) {
+  const needsProxy = looksHls(stream.url, stream.mime) || stream.proxy || (stream.headers && Object.keys(stream.headers).length);
+  if (!getProxy() || !needsProxy) return stream.url;
+  let u = proxify(stream.url);
+  if (stream.headers) u += '&headers=' + encodeURIComponent(JSON.stringify(stream.headers));
+  return new URL(u, location.href).href;
+}
+
+async function sendToCast(startTime = 0) {
+  if (!current) return;
+  const { item, stream } = current;
+  if (/^(blob|data):/.test(stream.url)) { showMsg('I file del dispositivo non si possono trasmettere: apri un contenuto online.', 4000); return; }
+  showMsg('Invio a ' + cast.deviceName() + '…');
+  try {
+    await cast.load({
+      url: castUrl(stream), mime: stream.mime, hls: looksHls(stream.url, stream.mime),
+      title: item.label, subtitle: item.subtitle || '', thumb: item.thumb, live: !!item.live, audio: current.audio, startTime,
+    });
+  } catch (e) {
+    showMsg('Trasmissione non riuscita' + (e && (e.description || e.code) ? ' (' + (e.description || e.code) + ')' : '') + '. Lo stream potrebbe non essere compatibile con il dispositivo.', 5000);
+    return;
+  }
+  // the TV plays it now: stop playing (and downloading) here
+  el.video.pause();
+  try { if (hls) hls.stopLoad(); } catch { /* ignore */ }
+  showMsg('In riproduzione su ' + cast.deviceName());
+}
+
+function updateCastBtn() {
+  const wireless = !!el.video.webkitCurrentPlaybackTargetIsWireless;
+  el.cast.hidden = !(cast.available() || airplayAvailable || casting || wireless);
+  el.cast.classList.toggle('active', casting || wireless);
+  el.root.classList.toggle('casting', casting);
+}
+
+cast.initCast({
+  onState: updateCastBtn,
+  onSession: (active) => {
+    casting = active;
+    updateCastBtn();
+    if (!isOpen() || !current) return;
+    if (active) sendToCast(localAttached ? el.video.currentTime : 0);
+    else {
+      el.play.innerHTML = '&#9654;';
+      try { if (hls) hls.startLoad(); } catch { /* ignore */ }
+      showMsg('Trasmissione terminata. Tocca ▶ per continuare qui.', 4000);
+    }
+  },
+  onProgress: ({ time, duration, paused }) => {
+    if (!casting || !isOpen()) return;
+    el.play.innerHTML = paused ? '&#9654;' : '&#10074;&#10074;';
+    el.cur.textContent = fmt(time);
+    if (isFinite(duration) && duration > 0 && !current?.item.live) {
+      el.dur.textContent = fmt(duration);
+      if (!seeking) el.seek.value = Math.round((time / duration) * 1000);
+    }
+  },
+});
+
+// AirPlay (Safari and every browser on iPad/iPhone, Safari on the Mac)
+if (window.WebKitPlaybackTargetAvailabilityEvent) {
+  el.video.addEventListener('webkitplaybacktargetavailabilitychanged', (e) => { airplayAvailable = e.availability === 'available'; updateCastBtn(); });
+  el.video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => {
+    updateCastBtn();
+    showMsg(el.video.webkitCurrentPlaybackTargetIsWireless ? 'In riproduzione su AirPlay' : '', 0);
+  });
+}
+
+el.cast.addEventListener('click', () => {
+  if (airplayAvailable && typeof el.video.webkitShowPlaybackTargetPicker === 'function') { el.video.webkitShowPlaybackTargetPicker(); return; }
+  cast.requestSession().catch(() => { /* picker closed */ });
+});
 
 // ---------------------------------------------------------------- live channels
 let pendingIndex = -1;   // channel shown on the OSD while the viewer is still pressing CH +/−
@@ -494,6 +591,12 @@ el.seek.addEventListener('input', () => {
   if (isFinite(v.duration)) el.cur.textContent = fmt((el.seek.value / 1000) * v.duration);
 });
 el.seek.addEventListener('change', () => {
+  if (casting) {
+    const d = cast.remoteDuration();
+    if (d > 0 && !current?.item.live) cast.seek((el.seek.value / 1000) * d);
+    seeking = false;
+    return;
+  }
   if (isFinite(v.duration)) v.currentTime = (el.seek.value / 1000) * v.duration;
   seeking = false;
 });

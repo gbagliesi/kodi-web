@@ -330,11 +330,13 @@ export function close() {
 // current orientation; the full screen button then turns to landscape). Needs the tap that
 // opened the video, which is why it runs before anything is awaited.
 let autoFs = false;
+const wantsAutoFs = () => /Android/i.test(navigator.userAgent) && getSettings().autoPip && isOpen() && current && !current.audio && !casting;
 function autoFullscreen() {
-  if (!/Android/i.test(navigator.userAgent) || !getSettings().autoPip || current?.audio || casting) return;
-  if (document.fullscreenElement || !el.root.requestFullscreen || !navigator.userActivation?.isActive) return;
+  if (!wantsAutoFs() || document.fullscreenElement || !el.root.requestFullscreen) return false;
+  if (navigator.userActivation && !navigator.userActivation.isActive) return false;
   autoFs = true;
   el.root.requestFullscreen({ navigationUI: 'hide' }).catch(() => { autoFs = false; });
+  return true;
 }
 
 const FS_ICON = el.fs.innerHTML;
@@ -352,8 +354,11 @@ function toggleFullscreen() {
   const r = el.root;
   if (document.fullscreenElement && isPhone() && typeof screen.orientation?.lock === 'function') {
     // already full screen on a phone: switch between portrait (automatic mode) and landscape
-    if (autoFs) { autoFs = false; onFullscreenChange(); }
-    else { autoFs = true; screen.orientation.lock('portrait').catch(() => {}); updateFsBtn(); }
+    const want = autoFs ? 'landscape' : 'portrait';
+    autoFs = want === 'portrait';
+    updateFsBtn();
+    // if the browser dropped full screen behind our back, the lock fails: enter full screen again
+    screen.orientation.lock(want).catch(() => r.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation.lock(want)).catch(() => {}));
     return;
   }
   if (document.fullscreenElement || document.webkitFullscreenElement) {
@@ -441,7 +446,9 @@ async function enterPip(fromButton = false) {
   const v = el.video;
   if (inPip() || !current || current.audio) return;
   try {
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
+    // leaving full screen for the window only when asked with the button: if the request below
+    // fails (no tap, e.g. when the app goes to the background) the video must stay full screen
+    if (fromButton && (document.fullscreenElement || document.webkitFullscreenElement)) {
       await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
     }
     if (v.requestPictureInPicture && document.pictureInPictureEnabled) await v.requestPictureInPicture();
@@ -795,6 +802,8 @@ function hideControls() {
 
 function onBackgroundTap() {
   if (swallowClick) { swallowClick = false; return; }
+  // automatic full screen got lost (back from the floating window, back gesture…): a tap restores it
+  if (lastPointer === 'touch' && autoFullscreen()) { wake(); return; }
   if (!el.panel.hidden) { closePanel(); return; }
   const hidden = el.ui.classList.contains('idle');
   if (lastPointer === 'mouse') { if (hidden) wake(); else togglePlay(); return; }

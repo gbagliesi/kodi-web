@@ -1,0 +1,51 @@
+# Builds the Fire TV / Android TV app (android/) and publishes it as the "firetv" release:
+# https://github.com/gbagliesi/kodi-web/releases/download/firetv/salotto-firetv.apk
+name: App Fire TV
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths:
+      - 'android/**'
+      - '.github/workflows/firetv.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: firetv
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # the GitHub runner already has the Android SDK (ANDROID_HOME); Gradle fetches what is missing
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: Costruisci l'APK
+        run: gradle -p android assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+      - name: Prepara il file
+        run: cp android/app/build/outputs/apk/release/app-release.apk salotto-firetv.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: salotto-firetv
+          path: salotto-firetv.apk
+      - name: Pubblica la release "firetv"
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: firetv
+          name: Salotto per Fire TV
+          body: |
+            App Salotto per Fire TV / Android TV (build ${{ github.run_number }}).
+            Installazione con l'app Downloader: vedi docs/FIRETV.md.
+          files: salotto-firetv.apk
+          make_latest: true

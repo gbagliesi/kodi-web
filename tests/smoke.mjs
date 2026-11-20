@@ -304,7 +304,9 @@ async function uiTests() {
     await page.evaluate(() => document.activeElement.blur());
     await page.keyboard.press('ArrowLeft');
     assert.ok(await page.evaluate(() => document.getElementById('video').currentTime) < 395, 'left arrow rewinds live TV');
-    await page.click('#pl-close');
+    // Fire TV app: the remote's Back key closes the player (window.salottoBack)
+    assert.equal(await page.evaluate(() => window.salottoBack()), true);
+    assert.equal(await page.evaluate(() => document.getElementById('player').hidden), true);
     console.log('✓ live TV: rewind within the broadcaster window, LIVE button returns to the live edge');
 
     // Channel with Referer goes through the proxy

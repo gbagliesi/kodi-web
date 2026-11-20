@@ -351,7 +351,7 @@ export function close() {
 // current orientation; the full screen button then turns to landscape). Needs the tap that
 // opened the video, which is why it runs before anything is awaited.
 let autoFs = false;
-const wantsAutoFs = () => /Android/i.test(navigator.userAgent) && getSettings().autoPip && isOpen() && current && !current.audio && !casting;
+const wantsAutoFs = () => /Android/i.test(navigator.userAgent) && !/SalottoTV/.test(navigator.userAgent) && getSettings().autoPip && isOpen() && current && !current.audio && !casting;
 function autoFullscreen() {
   const doc = document.documentElement;
   if (!wantsAutoFs() || document.fullscreenElement || !doc.requestFullscreen) return false;

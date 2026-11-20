@@ -1,0 +1,33 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'io.github.gbagliesi.salotto'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'io.github.gbagliesi.salotto'
+        minSdk 22          // Fire OS 5 and later
+        targetSdk 34
+        versionCode((project.findProperty('versionCode') ?: '1') as int)
+        versionName '1.0.' + (project.findProperty('versionCode') ?: '1')
+    }
+    signingConfigs {
+        // A fixed key kept in the repository, only so that a new APK installs over the old one.
+        // It protects nothing: the app is just a window on the public web site.
+        shared {
+            storeFile file('salotto-tv.keystore')
+            storePassword 'salotto'
+            keyAlias 'salotto'
+            keyPassword 'salotto'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}

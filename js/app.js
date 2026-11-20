@@ -728,7 +728,7 @@ function renderSettings() {
     h('div', { class: 'field' }, h('label', { for: 'proxy-token' }, 'Token del proxy'), token,
       h('div', { class: 'hint' }, 'Lo stesso valore impostato come TOKEN nel proxy. Impedisce ad altri di usarlo.')),
     h('div', { class: 'field check' }, resume, h('label', { for: 'resume' }, 'Riprendi i video dal punto in cui li hai lasciati')),
-    /Android/i.test(navigator.userAgent) ? h('div', { class: 'field check' }, autoPip, h('label', { for: 'autopip' }, 'Finestra mobile automatica: i video si aprono a schermo intero, così uscendo dall\'app continuano in una finestra mobile')) : null,
+    /Android/i.test(navigator.userAgent) && !isTvApp ? h('div', { class: 'field check' }, autoPip, h('label', { for: 'autopip' }, 'Finestra mobile automatica: i video si aprono a schermo intero, così uscendo dall\'app continuano in una finestra mobile')) : null,
     h('div', { class: 'field' }, h('label', { for: 'startpage' }, 'Pagina iniziale'), startSel,
       h('div', { class: 'hint' }, 'Per partire da una pagina qualsiasi (per esempio un elenco di canali), aprila e tocca 📌 in alto.')),
     h('div', { class: 'field' }, h('label', { for: 'viewmode' }, 'Vista degli elenchi'), viewSel),
@@ -813,3 +813,17 @@ console.info('Salotto', versionLabel());
 
 // exposed for debugging / tests
 window.salotto = { addons, store, player };
+
+// ---------------------------------------------------------------- Fire TV / Android TV app
+// The TV app (android/) is a window on this site: its user agent ends with "SalottoTV".
+// The remote's Back key asks the page first: close a dialog or the player, go back a page;
+// on Home the app exits.
+export const isTvApp = /SalottoTV/.test(navigator.userAgent);
+if (isTvApp) document.body.classList.add('tv', 'kbd-nav');
+window.salottoBack = () => {
+  const m = $('modal');
+  if (!m.hidden) { m._close?.(undefined); return true; }
+  if (player.isOpen()) { player.close(); return true; }
+  if (location.hash && location.hash !== '#/') { history.back(); return true; }
+  return false;
+};

@@ -28,6 +28,7 @@ html, body {
   font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+  overflow: hidden; /* only #view scrolls, never the page */
 }
 
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -35,9 +36,9 @@ button { cursor: pointer; }
 [hidden] { display: none !important; }
 
 #app {
+  /* pinned to the visible window: stays right when the status bar or the browser bars come and go */
+  position: fixed; inset: 0;
   display: flex;
-  height: 100%;
-  height: 100dvh;
   padding-top: var(--safe-top);
 }
 
@@ -61,6 +62,7 @@ button { cursor: pointer; }
   transition: background .15s, color .15s, transform .15s;
 }
 .menu-item .ico { width: 26px; text-align: center; font-size: 20px; }
+.menu-item .lbl-short { display: none; }
 .menu-item:hover { background: var(--panel); color: var(--text); }
 .menu-item.active { background: var(--panel-hi); color: var(--text); }
 .menu-item.active .ico { color: var(--accent); }
@@ -260,8 +262,11 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
     border-right: 0; border-top: 1px solid rgba(255, 255, 255, .06);
   }
   .brand, .clock, .app-version { display: none; }
-  #menu { flex-direction: row; justify-content: space-around; overflow-x: auto; }
-  .menu-item { flex-direction: column; gap: 2px; min-height: 56px; padding: 6px 8px; font-size: 11px; justify-content: center; }
+  #menu { flex-direction: row; justify-content: space-around; gap: 0; overflow: hidden; }
+  .menu-item { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 2px; min-height: 56px; padding: 6px 2px; font-size: 11px; justify-content: center; align-items: center; }
+  .menu-item .lbl, .menu-item .lbl-short { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .menu-item .lbl { display: none; }
+  .menu-item .lbl-short { display: block; }
   .menu-item .ico { font-size: 22px; }
   .tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 14px; }

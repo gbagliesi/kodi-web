@@ -386,6 +386,16 @@ async function uiTests() {
       const dims = await pp.evaluate(() => { const v = document.getElementById('view'); return [v.clientHeight, v.scrollHeight, document.getElementById('sidebar').getBoundingClientRect().bottom <= innerHeight + 1]; });
       assert.ok(dims[1] > dims[0], `${name}: content taller than the viewport (${dims})`);
       assert.ok(dims[2], `${name}: bottom menu visible`);
+      const menu = await pp.evaluate(() => {
+        const m = document.getElementById('menu');
+        const items = [...m.querySelectorAll('.menu-item')];
+        return { fits: m.scrollWidth <= m.clientWidth + 1, inside: items.every(i => i.getBoundingClientRect().bottom <= innerHeight + 1),
+          oneLine: items.every(i => i.querySelector('.lbl-short').getBoundingClientRect().height < 20) };
+      });
+      assert.deepEqual(menu, { fits: true, inside: true, oneLine: true }, `${name}: bottom menu fits on one line`);
+      await pp.evaluate(() => window.scrollTo(0, 120));
+      await pp.waitForTimeout(50);
+      assert.equal(await pp.evaluate(() => window.scrollY), 0, `${name}: the page itself never scrolls`);
       const cdp = await phone.newCDPSession(pp);
       const y0 = Math.round(await pp.evaluate(() => innerHeight * 0.6));
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 180, y: y0 }] });

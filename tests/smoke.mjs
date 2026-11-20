@@ -428,6 +428,19 @@ async function uiTests() {
       await tv.focus('#proxy');
       await tv.keyboard.press('ArrowLeft');
       assert.notEqual(await focusedTag(), 'proxy', 'TV: the arrow leaves an empty text field');
+      // ▲▼ stay in the side menu; only ◀▶ cross to the page
+      await tv.goto(BASE + '#/');
+      await tv.waitForSelector('.hero');
+      await tv.evaluate(() => document.querySelector('.menu-item:last-child').focus());
+      await tv.keyboard.press('ArrowDown');
+      assert.equal(await tv.evaluate(() => !!document.activeElement.closest('#sidebar')), true, 'TV: ▼ at the end of the menu stays there');
+      await tv.evaluate(() => document.querySelector('.menu-item').focus());
+      await tv.keyboard.press('ArrowUp');
+      assert.equal(await tv.evaluate(() => !!document.activeElement.closest('#sidebar')), true, 'TV: ▲ at the top of the menu stays there');
+      await tv.keyboard.press('ArrowRight');
+      assert.equal(await tv.evaluate(() => !!document.activeElement.closest('#main')), true, 'TV: ▶ goes to the page');
+      const mh = await tv.evaluate(() => { const m = document.getElementById('menu'); return m.scrollHeight - m.clientHeight; });
+      assert.ok(mh <= 1, 'TV: the whole side menu fits on screen');
       await tv.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
       await tv.waitForSelector('.row:has-text("La7")');
       await tv.click('.row:has-text("Rai 1") >> nth=0');
@@ -447,13 +460,16 @@ async function uiTests() {
       assert.equal(await tv.evaluate(() => document.getElementById('player-ui').classList.contains('idle')), true, 'TV: zapping keeps the controls hidden');
       await tv.keyboard.press('ArrowUp');
       await waitFor(async () => (await tvTitle()) !== t1);
+      // the new channel starting to play does not bring the controls back
+      await tv.evaluate(() => { const v = document.querySelector('#player video'); v.dispatchEvent(new Event('playing')); v.dispatchEvent(new Event('pause')); });
+      assert.equal(await tv.evaluate(() => document.getElementById('player-ui').classList.contains('idle')), true, 'TV: a channel starting does not show the controls');
       // the menu key opens the channel list
       await tv.keyboard.press('ContextMenu');
       await tv.waitForSelector('#pl-channels:not([hidden])');
       await tv.evaluate(() => window.salottoBack());
       assert.equal(await tv.isHidden('#pl-channels'), true);
       await tvc.close();
-      console.log('✓ Fire TV app: no auto-focused text field, arrows leave fields, player controls reachable, Back hides controls');
+      console.log('✓ Fire TV app: no auto-focused text field, arrows leave fields, player controls reachable, Back hides controls, menu column, quiet zapping');
     }
 
     // Desktop Chrome: extension-less broadcaster links go through hls.js

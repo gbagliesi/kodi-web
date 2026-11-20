@@ -45,6 +45,19 @@ function best(from, dir, candidates) {
   return bestEl;
 }
 
+// The side menu and the page are two columns: ▲▼ stay in the column you are in, and only
+// ◀▶ cross between them (on phones the menu is a bottom bar, so there it is the other way round).
+function sameRegion(cur, dir, list) {
+  const side = document.getElementById('sidebar'), main = document.getElementById('main');
+  if (!side || !main || !side.contains(cur) && !main.contains(cur)) return list;
+  const s = side.getBoundingClientRect(), m = main.getBoundingClientRect();
+  const besides = s.right <= m.left + 1 || m.right <= s.left + 1;
+  const vertical = dir === 'up' || dir === 'down';
+  if (besides !== vertical) return list;
+  const region = side.contains(cur) ? side : main;
+  return list.filter(el => region.contains(el));
+}
+
 export function move(dir) {
   const list = focusables();
   if (!list.length) return false;
@@ -53,7 +66,7 @@ export function move(dir) {
     list[0].focus();
     return true;
   }
-  const next = best(cur, dir, list);
+  const next = best(cur, dir, sameRegion(cur, dir, list));
   if (next) {
     next.focus({ preventScroll: true });
     next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });

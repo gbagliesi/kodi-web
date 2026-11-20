@@ -795,8 +795,10 @@ v.addEventListener('durationchange', updateSeekUi);
 v.addEventListener('progress', updateSeekUi);
 v.addEventListener('loadedmetadata', updateSeekUi);
 el.dur.addEventListener('click', () => { if (isLive() && el.dur.classList.contains('behind')) goLive(); });
-v.addEventListener('playing', () => { showMsg(''); el.play.innerHTML = '&#10074;&#10074;'; wake(); });
-v.addEventListener('pause', () => { el.play.innerHTML = '&#9654;'; wake(); saveResume(true); });
+// On the TV app the controls only come back when asked (OK), not when a new channel starts
+const tvIdle = () => document.body.classList.contains('tv') && el.ui.classList.contains('idle');
+v.addEventListener('playing', () => { showMsg(''); el.play.innerHTML = '&#10074;&#10074;'; if (!tvIdle()) wake(); });
+v.addEventListener('pause', () => { el.play.innerHTML = '&#9654;'; if (!tvIdle()) wake(); saveResume(true); });
 v.addEventListener('waiting', () => showMsg('Buffering…'));
 v.addEventListener('ended', () => { if (current) setResume(current.key, 0, 0); el.play.innerHTML = '&#9654;'; });
 v.addEventListener('error', () => {

@@ -298,11 +298,16 @@ function chooseView(listing) {
 
 function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
   const viewMode = mode === 'auto' ? chooseView(listing || { items }) : mode;
+  // live channels show the number used to tune them in the player (CH ±, digits)
+  const live = items.filter(x => x.live && x.playable && !x.external && !x.action);
+  const numOf = new Map();
+  if (live.length > 1) player.channelNumbers(live).forEach((n, i) => numOf.set(live[i], n));
+  const num = (it) => numOf.has(it) ? h('span', { class: 'ch-num' }, String(numOf.get(it))) : null;
   if (viewMode === 'list') {
     return h('div', { class: 'list' }, ...items.map((it, i) => h('button', { class: 'row focusable', onclick: () => onPick(it, i) },
       h('span', { class: 'row-thumb' + (isLogoItem(it) ? ' logo' : ''), style: bg(it.thumb) }, safeImg(it.thumb) ? '' : itemIcon(it)),
       h('span', { class: 'row-main' },
-        h('div', { class: 'row-label' }, it.label),
+        h('div', { class: 'row-label' }, num(it), it.label),
         (it.subtitle || it.info?.plot) && h('div', { class: 'row-sub' }, it.subtitle || it.info.plot)),
       h('span', { class: 'row-end' }, it.live ? 'LIVE' : it.info?.duration ? fmtDuration(it.info.duration) : it.playable ? '▶' : '›'))));
   }
@@ -314,7 +319,7 @@ function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
     isLogoItem(it) && safeImg(it.thumb)
       ? h('span', { class: 'thumb logo' }, h('img', { class: 'thumb-img', src: safeImg(it.thumb), alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(h('span', { class: 'thumb-ico' }, itemIcon(it))) }))
       : h('span', { class: 'thumb', style: bg(it.thumb) }, safeImg(it.thumb) ? '' : h('span', { class: 'thumb-ico' }, itemIcon(it))),
-    h('span', { class: 'label' }, it.label),
+    h('span', { class: 'label' }, num(it), it.label),
     (it.subtitle || it.info?.year) && h('span', { class: 'sub' }, it.subtitle || it.info.year))));
 }
 

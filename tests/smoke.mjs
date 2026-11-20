@@ -230,10 +230,12 @@ async function uiTests() {
     await page.waitForSelector('.row:has-text("Generalisti")');
     await page.click('.row:has-text("Generalisti")');
     await page.waitForSelector('.row:has-text("Rai 1")');
+    const labels = await page.locator('.row-label').allTextContents();
+    assert.ok(labels.includes('1Rai 1') && labels.includes('7La7'), 'channel lists show the channel numbers: ' + labels.join(' | '));
     const sub = await page.locator('.row:has-text("Rai 1") .row-sub').first().textContent();
     assert.match(sub, /Ora: Telegiornale di prova .* Poi: Film della sera/);
     assert.match(await page.locator('.row:has-text("La7") .row-sub').textContent(), /Solo dall'Italia/);
-    assert.equal((await page.locator('.row:has-text("La7") .row-label').textContent()).trim(), 'La7');
+    assert.equal((await page.locator('.row:has-text("La7") .row-label').textContent()).trim(), '7La7');
     await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
     await page.click('.row:has-text("Euronews")');
     assert.deepEqual(await page.evaluate(() => window.__opened), ['https://www.youtube.com/user/euronewsit/live']);
@@ -254,7 +256,7 @@ async function uiTests() {
     assert.equal(await page.isVisible('#pl-rew'), false, 'rewind hidden for live channels');
     await page.keyboard.press('ArrowUp');
     await waitFor(async () => /la7\.m3u8/.test(await nowSrc()));
-    assert.equal(await title(), 'La7');
+    assert.equal(await title(), '7  La7', 'player title shows the channel number');
     assert.equal(await page.isVisible('#player'), true);
     await page.click('#pl-chdown');
     await waitFor(async () => /rai1\.m3u8/.test(await nowSrc()));
@@ -563,10 +565,10 @@ async function uiTests() {
           for (let i = 1; i <= 8; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - i * 30 }] }); await pp.waitForTimeout(16); }
           await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
           await pp.waitForTimeout(400);
-          assert.equal(await pp.evaluate(() => document.getElementById('pl-title').textContent), 'Rai 1', 'edge swipe ignored');
+          assert.equal(await pp.evaluate(() => document.getElementById('pl-title').textContent), '1  Rai 1', 'edge swipe ignored');
         }
         await swipeUp();
-        await waitFor(() => pp.evaluate(() => document.getElementById('pl-title').textContent === 'La7'));
+        await waitFor(() => pp.evaluate(() => document.getElementById('pl-title').textContent === '7  La7'));
         assert.ok(await pp.isVisible('#pl-chup'));
         assert.equal((await pp.evaluate(() => window.__media)).slice(before).filter(m => m === 'pause').length, 0, 'swipe does not pause');
       }

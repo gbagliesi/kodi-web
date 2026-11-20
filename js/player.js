@@ -285,7 +285,7 @@ export async function play(item, stream, opts = {}) {
   el.art.hidden = !audio;
   if (audio) el.artImg.src = item.thumb || 'icons/icon.svg';
   el.video.poster = !audio && (item.fanart || item.thumb) ? (item.fanart || item.thumb) : '';
-  el.title.textContent = item.label;
+  el.title.textContent = channels ? chNumber(item, channels.index) + '  ' + item.label : item.label;
   el.seek.value = 0; el.cur.textContent = '0:00'; el.dur.textContent = item.live ? 'LIVE' : '0:00';
   updateFavBtn();
   el.seek.disabled = el.rew.disabled = el.fwd.disabled = !!item.live;
@@ -644,6 +644,8 @@ function numberChannels(list) {
   let next = used.size ? Math.max(...used) + 1 : 1;
   return out.map(n => n || next++);
 }
+/** Channel numbers for a list of live items, the same ones the player uses (CH ±, digits). */
+export const channelNumbers = (items) => numberChannels(items.map(item => ({ item })));
 const chNumber = (_it, i) => String(channels?.numbers?.[i] ?? i + 1);
 
 function updateChannelUi() {

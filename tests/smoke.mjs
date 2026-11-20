@@ -313,6 +313,7 @@ async function uiTests() {
     const viaProxy = () => page.evaluate(() => [window.__hlsSrc || '', document.getElementById('video').src].find(u => u.includes('/proxy?url=')));
     await waitFor(viaProxy);
     assert.match(await viaProxy(), /headers=%7B%22Referer/);
+    assert.equal(await page.textContent('#pl-route'), 'Proxy', 'badge: proxied stream');
     await page.click('#pl-close');
     console.log('✓ channels with custom headers are routed through the proxy');
 
@@ -389,6 +390,7 @@ async function uiTests() {
     await p3.waitForSelector('.row:has-text("Solo dall\'Italia")');
     await p3.click('.row:has-text("Rai 1"):has-text("Solo dall\'Italia")');
     await waitFor(() => p3.evaluate(() => (window.__hlsSrc || '').includes('relinkerServlet')));
+    assert.equal(await p3.textContent('#pl-route'), 'Diretto', 'badge: direct stream');
     console.log('✓ desktop: extension-less live links are played with hls.js');
 
     // Floating window (picture-in-picture): button toggles it, closing the player leaves it
@@ -414,6 +416,7 @@ async function uiTests() {
     assert.match(loads[0][0], /^http:\/\/127\.0\.0\.1:\d+\/proxy\?url=.*relinkerServlet/, 'cast URL goes through the proxy, absolute');
     assert.deepEqual(loads[0].slice(1), ['application/x-mpegurl', 'LIVE', 'Rai 1', 'fmp4', 'fmp4'], 'fMP4 segment format detected for the receiver');
     assert.match(await p3.textContent('#pl-msg'), /In riproduzione su TV Salotto/);
+    assert.equal(await p3.textContent('#pl-route'), 'TV · Proxy', 'badge: the TV gets the stream through the proxy');
     assert.equal(await p3.evaluate(() => document.getElementById('player').classList.contains('casting')), true);
     await p3.click('#pl-chdown');
     await waitFor(() => p3.evaluate(() => window.__castLoads.length === 2));

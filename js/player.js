@@ -17,7 +17,7 @@ const el = {
   close: $('pl-close'), fav: $('pl-fav'), play: $('pl-play'), rew: $('pl-rew'), fwd: $('pl-fwd'),
   seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'), pip: $('pl-pip'),
   msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
-  cast: $('pl-cast'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
+  cast: $('pl-cast'), route: $('pl-route'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
   osdName: $('pl-osd-name'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
 };
 
@@ -136,10 +136,23 @@ function buildUrl(stream) {
   return stream.url;
 }
 
+// "Diretto" / "Proxy" badge next to the title: how the stream reaches this device (or the TV)
+let localRoute = '';
+const isProxied = (u) => { const p = getProxy(); return !!p && String(u).startsWith(p.split('?')[0]); };
+function showRoute(proxied, where = '') {
+  const label = (where ? where + ' · ' : '') + (proxied ? 'Proxy' : 'Diretto');
+  el.route.textContent = label;
+  el.route.classList.toggle('proxy', proxied);
+  el.route.title = proxied ? 'Lo stream passa dal tuo proxy (Cloudflare o server locale)' : 'Lo stream arriva direttamente dal sito del canale, senza proxy';
+  el.route.hidden = false;
+}
+
 async function attach(stream) {
   destroyHls();
   const v = el.video;
   const url = buildUrl(stream);
+  localRoute = isProxied(url) ? 'proxy' : 'direct';
+  if (!casting) showRoute(localRoute === 'proxy');
   // Apple devices play HLS natively (and without CORS limits); elsewhere hls.js
   // is more reliable than the browser's own support, when Media Source is available.
   const native = !!v.canPlayType('application/vnd.apple.mpegurl') && (APPLE || !hasMse());
@@ -263,6 +276,7 @@ export async function play(item, stream, opts = {}) {
   updateChannelUi();
   const audio = item.type === 'audio' || /^audio\//.test(stream.mime || '');
   current = { item, stream, key: stream.url, audio, favEntry: opts.favEntry };
+  el.route.hidden = true;
   onCloseCb = opts.onClose || null;
   el.root.hidden = false;
   autoFullscreen();
@@ -502,6 +516,7 @@ async function sendToCast(startTime = 0) {
   el.video.pause();
   try { if (hls) hls.stopLoad(); } catch { /* ignore */ }
   showMsg('In riproduzione su ' + cast.deviceName());
+  showRoute(isProxied(castUrl(stream)), 'TV');
 }
 
 function updateCastBtn() {
@@ -523,6 +538,7 @@ cast.initCast({
       el.play.innerHTML = '&#9654;';
       try { if (hls) hls.startLoad(); } catch { /* ignore */ }
       showMsg('Trasmissione terminata. Tocca ▶ per continuare qui.', 4000);
+      if (localRoute) showRoute(localRoute === 'proxy');
     }
   },
   onProgress: ({ time, duration, paused }) => {

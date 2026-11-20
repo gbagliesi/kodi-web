@@ -285,3 +285,7 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+.route-badge { flex: none; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 3px 8px; border-radius: 999px;
+  color: #cfe9e4; background: rgba(61, 184, 164, .18); border: 1px solid rgba(61, 184, 164, .45); white-space: nowrap; }
+.route-badge.proxy { color: #ffe2b8; background: rgba(255, 170, 60, .16); border-color: rgba(255, 170, 60, .5); }

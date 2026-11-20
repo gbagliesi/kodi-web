@@ -265,6 +265,7 @@ export async function play(item, stream, opts = {}) {
   current = { item, stream, key: stream.url, audio, favEntry: opts.favEntry };
   onCloseCb = opts.onClose || null;
   el.root.hidden = false;
+  autoFullscreen();
   el.root.classList.toggle('audio', audio);
   el.art.hidden = !audio;
   if (audio) el.artImg.src = item.thumb || 'icons/icon.svg';
@@ -324,8 +325,26 @@ export function close() {
   if (cb) cb();
 }
 
+// Android/Chrome moves a video to the floating window by itself when the user leaves the app,
+// but only if the video is full screen. So on Android videos open full screen (keeping the
+// current orientation; the full screen button then turns to landscape). Needs the tap that
+// opened the video, which is why it runs before anything is awaited.
+let autoFs = false;
+function autoFullscreen() {
+  if (!/Android/i.test(navigator.userAgent) || !getSettings().autoPip || current?.audio || casting) return;
+  if (document.fullscreenElement || !el.root.requestFullscreen || !navigator.userActivation?.isActive) return;
+  autoFs = true;
+  el.root.requestFullscreen({ navigationUI: 'hide' }).catch(() => { autoFs = false; });
+}
+
 function toggleFullscreen() {
   const r = el.root;
+  if (autoFs && document.fullscreenElement) {
+    // automatic full screen: the button means "landscape, like the full screen button always did"
+    autoFs = false;
+    onFullscreenChange();
+    return;
+  }
   if (document.fullscreenElement || document.webkitFullscreenElement) {
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   } else if (r.requestFullscreen) {
@@ -344,9 +363,10 @@ const isPhone = () => matchMedia('(pointer: coarse)').matches && Math.min(screen
 
 function onFullscreenChange() {
   const fs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fs) autoFs = false;
   const o = screen.orientation;
   if (!o) return;
-  if (fs && current && !current.audio && isPhone() && typeof o.lock === 'function') {
+  if (fs && !autoFs && current && !current.audio && isPhone() && typeof o.lock === 'function') {
     o.lock('landscape').catch(() => { /* not supported (e.g. iOS): ignore */ });
   } else if (!fs && typeof o.unlock === 'function') {
     try { o.unlock(); } catch { /* ignore */ }

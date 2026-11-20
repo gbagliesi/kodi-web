@@ -477,6 +477,9 @@ async function uiTests() {
         await pp.locator('.card').first().click();
         await pp.waitForSelector('#player:not([hidden])');
         await pp.waitForTimeout(500); // let the player's own start-up play() happen first
+        // Android: the video opens full screen by itself (for the automatic floating window), still portrait
+        assert.equal(await pp.evaluate(() => document.fullscreenElement?.id), 'player', 'Android opens videos full screen');
+        assert.ok(!(await pp.evaluate(() => window.__orient.includes('lock:landscape'))), 'automatic full screen keeps the orientation');
         // Tapping the picture shows/hides the controls without pausing
         await pp.evaluate(() => {
           window.__media = [];
@@ -499,6 +502,7 @@ async function uiTests() {
         assert.equal((await pp.evaluate(() => window.__media)).length, 1, 'play button works once visible');
         await pp.click('#pl-fs');
         await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:landscape')));
+        assert.equal(await pp.evaluate(() => document.fullscreenElement?.id), 'player', 'the full screen button turns it landscape, stays full screen');
         await pp.evaluate(() => document.exitFullscreen());
         await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
         await pp.click('#pl-close');
@@ -521,7 +525,7 @@ async function uiTests() {
       }
       await phone.close();
     }
-    console.log('✓ phones: tap shows/hides player controls; swipe changes live channel; full screen locks landscape');
+    console.log('✓ phones: tap shows/hides player controls; swipe changes live channel; Android opens videos full screen; full screen button locks landscape');
     console.log('✓ phones (Android, iPhone): lists scroll with a swipe');
     console.log('✓ portrait layout uses a bottom menu bar');
 

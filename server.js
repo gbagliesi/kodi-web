@@ -145,7 +145,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'OPTIONS') { res.writeHead(204, { ...CORS, 'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS' }).end(); return; }
     if (u.pathname.endsWith('/proxy/health')) { res.writeHead(200, { ...CORS, 'Content-Type': 'text/plain' }).end('ok'); return; }
-    if (u.pathname.endsWith('/proxy')) { await handleProxy(req, res, u.searchParams); return; }
+    if (/\/proxy(\/[\w.-]+)?$/.test(u.pathname) && !u.pathname.endsWith('/proxy/health')) { await handleProxy(req, res, u.searchParams); return; }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
     serveStatic(req, res, u.pathname);
   } catch (e) {

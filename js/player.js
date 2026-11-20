@@ -134,6 +134,8 @@ function buildUrl(stream) {
     if (!getProxy()) return stream.url; // best effort without proxy
     let u = proxify(stream.url);
     if (stream.headers) u += '&headers=' + encodeURIComponent(JSON.stringify(stream.headers));
+    // the WebView's native HLS player decides by the file extension (error 4 on ".../proxy?url=")
+    if (stream.m3u8Name) u = u.replace(/\/proxy\?/, '/proxy/live.m3u8?');
     return u;
   }
   return stream.url;
@@ -826,7 +828,7 @@ v.addEventListener('error', () => {
     // native player may need; if that fails too, use hls.js
     const viaProxy = nativeStage === 0 && getProxy() && !current.stream.proxy;
     nativeStage = viaProxy ? 1 : 2;
-    const stream = viaProxy ? { ...current.stream, proxy: true } : current.stream;
+    const stream = viaProxy ? { ...current.stream, proxy: true, m3u8Name: true } : current.stream;
     attach(stream).then(() => v.play().catch(() => {})).catch(e => showMsg(e.message));
     return;
   }

@@ -155,6 +155,11 @@ async function workerTests() {
     const body = await pl.text();
     assert.match(body, /URI="proxy\?url=http%3A%2F%2F127\.0\.0\.1%3A\d+%2Flive%2Finit\.mp4&token=s3cret"/);
     assert.match(body, /\nproxy\?url=http%3A%2F%2F127\.0\.0\.1%3A\d+%2Flive%2Fseg1\.ts&token=s3cret/);
+    // with a file name in the path (for native HLS players), relative links still resolve to the proxy
+    const named = await call('/proxy/live.m3u8?token=s3cret&url=' + target);
+    assert.equal(named.status, 200);
+    assert.match(await named.text(), /\nproxy\?url=/);
+    assert.equal((await call('/proxy/a/b?token=s3cret&url=' + target)).status, 404);
     const h = encodeURIComponent(JSON.stringify({ Referer: 'https://www.raiplay.it/' }));
     const seg = await call(`/proxy?token=s3cret&headers=${h}&url=` + encodeURIComponent(`http://127.0.0.1:${port}/live/seg1.ts`), { Range: 'bytes=0-3' });
     assert.equal(seg.status, 206);

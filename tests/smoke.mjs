@@ -503,6 +503,10 @@ async function uiTests() {
         await pp.click('#pl-fs');
         await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:landscape')));
         assert.equal(await pp.evaluate(() => document.fullscreenElement?.id), 'player', 'the full screen button turns it landscape, stays full screen');
+        assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Ruota in verticale');
+        await pp.click('#pl-fs');
+        await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:portrait')));
+        assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Ruota in orizzontale');
         await pp.evaluate(() => document.exitFullscreen());
         await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
         await pp.click('#pl-close');
@@ -518,6 +522,15 @@ async function uiTests() {
           for (let i = 1; i <= 8; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - i * 20 }] }); await pp.waitForTimeout(16); }
           await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
         };
+        // a swipe from the bottom edge (Android's home gesture) does not change channel
+        {
+          const x = 180, y = Math.round(await pp.evaluate(() => innerHeight - 10));
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+          for (let i = 1; i <= 8; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - i * 30 }] }); await pp.waitForTimeout(16); }
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+          await pp.waitForTimeout(400);
+          assert.equal(await pp.evaluate(() => document.getElementById('pl-title').textContent), 'Rai 1', 'edge swipe ignored');
+        }
         await swipeUp();
         await waitFor(() => pp.evaluate(() => document.getElementById('pl-title').textContent === 'La7'));
         assert.ok(await pp.isVisible('#pl-chup'));

@@ -337,12 +337,23 @@ function autoFullscreen() {
   el.root.requestFullscreen({ navigationUI: 'hide' }).catch(() => { autoFs = false; });
 }
 
+const FS_ICON = el.fs.innerHTML;
+const ROTATE_ICON = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M16.5 2.5A10 10 0 0 1 22 11h1.5A11.5 11.5 0 0 0 12 0l-.66.03 3.81 3.81 1.35-1.34zM10.23 1.75a1.5 1.5 0 0 0-2.12 0L1.75 8.11a1.5 1.5 0 0 0 0 2.12l12.02 12.02a1.5 1.5 0 0 0 2.12 0l6.36-6.36a1.5 1.5 0 0 0 0-2.12L10.23 1.75zm4.6 19.44L2.81 9.17l6.36-6.36 12.02 12.02-6.36 6.36zM7.5 21.5A10 10 0 0 1 2 13H.5A11.5 11.5 0 0 0 12 24l.66-.03-3.81-3.81-1.35 1.34z"/></svg>';
+/** Phones in full screen: the button rotates (portrait ⇄ landscape) instead of leaving full screen. */
+function updateFsBtn() {
+  const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const rotate = fs && isPhone() && typeof screen.orientation?.lock === 'function';
+  el.fs.innerHTML = rotate ? ROTATE_ICON : FS_ICON;
+  el.fs.setAttribute('aria-label', rotate ? (autoFs ? 'Ruota in orizzontale' : 'Ruota in verticale') : 'Schermo intero');
+  el.fs.title = el.fs.getAttribute('aria-label');
+}
+
 function toggleFullscreen() {
   const r = el.root;
-  if (autoFs && document.fullscreenElement) {
-    // automatic full screen: the button means "landscape, like the full screen button always did"
-    autoFs = false;
-    onFullscreenChange();
+  if (document.fullscreenElement && isPhone() && typeof screen.orientation?.lock === 'function') {
+    // already full screen on a phone: switch between portrait (automatic mode) and landscape
+    if (autoFs) { autoFs = false; onFullscreenChange(); }
+    else { autoFs = true; screen.orientation.lock('portrait').catch(() => {}); updateFsBtn(); }
     return;
   }
   if (document.fullscreenElement || document.webkitFullscreenElement) {
@@ -364,6 +375,7 @@ const isPhone = () => matchMedia('(pointer: coarse)').matches && Math.min(screen
 function onFullscreenChange() {
   const fs = document.fullscreenElement || document.webkitFullscreenElement;
   if (!fs) autoFs = false;
+  updateFsBtn();
   const o = screen.orientation;
   if (!o) return;
   if (fs && !autoFs && current && !current.audio && isPhone() && typeof o.lock === 'function') {
@@ -756,11 +768,14 @@ let swallowClick = false;
 el.root.addEventListener('pointerdown', (e) => {
   lastPointer = e.pointerType || 'mouse';
   const onBackground = !e.target.closest('.player-top, .player-bottom, .player-channels');
-  swipe = channels && e.pointerType === 'touch' && onBackground ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
+  // Swipes that start near the screen edges are the system's (home bar, notifications, back): ignore them.
+  const H = innerHeight, W = innerWidth, edgeY = Math.max(64, H * 0.15), edgeX = 32;
+  const inEdge = e.clientY < edgeY || e.clientY > H - edgeY || e.clientX < edgeX || e.clientX > W - edgeX;
+  swipe = channels && e.pointerType === 'touch' && onBackground && !inEdge ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
 }, { capture: true, passive: true });
 el.root.addEventListener('pointerup', (e) => {
   const s = swipe; swipe = null;
-  if (!s || !channels) return;
+  if (!s || !channels || document.visibilityState !== 'visible') return;
   const dx = e.clientX - s.x, dy = e.clientY - s.y;
   if (Math.abs(dy) > 60 && Math.abs(dy) > 1.5 * Math.abs(dx) && Date.now() - s.t < 1000) {
     swallowClick = true;

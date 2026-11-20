@@ -675,12 +675,28 @@ el.fwd.addEventListener('click', () => skip(30));
 el.close.addEventListener('click', close);
 el.fs.addEventListener('click', toggleFullscreen);
 el.pip.addEventListener('click', () => { (inPip() ? exitPip() : enterPip(true)); wake(); });
-v.addEventListener('enterpictureinpicture', () => el.pip.classList.add('active'));
-v.addEventListener('leavepictureinpicture', () => el.pip.classList.remove('active'));
-v.addEventListener('webkitpresentationmodechanged', () => el.pip.classList.toggle('active', inPip()));
+// Going back to the app from the floating window: some browsers pause the video on the way.
+// If it was playing and the app is visible again (not closed with the window's ✕), carry on.
+let pipLeftAt = 0, pausedAt = 0, wasInPip = false;
+v.addEventListener('pause', () => { pausedAt = Date.now(); });
+function resumeAfterPip() {
+  const now = Date.now();
+  if (document.visibilityState !== 'visible' || !isOpen() || casting || !v.paused) return;
+  if (now - pipLeftAt < 2500 && now - pausedAt < 2500) v.play().catch(() => {});
+}
+function pipChanged() {
+  const on = inPip();
+  el.pip.classList.toggle('active', on);
+  if (wasInPip && !on) { pipLeftAt = Date.now(); setTimeout(resumeAfterPip, 300); setTimeout(resumeAfterPip, 1200); }
+  wasInPip = on;
+}
+v.addEventListener('enterpictureinpicture', pipChanged);
+v.addEventListener('leavepictureinpicture', pipChanged);
+v.addEventListener('webkitpresentationmodechanged', pipChanged);
 // Leaving the app (home button, app switcher) while a video plays: try to keep it in a floating
 // window. Safari does this by itself (autopictureinpicture); Chrome allows it only in some cases.
 document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') setTimeout(resumeAfterPip, 200);
   if (document.visibilityState === 'hidden' && isOpen() && !casting && !current?.audio && !v.paused && !inPip()) enterPip();
 });
 el.fav.addEventListener('click', () => {

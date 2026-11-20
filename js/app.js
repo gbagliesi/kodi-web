@@ -112,15 +112,22 @@ const MENU = [
   { route: 'files', ico: '📁', label: 'File' },
   { route: 'favourites', ico: '★', label: 'Preferiti' },
   { route: 'addons', ico: '🧩', label: 'Add-on' },
-  { route: 'settings', ico: '⚙', label: 'Impostazioni' },
+  { route: 'settings', ico: '⚙', label: 'Impostazioni', short: 'Opzioni' },
 ];
 
 function renderMenu(active) {
   $('menu').replaceChildren(...MENU.map(m => h('button', {
     class: 'menu-item focusable' + (m.route === active ? ' active' : ''),
     onclick: () => go(m.route),
-  }, h('span', { class: 'ico' }, m.ico), h('span', {}, m.label))));
+    'aria-label': m.label,
+  }, h('span', { class: 'ico' }, m.ico), h('span', { class: 'lbl' }, m.label), h('span', { class: 'lbl-short' }, m.short || m.label))));
 }
+
+// Keep the page itself from ever scrolling: on Android, leaving full screen or the status
+// bar appearing can leave the whole app shifted up, with the header under the status bar.
+const pinPage = () => { if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0); };
+for (const ev of ['resize', 'orientationchange', 'fullscreenchange', 'webkitfullscreenchange', 'scroll']) window.addEventListener(ev, pinPage, { passive: true });
+document.addEventListener('fullscreenchange', () => setTimeout(pinPage, 300));
 
 // ---------------------------------------------------------------- router
 function go(route) { location.hash = '#/' + route; }

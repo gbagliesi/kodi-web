@@ -415,6 +415,47 @@ async function uiTests() {
     assert.ok(f1 && f2 && f1 !== f2, `focus moved: ${f1} -> ${f2}`);
     console.log('✓ arrow-key navigation moves focus');
 
+    // Fire TV app (user agent "SalottoTV"): remote-control navigation
+    {
+      const tvc = await browser.newContext({ viewport: { width: 960, height: 540 }, serviceWorkers: 'block',
+        userAgent: 'Mozilla/5.0 (Linux; Android 9; AFTSSS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36 SalottoTV/1' });
+      await mock(tvc);
+      const tv = await tvc.newPage();
+      await tv.goto(BASE + '#/settings');
+      await tv.waitForSelector('#proxy');
+      const focusedTag = () => tv.evaluate(() => document.activeElement && (document.activeElement.id || document.activeElement.tagName));
+      assert.notEqual(await focusedTag(), 'proxy', 'TV: settings do not start inside a text field');
+      await tv.focus('#proxy');
+      await tv.keyboard.press('ArrowLeft');
+      assert.notEqual(await focusedTag(), 'proxy', 'TV: the arrow leaves an empty text field');
+      await tv.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
+      await tv.waitForSelector('.row:has-text("La7")');
+      await tv.click('.row:has-text("Rai 1") >> nth=0');
+      await tv.waitForSelector('#player:not([hidden])');
+      const tvTitle = () => tv.textContent('#pl-title');
+      const t0 = await tvTitle();
+      // controls shown: ▲ moves to the top bar instead of changing channel
+      await tv.keyboard.press('ArrowUp');
+      assert.equal(await tvTitle(), t0, 'TV: arrows move between controls while they are shown');
+      assert.equal(await tv.evaluate(() => !!document.activeElement.closest('.player-top')), true, 'TV: ▲ reaches the top bar');
+      // Back hides the controls; then ▲ changes channel
+      assert.equal(await tv.evaluate(() => window.salottoBack()), true);
+      assert.equal(await tv.evaluate(() => document.getElementById('player-ui').classList.contains('idle')), true);
+      await tv.keyboard.press('ArrowUp');
+      await waitFor(async () => (await tvTitle()) !== t0);
+      const t1 = await tvTitle();
+      assert.equal(await tv.evaluate(() => document.getElementById('player-ui').classList.contains('idle')), true, 'TV: zapping keeps the controls hidden');
+      await tv.keyboard.press('ArrowUp');
+      await waitFor(async () => (await tvTitle()) !== t1);
+      // the menu key opens the channel list
+      await tv.keyboard.press('ContextMenu');
+      await tv.waitForSelector('#pl-channels:not([hidden])');
+      await tv.evaluate(() => window.salottoBack());
+      assert.equal(await tv.isHidden('#pl-channels'), true);
+      await tvc.close();
+      console.log('✓ Fire TV app: no auto-focused text field, arrows leave fields, player controls reachable, Back hides controls');
+    }
+
     // Desktop Chrome: extension-less broadcaster links go through hls.js
     const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
     await mock(desktop);

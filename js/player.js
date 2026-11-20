@@ -295,7 +295,8 @@ export async function play(item, stream, opts = {}) {
   showMsg('Caricamento…');
   setupMediaSession(item);
   updatePipBtn();
-  wake();
+  // TV remote zapping with the controls hidden: keep them hidden so ▲▼ keep changing channel
+  if (!(opts.keepFocus && document.body.classList.contains('tv') && el.ui.classList.contains('idle'))) wake();
   localAttached = false;
   if (casting) {
     const resume = getSettings().autoResume && !item.live ? getResume(current.key) : 0;
@@ -315,6 +316,13 @@ export async function play(item, stream, opts = {}) {
     showMsg(e.message);
   }
   if (!opts.keepFocus || !el.root.contains(document.activeElement)) el.play.focus({ preventScroll: true });
+}
+
+/** Remote "Back": channel list → controls (TV) → close the player. */
+export function back() {
+  if (!el.panel.hidden) { closePanel(); return; }
+  if (document.body.classList.contains('tv') && !el.ui.classList.contains('idle')) { hideControls(); return; }
+  close();
 }
 
 export function close() {
@@ -423,6 +431,19 @@ export function handleKey(e) {
     if (e.key === 'Escape') { closePanel(); return true; }
     if (e.key === 'Enter') { const n = parseInt(el.chNum.value, 10); if (n) { closePanel(); jumpTo(n); } return true; }
     return false; // typing in the channel number box
+  }
+  if (document.body.classList.contains('tv')) {
+    // TV remote: with the controls hidden, ▲▼ change channel, ◀▶ skip, OK shows the controls;
+    // with the controls shown, the arrows move between the buttons (top bar included).
+    const idle = el.ui.classList.contains('idle');
+    const inPanel = !el.panel.hidden && el.panel.contains(document.activeElement);
+    if ((e.key === 'ContextMenu' || e.key === 'c') && channels) { togglePanel(); wake(); return true; }
+    if (idle && !inPanel) {
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && channels) { zap(e.key === 'ArrowUp' ? 1 : -1); return true; }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { skip(e.key === 'ArrowLeft' ? -10 : 30); return true; }
+      if (e.key === 'Enter') { wake(); el.play.focus({ preventScroll: true }); return true; }
+    }
+    if (e.key.startsWith('Arrow')) { wake(); return false; } // spatial navigation among the controls
   }
   wake();
   if (channels) {

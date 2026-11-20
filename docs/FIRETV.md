@@ -26,8 +26,13 @@ tienilo premuto con il tasto ☰ per spostarlo in prima fila.
 - **Proxy:** come su Chrome, i canali Rai e altri canali "solo Italia" passano dal
   proxy Cloudflare. Inseriscilo in **Opzioni** dentro l'app (indirizzo e token),
   perché le impostazioni non sono condivise con gli altri dispositivi.
-- **Telecomando:** frecce e OK per muoversi, Indietro per chiudere il lettore o
-  tornare alla pagina precedente; nel lettore delle dirette su/giù cambiano canale.
+- **Telecomando nel lettore:** con i comandi nascosti ▲▼ cambiano canale, ◀▶
+  vanno indietro/avanti, OK mostra i comandi. Con i comandi visibili le frecce si
+  muovono tra i pulsanti (anche quelli in alto, come l'elenco canali). Il tasto ☰
+  apre l'elenco canali. Indietro: chiude l'elenco, poi nasconde i comandi, poi
+  chiude il lettore.
+- **Campi di testo (Opzioni):** OK per scrivere; le frecce ◀▶ escono dal campo
+  quando il cursore è all'inizio o alla fine.
 - **Aggiornamenti:** il contenuto si aggiorna da solo. Una nuova versione
   dell'APK serve solo se cambia l'app stessa: si installa allo stesso modo, sopra
   quella vecchia.

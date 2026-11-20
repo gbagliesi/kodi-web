@@ -1,4 +1,4 @@
 // App version. BUILD is filled in by the GitHub Pages workflow (commit + date).
-export const VERSION = '0.8.3';
+export const VERSION = '0.8.4';
 export const BUILD = '__BUILD__';
 export const versionLabel = () => 'v' + VERSION + (BUILD.startsWith('__') ? ' (sviluppo)' : ' · ' + BUILD);

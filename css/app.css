@@ -295,3 +295,6 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
 .player-stats div { display: flex; gap: 14px; justify-content: space-between; }
 .player-stats span { color: var(--dim, #9aa4b2); }
 .player-stats b { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+
+.ch-num { display: inline-block; min-width: 1.9em; margin-right: 8px; padding: 0 5px; border-radius: 6px; text-align: center;
+  font-size: .82em; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); background: rgba(61, 184, 164, .14); }

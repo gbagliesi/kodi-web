@@ -100,7 +100,8 @@ function errorBox(err, retry) {
 function focusFirst(container = view) {
   const kb = document.body.classList.contains('kbd-nav');
   if (!kb) return;
-  const f = focusables(container)[0];
+  // never start inside a text field: on a TV that opens the on-screen keyboard
+  const f = focusables(container).find(x => !(x.tagName === 'INPUT' && !['checkbox', 'radio', 'range'].includes(x.type)) && x.tagName !== 'TEXTAREA');
   f?.focus({ preventScroll: true });
 }
 
@@ -823,7 +824,7 @@ if (isTvApp) document.body.classList.add('tv', 'kbd-nav');
 window.salottoBack = () => {
   const m = $('modal');
   if (!m.hidden) { m._close?.(undefined); return true; }
-  if (player.isOpen()) { player.close(); return true; }
+  if (player.isOpen()) { player.back(); return true; }
   if (location.hash && location.hash !== '#/') { history.back(); return true; }
   return false;
 };

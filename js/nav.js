@@ -68,11 +68,22 @@ export function handleNavKey(e) {
   if (!dir) return false;
   const a = document.activeElement;
   // Let text fields and sliders keep their own horizontal arrow behaviour.
-  if (a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'checkbox'))) {
-    if (dir === 'left' || dir === 'right') return false;
-    if (a.tagName === 'TEXTAREA') return false;
+  // Text fields keep left/right for the cursor, but the arrow leaves the field at its ends
+  // (otherwise a TV remote gets stuck in it); sliders keep left/right for their value.
+  if (a && a.tagName === 'TEXTAREA') return false;
+  if (a && a.tagName === 'INPUT' && a.type !== 'checkbox') {
+    if (a.type === 'range' && (dir === 'left' || dir === 'right')) return false;
+    if (dir === 'left' || dir === 'right') {
+      let atEdge = true;
+      try {
+        if (a.selectionStart != null) atEdge = dir === 'left' ? a.selectionStart === 0 && a.selectionEnd === 0 : a.selectionEnd === a.value.length;
+      } catch { /* types without a cursor position */ }
+      if (!atEdge) return false;
+    }
   }
-  if (a && a.tagName === 'SELECT') return false;
+  // Drop-down lists: up/down choose the value with a keyboard, except on the TV app where
+  // OK opens the list and the arrows move between fields
+  if (a && a.tagName === 'SELECT' && (dir === 'up' || dir === 'down') && !document.body.classList.contains('tv')) return false;
   document.body.classList.add('kbd-nav');
   return move(dir);
 }

@@ -272,6 +272,32 @@ async function uiTests() {
     assert.equal(await page.isVisible('#player'), false);
     console.log('✓ live TV: change channel inside the player (CH +/−, arrows, number, channel list)');
 
+    // Live rewind: the broadcaster's window (seekable range) drives the seek bar, ⟲10 and LIVE
+    await page.locator('.row:has-text("Rai 1")').first().click();
+    await page.waitForSelector('#player:not([hidden])');
+    assert.equal(await page.isVisible('#pl-rew'), false, 'no rewind without a window');
+    await page.evaluate(() => {
+      const v = document.getElementById('video');
+      let t = 400;
+      Object.defineProperty(v, 'seekable', { configurable: true, get: () => ({ length: 1, start: () => 100, end: () => 400 }) });
+      Object.defineProperty(v, 'currentTime', { configurable: true, get: () => t, set: (x) => { t = x; } });
+      Object.defineProperty(v, 'duration', { configurable: true, get: () => Infinity });
+      v.dispatchEvent(new Event('progress'));
+    });
+    assert.equal(await page.isVisible('#pl-rew'), true, 'rewind shown when the stream has a window');
+    assert.equal((await page.textContent('#pl-dur')).trim(), 'LIVE');
+    await page.click('#pl-rew'); await page.click('#pl-rew'); await page.click('#pl-rew');
+    assert.equal(await page.evaluate(() => document.getElementById('video').currentTime), 370);
+    assert.equal((await page.textContent('#pl-cur')).trim(), '−0:30');
+    assert.match(await page.textContent('#pl-dur'), /LIVE ▶▶/);
+    await page.click('#pl-dur');
+    assert.ok(await page.evaluate(() => document.getElementById('video').currentTime) >= 395, 'LIVE jumps back to the live edge');
+    await page.evaluate(() => document.activeElement.blur());
+    await page.keyboard.press('ArrowLeft');
+    assert.ok(await page.evaluate(() => document.getElementById('video').currentTime) < 395, 'left arrow rewinds live TV');
+    await page.click('#pl-close');
+    console.log('✓ live TV: rewind within the broadcaster window, LIVE button returns to the live edge');
+
     // Channel with Referer goes through the proxy
     await page.goBack();
     await page.waitForSelector('.row:has-text("News")');

@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 const el = {
   root: $('player'), video: $('video'), ui: $('player-ui'), title: $('pl-title'),
   close: $('pl-close'), fav: $('pl-fav'), play: $('pl-play'), rew: $('pl-rew'), fwd: $('pl-fwd'),
-  seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'),
+  seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'), pip: $('pl-pip'),
   msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
   cast: $('pl-cast'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
   osdName: $('pl-osd-name'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
@@ -198,6 +198,8 @@ function setupMediaSession(item) {
     navigator.mediaSession.setActionHandler('nexttrack', channels ? () => zap(1) : null);
     navigator.mediaSession.setActionHandler('previoustrack', channels ? () => zap(-1) : null);
   } catch { /* unsupported actions */ }
+  // Chrome: lets the browser open the floating window by itself when the user leaves the app
+  try { navigator.mediaSession.setActionHandler('enterpictureinpicture', () => enterPip()); } catch { /* older Chrome */ }
 }
 
 function skip(s) {
@@ -276,6 +278,7 @@ export async function play(item, stream, opts = {}) {
   el.seek.title = '';
   showMsg('Caricamento…');
   setupMediaSession(item);
+  updatePipBtn();
   wake();
   localAttached = false;
   if (casting) {
@@ -303,6 +306,7 @@ export function close() {
   saveResume(true);
   if (casting) cast.stopMedia();
   const v = el.video;
+  exitPip();
   v.pause();
   destroyHls();
   v.removeAttribute('src');
@@ -392,6 +396,34 @@ export function handleKey(e) {
     case 'MediaTrackNext': skip(30); return true;
     default: return false;
   }
+}
+
+// ---------------------------------------------------------------- picture-in-picture (floating window)
+const pipSupported = () => !!((document.pictureInPictureEnabled && !el.video.disablePictureInPicture)
+  || (typeof el.video.webkitSupportsPresentationMode === 'function' && el.video.webkitSupportsPresentationMode('picture-in-picture')));
+const inPip = () => document.pictureInPictureElement === el.video || el.video.webkitPresentationMode === 'picture-in-picture';
+
+function updatePipBtn() { el.pip.hidden = !pipSupported() || !!current?.audio; }
+
+async function enterPip(fromButton = false) {
+  const v = el.video;
+  if (inPip() || !current || current.audio) return;
+  try {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    }
+    if (v.requestPictureInPicture && document.pictureInPictureEnabled) await v.requestPictureInPicture();
+    else if (v.webkitSetPresentationMode) v.webkitSetPresentationMode('picture-in-picture');
+  } catch (e) {
+    if (fromButton) showMsg('Finestra mobile non disponibile' + (v.readyState < 1 ? ': attendi che il video parta.' : '.'), 3000);
+  }
+}
+
+function exitPip() {
+  try {
+    if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
+    else if (el.video.webkitPresentationMode === 'picture-in-picture') el.video.webkitSetPresentationMode('inline');
+  } catch { /* ignore */ }
 }
 
 // ---------------------------------------------------------------- casting (Google Cast, AirPlay)
@@ -642,6 +674,15 @@ el.rew.addEventListener('click', () => skip(-10));
 el.fwd.addEventListener('click', () => skip(30));
 el.close.addEventListener('click', close);
 el.fs.addEventListener('click', toggleFullscreen);
+el.pip.addEventListener('click', () => { (inPip() ? exitPip() : enterPip(true)); wake(); });
+v.addEventListener('enterpictureinpicture', () => el.pip.classList.add('active'));
+v.addEventListener('leavepictureinpicture', () => el.pip.classList.remove('active'));
+v.addEventListener('webkitpresentationmodechanged', () => el.pip.classList.toggle('active', inPip()));
+// Leaving the app (home button, app switcher) while a video plays: try to keep it in a floating
+// window. Safari does this by itself (autopictureinpicture); Chrome allows it only in some cases.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && isOpen() && !casting && !current?.audio && !v.paused && !inPip()) enterPip();
+});
 el.fav.addEventListener('click', () => {
   if (!current?.favEntry) return;
   toggleFavourite(current.favEntry);

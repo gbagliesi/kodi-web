@@ -39,7 +39,7 @@
 
   <div id="player" class="player" hidden>
     <div class="player-stage">
-      <video id="video" playsinline webkit-playsinline x-webkit-airplay="allow" preload="metadata"></video>
+      <video id="video" playsinline webkit-playsinline autopictureinpicture x-webkit-airplay="allow" preload="metadata"></video>
       <div class="player-audio-art" id="audio-art" hidden>
         <img id="audio-art-img" alt="">
       </div>
@@ -66,6 +66,7 @@
           <button class="icon-btn focusable ch-btn" id="pl-chup" aria-label="Canale successivo" hidden>CH +</button>
           <div class="spacer"></div>
           <input type="range" id="pl-vol" class="focusable" min="0" max="100" value="100" aria-label="Volume">
+          <button class="icon-btn focusable" id="pl-pip" aria-label="Finestra mobile" title="Finestra mobile" hidden><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19 11h-8v6h8v-6zm4 8V5a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2zm-2 0H3V5h18v14z"/></svg></button>
           <button class="icon-btn focusable" id="pl-fs" aria-label="Schermo intero">&#9974;</button>
         </div>
       </div>

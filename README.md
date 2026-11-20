@@ -63,6 +63,8 @@ finché non si indica un proxy in *Impostazioni*.
 Per l'app pubblicata online il modo più semplice è un proxy gratuito su
 Cloudflare Workers: guida passo passo in [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md).
 
+Fire TV Stick: app da installare con Downloader, guida in [docs/FIRETV.md](docs/FIRETV.md).
+
 `server.js` espone `/proxy?url=…`, usato automaticamente dall'app quando il
 browser blocca una richiesta. Aggiunge gli header richiesti dagli stream
 (Referer, User-Agent) e riscrive le playlist HLS in modo che anche i segmenti

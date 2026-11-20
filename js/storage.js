@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
   proxyUrl: '',          // proxy base (https://x.workers.dev) or full ...proxy?url= (empty = auto-detect)
   proxyToken: '',        // optional token required by the proxy
   autoResume: true,
+  autoPip: true,         // Android: videos open full screen so leaving the app moves them to a floating window
   viewMode: 'auto',      // auto | grid | list
   repositories: ['addons/repository.json'],
 };

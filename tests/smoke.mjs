@@ -513,7 +513,7 @@ async function uiTests() {
     await p3.click('#pl-route');
     await p3.waitForSelector('#pl-stats:not([hidden])');
     const stats = await p3.textContent('#pl-stats');
-    assert.match(stats, /Motore\s*hls\.js/); assert.match(stats, /Percorso\s*Diretto/); assert.match(stats, /Buffer/);
+    assert.match(stats, /Motore\s*hls\.js/); assert.match(stats, /Percorso\s*Diretto/); assert.match(stats, /Buffer/); assert.match(stats, /Canale\s*\d+ · Rai 1/);
     await p3.click('#pl-stats');
     assert.equal(await p3.isHidden('#pl-stats'), true);
     console.log('✓ desktop: extension-less live links are played with hls.js');

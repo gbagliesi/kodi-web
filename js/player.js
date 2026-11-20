@@ -495,6 +495,7 @@ let statsTimer = 0;
 const kbps = (b) => !b ? '—' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' Mbit/s' : Math.round(b / 1e3) + ' kbit/s';
 function statsRows() {
   const v = el.video, rows = [];
+  if (current) rows.push(['Canale', channels ? chNumber(current.item, channels.index) + ' · ' + current.item.label : current.item.label]);
   rows.push(['Percorso', routeLabel || '—']);
   if (casting) { rows.push(['Riproduzione', 'sulla TV (' + cast.deviceName() + ')']); return rows; }
   rows.push(['Motore', hls ? 'hls.js' : (looksHls(current?.stream.url || '', current?.stream.mime) ? 'HLS nativo del browser' : 'lettore del browser')]);

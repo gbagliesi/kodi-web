@@ -29,7 +29,8 @@ tienilo premuto con il tasto ☰ per spostarlo in prima fila.
 - **Telecomando nel lettore:** con i comandi nascosti ▲▼ cambiano canale, ◀▶
   vanno indietro/avanti, OK mostra i comandi. Con i comandi visibili le frecce si
   muovono tra i pulsanti (anche quelli in alto, come l'elenco canali). Cambiando
-  canale i comandi restano nascosti: compaiono solo con OK. Il tasto ☰
+  canale i comandi restano nascosti: compaiono solo con OK. Sulla barra del
+  tempo ◀ torna indietro di 10 s e ▶ porta sul pulsante LIVE (OK = torna in diretta). Il tasto ☰
   apre l'elenco canali. Indietro: chiude l'elenco, poi nasconde i comandi, poi
   chiude il lettore.
 - **Menu a sinistra:** ▲▼ restano nel menu; per passare alla pagina usa ▶ e per

@@ -364,6 +364,45 @@ async function uiTests() {
     await waitFor(() => page.evaluate(() => window.salotto.store.getSettings().startPage === ''));
     console.log('✓ start page: 📌 sets it, the app opens there with Home behind, settings can reset it');
 
+    // List order: by name, by channel number, manual (▲▼), survives source updates
+    const G = BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti';
+    const rowLabels = () => page.locator('#view .row-label').allTextContents();
+    const sortDlg = async (value, button = 'OK') => {
+      await page.click('#view-btn');
+      await page.waitForSelector('#dlg-sort');
+      if (value) await page.selectOption('#dlg-sort', value);
+      await page.click(`#modal-actions button:has-text("${button}")`);
+    };
+    await page.goto(G);
+    await page.waitForSelector('.row:has-text("La7")');
+    const source = await rowLabels();
+    await sortDlg('name');
+    await waitFor(async () => { const l = await rowLabels(); return l.indexOf('7La7') >= 0 && l.indexOf('7La7') < l.indexOf('1Rai 1'); });
+    await sortDlg('number');
+    await waitFor(async () => (await rowLabels()).slice(0, 3).join('|') === '1Rai 1|7La7|8Rai 1');
+    // manual: move the first channel down one place
+    await sortDlg('', 'Riordina a mano');
+    await page.waitForSelector('.reorder-row');
+    await page.locator('.reorder-row').first().locator('button[aria-label="Giù"]').click();
+    await page.click('.reorder-bar button:has-text("Fatto")');
+    await waitFor(async () => (await rowLabels()).slice(0, 2).join('|') === '7La7|1Rai 1');
+    const sortCfg = await page.evaluate(() => Object.values(window.salotto.store.load('sort', {}))[0]);
+    assert.equal(sortCfg.mode, 'custom');
+    // source updated: a channel no longer present is dropped, new ones go to the end in source order
+    await page.evaluate(() => {
+      const all = window.salotto.store.load('sort', {}); const k = Object.keys(all)[0];
+      all[k].order = ['https://example.org/live/la7.m3u8', 'https://example.org/gone.m3u8'];
+      window.salotto.store.save('sort', all);
+    });
+    await page.reload();
+    await page.waitForSelector('.row:has-text("La7")');
+    const after = await rowLabels();
+    assert.equal(after[0], '7La7', 'saved order kept');
+    assert.deepEqual(after.slice(1), source.filter(l => l !== '7La7'), 'other channels follow in source order');
+    await sortDlg('source');
+    await waitFor(async () => (await rowLabels()).join('|') === source.join('|'));
+    console.log('✓ list order: by name, by number, manual, kept when the source list changes');
+
     // Keyboard / remote navigation
     await page.goto(BASE + '#/');
     await page.waitForSelector('.hero');

@@ -364,19 +364,103 @@ async function renderBrowse(id, path, params) {
     };
   }
   viewBtn.hidden = false;
-  viewBtn.onclick = () => {
-    const cur = store.getSettings().viewMode;
-    store.setSettings({ viewMode: cur === 'list' ? 'grid' : 'list' });
-    route();
-  };
+  const listKey = id + '|' + (query != null ? 'q:' + query : path || '');
+  viewBtn.onclick = () => viewAndSortDialog(listKey, listing.items);
 
-  const channels = channelList(id, listing.items);
+  numberLiveItems(listing.items);
+  const items = sortItems(listing.items, getSort(listKey));
+  const channels = channelList(id, items);
   const onPick = (it) => pick(id, it, titleTrail, channels);
-  fill(view, 
+  fill(view,
     listing.message ? h('p', { class: 'empty' }, listing.message) : null,
-    listing.items.length ? renderItems(listing.items, { onPick, listing }) : h('div', { class: 'empty' }, 'Nessun elemento.'),
+    items.length ? renderItems(items, { onPick, listing }) : h('div', { class: 'empty' }, 'Nessun elemento.'),
   );
   focusFirst();
+}
+
+// ---------------------------------------------------------------- list order (▦ button)
+// Each list remembers its own order. Items are recognised by their address, so when the
+// source list is updated the order survives: new channels go to the end (in source order),
+// channels that disappeared are simply dropped.
+const itemKey = (it) => String(it.path || it.url || it.id || it.label);
+const getSort = (listKey) => store.load('sort', {})[listKey] || { mode: 'source' };
+function setSort(listKey, cfg) {
+  const all = store.load('sort', {});
+  if (!cfg || cfg.mode === 'source') delete all[listKey]; else all[listKey] = cfg;
+  store.save('sort', all);
+}
+
+/** Fixes each live channel's number from the source order, so sorting never renumbers them. */
+function numberLiveItems(items) {
+  const live = items.filter(x => x.live && x.playable && !x.external && !x.action);
+  if (live.length < 2 || live.every(x => x._numbered)) return;
+  player.channelNumbers(live).forEach((n, i) => { live[i].number = String(n); live[i]._numbered = true; });
+}
+
+function sortItems(items, cfg) {
+  const mode = cfg?.mode || 'source';
+  if (mode === 'source') return items;
+  if (mode === 'custom') {
+    const pos = new Map((cfg.order || []).map((k, i) => [k, i]));
+    const known = items.filter(it => pos.has(itemKey(it))).sort((a, b) => pos.get(itemKey(a)) - pos.get(itemKey(b)));
+    return [...known, ...items.filter(it => !pos.has(itemKey(it)))];
+  }
+  // folders stay first, in their order; playable entries are sorted
+  const folders = items.filter(it => !it.playable), rest = items.filter(it => it.playable);
+  const num = (it) => parseInt(it.number, 10) || Infinity;
+  const byName = (a, b) => a.label.localeCompare(b.label, 'it', { numeric: true, sensitivity: 'base' });
+  rest.sort(mode === 'number' ? (a, b) => (num(a) - num(b)) || byName(a, b) : byName);
+  return [...folders, ...rest];
+}
+
+async function viewAndSortDialog(listKey, sourceItems) {
+  const s = store.getSettings();
+  const cur = getSort(listKey);
+  const hasNumbers = sourceItems.some(it => it.live && it.number);
+  const viewSel = h('select', { id: 'dlg-view' }, ...[['auto', 'Automatica'], ['list', 'Elenco'], ['grid', 'Icone']].map(([v, l]) => h('option', { value: v, selected: s.viewMode === v }, l)));
+  const sorts = [['source', 'Come la lista originale'], ...(hasNumbers ? [['number', 'Per numero di canale']] : []), ['name', 'Per nome'], ['custom', 'Personalizzato']];
+  const sortSel = h('select', { id: 'dlg-sort' }, ...sorts.map(([v, l]) => h('option', { value: v, selected: cur.mode === v }, l)));
+  const body = h('div', {},
+    h('div', { class: 'field' }, h('label', { for: 'dlg-view' }, 'Vista'), viewSel),
+    h('div', { class: 'field' }, h('label', { for: 'dlg-sort' }, 'Ordine'), sortSel,
+      h('div', { class: 'hint' }, 'Vale solo per questo elenco. Se la lista viene aggiornata, i canali nuovi finiscono in fondo e quelli tolti spariscono.')));
+  const res = await modal({ title: 'Vista e ordine', body, actions: [{ label: 'Annulla', value: false }, { label: 'Riordina a mano', value: 'reorder' }, { label: 'OK', value: true, primary: true }] });
+  if (!res) return;
+  store.setSettings({ viewMode: viewSel.value });
+  if (res === 'reorder' || (sortSel.value === 'custom' && cur.mode !== 'custom')) {
+    const start = sortItems(sourceItems, sortSel.value === 'custom' ? cur : { mode: sortSel.value });
+    reorderView(listKey, start);
+    return;
+  }
+  setSort(listKey, sortSel.value === 'custom' ? cur : { mode: sortSel.value });
+  route();
+}
+
+/** Manual order: ▲ ▼ on each row (works with touch, mouse and TV remote). */
+function reorderView(listKey, items) {
+  const list = [...items];
+  const done = h('button', { class: 'btn primary focusable', onclick: () => { setSort(listKey, { mode: 'custom', order: list.map(itemKey) }); route(); } }, 'Fatto');
+  const cancel = h('button', { class: 'btn focusable', onclick: () => route() }, 'Annulla');
+  const rowsBox = h('div', { class: 'list reorder' });
+  const draw = (focusKey, dir) => {
+    fill(rowsBox, ...list.map((it, i) => h('div', { class: 'row reorder-row' },
+      h('span', { class: 'row-main' }, h('div', { class: 'row-label' }, it.live && it.number ? h('span', { class: 'ch-num' }, it.number) : null, it.label)),
+      h('button', { class: 'icon-btn focusable', 'aria-label': 'Su', 'data-k': itemKey(it) + '|up', disabled: i === 0, onclick: () => move(i, -1) }, '▲'),
+      h('button', { class: 'icon-btn focusable', 'aria-label': 'Giù', 'data-k': itemKey(it) + '|down', disabled: i === list.length - 1, onclick: () => move(i, 1) }, '▼'))));
+    if (focusKey) {
+      const b = [...rowsBox.querySelectorAll('button')].find(x => x.dataset.k === focusKey + '|' + dir);
+      (b && !b.disabled ? b : rowsBox.querySelector(`button[data-k="${CSS.escape(focusKey + '|' + (dir === 'up' ? 'down' : 'up'))}"]`))?.focus({ preventScroll: false });
+    }
+  };
+  const move = (i, d) => {
+    const j = i + d;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    draw(itemKey(list[j]), d < 0 ? 'up' : 'down');
+  };
+  draw();
+  fill(view, h('div', { class: 'reorder-bar' }, h('span', { class: 'hint' }, 'Sposta con ▲ ▼'), h('div', { class: 'spacer' }), cancel, done), rowsBox);
+  viewBtn.hidden = true; pinBtn.hidden = true; searchBtn.hidden = true;
 }
 
 // What the player needs to open an entry: the resolved stream plus the favourite key.

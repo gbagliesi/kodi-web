@@ -509,6 +509,9 @@ async function uiTests() {
         assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Ruota in orizzontale');
         await pp.evaluate(() => document.exitFullscreen());
         await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
+        // full screen lost: a tap on the picture brings the automatic full screen back
+        await pp.touchscreen.tap(180, 300);
+        await waitFor(() => pp.evaluate(() => document.fullscreenElement?.id === 'player'));
         await pp.click('#pl-close');
         // Live TV: a vertical swipe on the picture changes channel
         await pp.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');

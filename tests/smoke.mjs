@@ -44,26 +44,26 @@ const RADIO = [{ stationuuid: 'u1', name: 'Radio Prova', url_resolved: 'https://
 
 // Fake Google Cast SDK: records what would be sent to the TV
 const FAKE_CAST = `(() => {
-  let sess = null; const ctxL = []; window.__castLoads = []; window.__castPP = 0; window.__castStopped = 0;
+  let sess = null, idle = null; const ctxL = []; window.__castLoads = []; window.__castPP = 0; window.__castStopped = 0;
   window.chrome = window.chrome || {};
   window.chrome.cast = { AutoJoinPolicy: { ORIGIN_SCOPED: 'o' }, Image: function (u) { this.url = u; }, media: {
-    DEFAULT_MEDIA_RECEIVER_APP_ID: 'CC1AD845', StreamType: { LIVE: 'LIVE', BUFFERED: 'BUFFERED' },
+    DEFAULT_MEDIA_RECEIVER_APP_ID: 'CC1AD845', HlsSegmentFormat: { TS: 'ts', FMP4: 'fmp4', AAC: 'aac', MP3: 'mp3', AC3: 'ac3' }, HlsVideoSegmentFormat: { MPEG2_TS: 'mpeg2_ts', FMP4: 'fmp4' }, StreamType: { LIVE: 'LIVE', BUFFERED: 'BUFFERED' },
     MediaInfo: function (u, t) { this.contentId = u; this.contentType = t; },
     GenericMediaMetadata: function () {}, MusicTrackMediaMetadata: function () {}, LoadRequest: function (m) { this.media = m; } } };
   const fire = (st) => { for (const [t, f] of ctxL) if (t === 'session') f({ sessionState: st }); };
   const ctx = { setOptions() {}, addEventListener(t, f) { ctxL.push([t, f]); }, getCastState: () => 'NOT_CONNECTED', getCurrentSession: () => sess,
     requestSession() {
       sess = { getCastDevice: () => ({ friendlyName: 'TV Salotto' }),
-        loadMedia: async (r) => { window.__castLoads.push([r.media.contentId, r.media.contentType, r.media.streamType, r.media.metadata.title]); },
-        getMediaSession: () => ({ stop() { window.__castStopped++; } }) };
+        loadMedia: async (r) => { window.__castLoads.push([r.media.contentId, r.media.contentType, r.media.streamType, r.media.metadata.title, r.media.hlsSegmentFormat || '', r.media.hlsVideoSegmentFormat || '']); },
+        getMediaSession: () => ({ idleReason: idle, stop() { window.__castStopped++; } }) };
       fire('SESSION_STARTED'); return Promise.resolve();
     } };
   window.cast = { framework: { CastContext: { getInstance: () => ctx },
     CastContextEventType: { CAST_STATE_CHANGED: 'state', SESSION_STATE_CHANGED: 'session' },
     SessionState: { SESSION_STARTED: 'SESSION_STARTED', SESSION_RESUMED: 'SESSION_RESUMED', SESSION_ENDED: 'SESSION_ENDED' },
     RemotePlayer: function () { this.currentTime = 0; this.duration = 0; this.isPaused = false; },
-    RemotePlayerController: function () { this.addEventListener = () => {}; this.playOrPause = () => { window.__castPP++; }; this.seek = () => {}; },
-    RemotePlayerEventType: {} } };
+    RemotePlayerController: function (pl) { const L = {}; this.addEventListener = (t, f) => { L[t] = f; }; window.__castError = () => { pl.playerState = 'IDLE'; idle = 'ERROR'; L.psc && L.psc(); }; this.playOrPause = () => { window.__castPP++; }; this.seek = () => {}; },
+    RemotePlayerEventType: { PLAYER_STATE_CHANGED: 'psc' } } };
   window.__endCast = () => { sess = null; fire('SESSION_ENDED'); };
   setTimeout(() => window.__onGCastApiAvailable(true), 0);
 })();`;
@@ -142,7 +142,14 @@ async function workerTests() {
     assert.equal(await (await call('/proxy/health')).text(), 'ok');
     const target = encodeURIComponent(`http://127.0.0.1:${port}/live/index.m3u8`);
     assert.equal((await call('/proxy?url=' + target)).status, 401);
-    assert.equal((await call('/proxy?token=s3cret&url=' + target, { Origin: 'https://evil.example' })).status, 403);
+    // with a TOKEN the token is the protection; the Chromecast (another origin) must get through
+    assert.equal((await call('/proxy?token=s3cret&url=' + target, { Origin: 'https://www.gstatic.com' })).status, 200);
+    // without a TOKEN the origin allow-list applies, Cast receivers always allowed
+    const env2 = { ALLOWED_ORIGINS: 'https://gbagliesi.github.io' };
+    const call2 = (q, headers = {}) => worker.fetch(new Request(W + q, { headers }), env2);
+    assert.equal((await call2('/proxy?url=' + target, { Origin: 'https://evil.example' })).status, 403);
+    assert.equal((await call2('/proxy?url=' + target, { Origin: 'https://www.gstatic.com' })).status, 200);
+    assert.equal((await call2('/proxy?url=' + target, { Origin: 'https://gbagliesi.github.io' })).status, 200);
     const pl = await call('/proxy?token=s3cret&url=' + target, { Origin: 'https://gbagliesi.github.io' });
     assert.equal(pl.headers.get('access-control-allow-origin'), '*');
     const body = await pl.text();
@@ -153,7 +160,7 @@ async function workerTests() {
     assert.equal(seg.status, 206);
     assert.equal(seg.headers.get('content-range'), 'bytes 0-3/10');
     assert.equal(await seg.text(), 'ref=https://www.raiplay.it/;range=bytes=0-3');
-    console.log('✓ Cloudflare worker: token, origin allow-list, HLS rewrite, headers and ranges');
+    console.log('✓ Cloudflare worker: token, origin allow-list (Chromecast allowed), HLS rewrite, headers and ranges');
   } finally { up.close(); }
 }
 
@@ -356,18 +363,24 @@ async function uiTests() {
     console.log('✓ desktop: extension-less live links are played with hls.js');
 
     // Google Cast: the TV gets the proxied stream, zapping follows on the TV, controls drive it
+    // (Rai 1 served as an fMP4 master playlist so the segment format is detected for the receiver)
+    await desktop.route(/\/proxy\?url=[^&]*relinkerServlet/, r => r.fulfill({ status: 200, contentType: 'application/vnd.apple.mpegurl', body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nproxy?url=' + encodeURIComponent('https://cdn.example.net/v/media.m3u8') + '\n' }));
+    await desktop.route(/\/proxy\?url=[^&]*media\.m3u8/, r => r.fulfill({ status: 200, contentType: 'application/vnd.apple.mpegurl', body: '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:6,\nproxy?url=' + encodeURIComponent('https://cdn.example.net/v/s1.m4s?x=1') + '\n' }));
     await p3.waitForSelector('#pl-cast:not([hidden])');
     await p3.click('#pl-cast');
     await waitFor(() => p3.evaluate(() => window.__castLoads.length === 1));
     let loads = await p3.evaluate(() => window.__castLoads);
     assert.match(loads[0][0], /^http:\/\/127\.0\.0\.1:\d+\/proxy\?url=.*relinkerServlet/, 'cast URL goes through the proxy, absolute');
-    assert.deepEqual(loads[0].slice(1), ['application/x-mpegurl', 'LIVE', 'Rai 1']);
+    assert.deepEqual(loads[0].slice(1), ['application/x-mpegurl', 'LIVE', 'Rai 1', 'fmp4', 'fmp4'], 'fMP4 segment format detected for the receiver');
     assert.match(await p3.textContent('#pl-msg'), /In riproduzione su TV Salotto/);
     assert.equal(await p3.evaluate(() => document.getElementById('player').classList.contains('casting')), true);
     await p3.click('#pl-chdown');
     await waitFor(() => p3.evaluate(() => window.__castLoads.length === 2));
     loads = await p3.evaluate(() => window.__castLoads);
     assert.match(loads[1][3], /La7/, 'zapping sends the new channel to the TV');
+    // the receiver failing (logo stays on the TV) is reported in the app
+    await p3.evaluate(() => window.__castError());
+    assert.match(await p3.textContent('#pl-msg'), /La TV non riesce a riprodurre/);
     await p3.click('#pl-play');
     assert.equal(await p3.evaluate(() => window.__castPP), 1, 'play/pause drives the TV');
     await p3.click('#pl-close');

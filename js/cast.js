@@ -7,11 +7,11 @@ let ctx = null;            // cast.framework.CastContext
 let player = null;         // cast.framework.RemotePlayer
 let controller = null;     // cast.framework.RemotePlayerController
 let state = 'NO_DEVICES_AVAILABLE';
-const handlers = { state: () => {}, session: () => {}, progress: () => {} };
+const handlers = { state: () => {}, session: () => {}, progress: () => {}, error: () => {} };
 
 /** Load the Cast SDK (Chrome only). onState(available), onSession(active, deviceName), onProgress({time, duration, paused}). */
-export function initCast({ onState, onSession, onProgress } = {}) {
-  Object.assign(handlers, { state: onState || handlers.state, session: onSession || handlers.session, progress: onProgress || handlers.progress });
+export function initCast({ onState, onSession, onProgress, onError } = {}) {
+  Object.assign(handlers, { state: onState || handlers.state, session: onSession || handlers.session, progress: onProgress || handlers.progress, error: onError || handlers.error });
   const ua = navigator.userAgent;
   if (!window.chrome || /iPad|iPhone|iPod|CriOS/.test(ua)) return; // no Cast SDK outside Chrome
   window.__onGCastApiAvailable = (ok) => { if (ok) setup(); };
@@ -44,6 +44,11 @@ function setup() {
   controller.addEventListener(E.CURRENT_TIME_CHANGED, report);
   controller.addEventListener(E.IS_PAUSED_CHANGED, report);
   controller.addEventListener(E.DURATION_CHANGED, report);
+  // The receiver gives up silently (logo stays on the TV): report it to the app.
+  controller.addEventListener(E.PLAYER_STATE_CHANGED, () => {
+    const m = session()?.getMediaSession();
+    if (player.playerState === 'IDLE' && m && m.idleReason === 'ERROR') handlers.error();
+  });
   state = ctx.getCastState();
   handlers.state(available());
 }
@@ -66,6 +71,7 @@ export async function load({ url, mime, hls, title, subtitle, thumb, live, audio
   const { media } = window.chrome.cast;
   const type = hls ? 'application/x-mpegurl' : (mime || (audio ? 'audio/mpeg' : 'video/mp4'));
   const info = new media.MediaInfo(url, type);
+  if (hls) await setSegmentFormat(info, url);
   info.streamType = live ? media.StreamType.LIVE : media.StreamType.BUFFERED;
   const meta = audio ? new media.MusicTrackMediaMetadata() : new media.GenericMediaMetadata();
   meta.title = title || '';
@@ -76,6 +82,35 @@ export async function load({ url, mime, hls, title, subtitle, thumb, live, audio
   req.autoplay = true;
   if (!live && startTime > 0) req.currentTime = startTime;
   await s.loadMedia(req);
+}
+
+// The Default Media Receiver assumes MPEG-TS segments; fMP4/CMAF or packed-audio streams
+// only play if told so. Peek at the playlist (through the same proxied URL the TV will use).
+async function setSegmentFormat(info, url) {
+  const { media } = window.chrome.cast;
+  if (!media.HlsSegmentFormat) return;
+  try {
+    const get = async (u) => { const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 4000);
+      try { const r = await fetch(u, { signal: ctl.signal }); return r.ok ? await r.text() : ''; } finally { clearTimeout(t); } };
+    let text = await get(url);
+    const variant = text.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#') && /#EXT-X-STREAM-INF/.test(text));
+    if (variant) text = await get(new URL(variant, url).href);
+    if (!text) return;
+    const map = /#EXT-X-MAP:/.test(text);
+    const seg = text.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#')) || '';
+    // segment names may be proxied (proxy?url=<encoded>): decode before looking at the extension
+    const ext = (decodeURIComponent(seg).match(/\.(ts|m4s|mp4|m4a|m4v|cmfv|cmfa|aac|mp3|ac3)(?:[?&#]|$)/i) || [])[1]?.toLowerCase() || '';
+    if (map || ['m4s', 'mp4', 'm4v', 'm4a', 'cmfv', 'cmfa'].includes(ext)) {
+      info.hlsSegmentFormat = media.HlsSegmentFormat.FMP4;
+      if (media.HlsVideoSegmentFormat) info.hlsVideoSegmentFormat = media.HlsVideoSegmentFormat.FMP4;
+    } else if (ext === 'aac') info.hlsSegmentFormat = media.HlsSegmentFormat.AAC;
+    else if (ext === 'mp3') info.hlsSegmentFormat = media.HlsSegmentFormat.MP3;
+    else if (ext === 'ac3') info.hlsSegmentFormat = media.HlsSegmentFormat.AC3;
+    else if (ext === 'ts') {
+      info.hlsSegmentFormat = media.HlsSegmentFormat.TS;
+      if (media.HlsVideoSegmentFormat) info.hlsVideoSegmentFormat = media.HlsVideoSegmentFormat.MPEG2_TS;
+    }
+  } catch { /* unreachable from here: let the receiver guess */ }
 }
 
 export function playOrPause() { if (controller && isCasting()) controller.playOrPause(); }

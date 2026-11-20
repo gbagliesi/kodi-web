@@ -45,6 +45,61 @@ function fmt(t) {
 
 function isLive() { return !isFinite(el.video.duration) || (current && current.item.live); }
 
+// Live rewind: how far back the stream lets us go. It is the broadcaster's window (the
+// segments still listed in the HLS playlist), reported by the browser as the seekable range.
+const MIN_WINDOW = 20; // seconds: shorter windows are not worth a seek bar
+function liveWindow() {
+  const s = el.video.seekable;
+  if (!s || !s.length) return null;
+  const start = s.start(0), end = s.end(s.length - 1);
+  return isFinite(start) && isFinite(end) && end - start >= MIN_WINDOW ? { start, end } : null;
+}
+
+function goLive() {
+  const w = liveWindow();
+  if (!w) return;
+  const edge = hls && isFinite(hls.liveSyncPosition) && hls.liveSyncPosition > 0 ? hls.liveSyncPosition : w.end - 3;
+  el.video.currentTime = edge;
+  if (el.video.paused) el.video.play().catch(() => {});
+  wake();
+}
+
+/** Seek bar, ⟲10/30⟳ and the LIVE button: for live streams they follow the rewind window. */
+function updateSeekUi() {
+  const v = el.video;
+  if (!current || casting) return;
+  const live = isLive();
+  const w = live ? liveWindow() : null;
+  const canSeek = !live || !!w;
+  if (el.seek.disabled === canSeek) el.seek.disabled = !canSeek;
+  el.rew.disabled = el.fwd.disabled = !canSeek;
+  el.rew.hidden = el.fwd.hidden = live && !w;
+  if (!live) {
+    el.dur.textContent = fmt(v.duration);
+    el.dur.classList.remove('is-live', 'behind');
+    el.dur.tabIndex = -1;
+    if (!seeking && isFinite(v.duration) && v.duration > 0) el.seek.value = Math.round((v.currentTime / v.duration) * 1000);
+    el.cur.textContent = fmt(v.currentTime);
+    return;
+  }
+  if (!w) {
+    el.dur.textContent = 'LIVE';
+    el.dur.classList.add('is-live'); el.dur.classList.remove('behind');
+    el.dur.tabIndex = -1;
+    el.cur.textContent = '';
+    return;
+  }
+  const behind = Math.max(0, w.end - v.currentTime);
+  const atEdge = behind < 12;
+  if (!seeking) el.seek.value = Math.round(((v.currentTime - w.start) / (w.end - w.start)) * 1000);
+  el.cur.textContent = atEdge ? '' : '−' + fmt(behind);
+  el.dur.textContent = atEdge ? 'LIVE' : 'LIVE ▶▶';
+  el.dur.classList.toggle('is-live', atEdge);
+  el.dur.classList.toggle('behind', !atEdge);
+  el.dur.tabIndex = atEdge ? -1 : 0;
+  el.seek.title = 'Puoi tornare indietro fino a ' + fmt(w.end - w.start);
+}
+
 function showMsg(text, ms = 0) {
   el.msg.textContent = text;
   el.msg.hidden = !text;
@@ -148,7 +203,14 @@ function setupMediaSession(item) {
 function skip(s) {
   const v = el.video;
   if (casting) { if (!current?.item.live) cast.seek(cast.remoteTime() + s); wake(); return; }
-  if (isLive()) return;
+  if (isLive()) {
+    const w = liveWindow();
+    if (!w) return;
+    v.currentTime = Math.max(w.start + 1, Math.min(w.end - 3, v.currentTime + s));
+    updateSeekUi();
+    wake();
+    return;
+  }
   v.currentTime = Math.max(0, Math.min((v.duration || 0) - 1, v.currentTime + s));
   wake();
 }
@@ -209,6 +271,9 @@ export async function play(item, stream, opts = {}) {
   el.seek.value = 0; el.cur.textContent = '0:00'; el.dur.textContent = item.live ? 'LIVE' : '0:00';
   updateFavBtn();
   el.seek.disabled = el.rew.disabled = el.fwd.disabled = !!item.live;
+  el.rew.hidden = el.fwd.hidden = !!item.live; // shown again if the stream has a rewind window
+  el.dur.classList.toggle('is-live', !!item.live); el.dur.classList.remove('behind');
+  el.seek.title = '';
   showMsg('Caricamento…');
   setupMediaSession(item);
   wake();
@@ -427,8 +492,6 @@ const chNumber = (_it, i) => String(channels?.numbers?.[i] ?? i + 1);
 function updateChannelUi() {
   const on = !!channels;
   el.chUp.hidden = el.chDown.hidden = el.chList.hidden = !on;
-  // live TV cannot be rewound: the channel buttons take the place of ⟲10 / 30⟳
-  el.rew.hidden = el.fwd.hidden = on;
   if (!on) { el.panel.hidden = true; return; }
   if (!el.panel.hidden) renderPanel();
 }
@@ -545,15 +608,13 @@ el.chNum.addEventListener('input', () => { el.chNum.value = el.chNum.value.repla
 // ---------------------------------------------------------------- wiring
 const v = el.video;
 v.addEventListener('timeupdate', () => {
-  if (!seeking && isFinite(v.duration) && v.duration > 0) el.seek.value = Math.round((v.currentTime / v.duration) * 1000);
-  el.cur.textContent = fmt(v.currentTime);
+  updateSeekUi();
   saveResume(false);
 });
-v.addEventListener('durationchange', () => {
-  const live = isLive();
-  el.dur.textContent = live ? 'LIVE' : fmt(v.duration);
-  el.seek.disabled = live; el.rew.disabled = live; el.fwd.disabled = live;
-});
+v.addEventListener('durationchange', updateSeekUi);
+v.addEventListener('progress', updateSeekUi);
+v.addEventListener('loadedmetadata', updateSeekUi);
+el.dur.addEventListener('click', () => { if (isLive() && el.dur.classList.contains('behind')) goLive(); });
 v.addEventListener('playing', () => { showMsg(''); el.play.innerHTML = '&#10074;&#10074;'; wake(); });
 v.addEventListener('pause', () => { el.play.innerHTML = '&#9654;'; wake(); saveResume(true); });
 v.addEventListener('waiting', () => showMsg('Buffering…'));
@@ -588,6 +649,8 @@ el.fav.addEventListener('click', () => {
 el.vol.addEventListener('input', () => { v.volume = el.vol.value / 100; });
 el.seek.addEventListener('input', () => {
   seeking = true;
+  const w = isLive() ? liveWindow() : null;
+  if (w) { el.cur.textContent = '−' + fmt(w.end - (w.start + (el.seek.value / 1000) * (w.end - w.start))); return; }
   if (isFinite(v.duration)) el.cur.textContent = fmt((el.seek.value / 1000) * v.duration);
 });
 el.seek.addEventListener('change', () => {
@@ -595,6 +658,13 @@ el.seek.addEventListener('change', () => {
     const d = cast.remoteDuration();
     if (d > 0 && !current?.item.live) cast.seek((el.seek.value / 1000) * d);
     seeking = false;
+    return;
+  }
+  const w = isLive() ? liveWindow() : null;
+  if (w) {
+    v.currentTime = Math.min(w.end - 3, w.start + (el.seek.value / 1000) * (w.end - w.start));
+    seeking = false;
+    updateSeekUi();
     return;
   }
   if (isFinite(v.duration)) v.currentTime = (el.seek.value / 1000) * v.duration;

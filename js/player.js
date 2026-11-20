@@ -313,7 +313,12 @@ export function close() {
   v.removeAttribute('src');
   for (const t of [...v.querySelectorAll('track')]) t.remove();
   v.load();
-  if (document.fullscreenElement || document.webkitFullscreenElement) {
+  if (wantsAutoFs() && document.fullscreenElement === document.documentElement) {
+    // automatic mode: the whole app stays full screen, so Chrome's "full screen" notice
+    // appears once instead of at every video; just give the lists their orientation back
+    autoFs = true;
+    try { screen.orientation?.unlock(); } catch { /* ignore */ }
+  } else if (document.fullscreenElement || document.webkitFullscreenElement) {
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   }
   el.root.hidden = true;
@@ -332,10 +337,12 @@ export function close() {
 let autoFs = false;
 const wantsAutoFs = () => /Android/i.test(navigator.userAgent) && getSettings().autoPip && isOpen() && current && !current.audio && !casting;
 function autoFullscreen() {
-  if (!wantsAutoFs() || document.fullscreenElement || !el.root.requestFullscreen) return false;
+  const doc = document.documentElement;
+  if (!wantsAutoFs() || document.fullscreenElement || !doc.requestFullscreen) return false;
   if (navigator.userActivation && !navigator.userActivation.isActive) return false;
   autoFs = true;
-  el.root.requestFullscreen({ navigationUI: 'hide' }).catch(() => { autoFs = false; });
+  // the whole page (not just the player) so it can stay full screen between videos
+  doc.requestFullscreen({ navigationUI: 'hide' }).catch(() => { autoFs = false; });
   return true;
 }
 
@@ -358,7 +365,8 @@ function toggleFullscreen() {
     autoFs = want === 'portrait';
     updateFsBtn();
     // if the browser dropped full screen behind our back, the lock fails: enter full screen again
-    screen.orientation.lock(want).catch(() => r.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation.lock(want)).catch(() => {}));
+    const target = wantsAutoFs() ? document.documentElement : r;
+    screen.orientation.lock(want).catch(() => target.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation.lock(want)).catch(() => {}));
     return;
   }
   if (document.fullscreenElement || document.webkitFullscreenElement) {

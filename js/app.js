@@ -247,6 +247,8 @@ async function openUrlDialog() {
 }
 
 // ---------------------------------------------------------------- listings
+const isLogoItem = (it) => !!(it.live || it.type === 'audio' || it.logo);
+
 function itemIcon(it) {
   if (!it.playable) return '📁';
   if (it.type === 'audio') return '🎵';
@@ -267,15 +269,20 @@ function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
   const viewMode = mode === 'auto' ? chooseView(listing || { items }) : mode;
   if (viewMode === 'list') {
     return h('div', { class: 'list' }, ...items.map((it, i) => h('button', { class: 'row focusable', onclick: () => onPick(it, i) },
-      h('span', { class: 'row-thumb', style: bg(it.thumb) }, safeImg(it.thumb) ? '' : itemIcon(it)),
+      h('span', { class: 'row-thumb' + (isLogoItem(it) ? ' logo' : ''), style: bg(it.thumb) }, safeImg(it.thumb) ? '' : itemIcon(it)),
       h('span', { class: 'row-main' },
         h('div', { class: 'row-label' }, it.label),
         (it.subtitle || it.info?.plot) && h('div', { class: 'row-sub' }, it.subtitle || it.info.plot)),
       h('span', { class: 'row-end' }, it.live ? 'LIVE' : it.info?.duration ? fmtDuration(it.info.duration) : it.playable ? '▶' : '›'))));
   }
-  const cls = 'grid' + (viewMode === 'wide' ? ' wide' : viewMode === 'square' ? ' square' : '');
+  // Channel and station logos are shown whole on square tiles; posters and covers fill theirs.
+  const logos = items.filter(isLogoItem).length > items.length / 2;
+  const shape = viewMode === 'wide' ? ' wide' : (viewMode === 'square' || logos) ? ' square' : '';
+  const cls = 'grid' + shape;
   return h('div', { class: cls }, ...items.map((it, i) => h('button', { class: 'card focusable', onclick: () => onPick(it, i), title: it.info?.plot || it.label },
-    h('span', { class: 'thumb', style: bg(it.thumb) }, safeImg(it.thumb) ? '' : itemIcon(it)),
+    isLogoItem(it) && safeImg(it.thumb)
+      ? h('span', { class: 'thumb logo' }, h('img', { class: 'thumb-img', src: safeImg(it.thumb), alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(h('span', { class: 'thumb-ico' }, itemIcon(it))) }))
+      : h('span', { class: 'thumb', style: bg(it.thumb) }, safeImg(it.thumb) ? '' : h('span', { class: 'thumb-ico' }, itemIcon(it))),
     h('span', { class: 'label' }, it.label),
     (it.subtitle || it.info?.year) && h('span', { class: 'sub' }, it.subtitle || it.info.year))));
 }

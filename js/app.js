@@ -790,16 +790,21 @@ async function renderGuide(params) {
     entry.open().then(r => player.play(r.item, r.stream, { favEntry: r.favEntry, channels: channels.length > 1 ? { list: channels, index: row.i } : undefined }))
       .catch(e => toast(e.message, 5000));
   };
+  // Tap / OK always shows the whole description first; watching is a separate button.
   const pickProg = async (p, row) => {
-    if (p.start <= Date.now()) { play(row); return; }
+    const t = Date.now();
+    const live = p.start <= t && p.stop > t;
+    const when = (new Date(p.start).toDateString() === new Date().toDateString() ? 'Oggi' : new Date(p.start).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }))
+      + `, ${epg.hhmm(p.start)}–${epg.hhmm(p.stop)} su ${row.num} ${row.c.item.label}`;
     const watch = await modal({
       title: p.title,
-      body: h('div', {},
-        h('p', { class: 'hint' }, `${new Date(p.start).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}, ${epg.hhmm(p.start)}–${epg.hhmm(p.stop)} su ${row.c.item.label}`),
-        p.sub ? h('p', {}, p.sub) : null,
-        p.desc ? h('p', {}, p.desc) : null,
+      body: h('div', { class: 'prog-detail' },
+        h('p', { class: 'hint' }, when, live ? h('span', { class: 'gi-live' }, 'IN ONDA') : p.stop <= t ? ' · già trasmesso' : ''),
+        live ? h('div', { class: 'gi-bar' }, h('span', { style: { width: Math.round(epg.progress(p) * 100) + '%' } })) : null,
+        p.sub ? h('p', { class: 'pd-sub' }, p.sub) : null,
+        h('p', {}, p.desc || 'Nessuna descrizione disponibile.'),
         p.cat ? h('p', { class: 'hint' }, p.cat) : null),
-      actions: [{ label: 'Chiudi', value: false }, { label: 'Guarda ' + row.c.item.label + ' adesso', value: true, primary: true }],
+      actions: [{ label: 'Chiudi', value: false }, { label: live ? '▶ Guarda ' + row.c.item.label : 'Guarda ' + row.c.item.label + ' adesso', value: true, primary: true }],
     });
     if (watch) play(row);
   };

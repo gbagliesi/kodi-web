@@ -17,6 +17,8 @@ function scope() {
     // the channel list covers part of the controls: while it has the focus, stay inside it
     const panel = document.getElementById('pl-channels');
     if (panel && !panel.hidden && panel.contains(document.activeElement)) return panel;
+    const info = document.getElementById('pl-epg');
+    if (info && !info.hidden && info.contains(document.activeElement)) return info;
     return player;
   }
   return document.getElementById('app');

@@ -310,6 +310,12 @@ async function uiTests() {
     assert.match(await page.locator('.grow').nth(1).locator('.gcell.on').textContent(), /Notiziario La7/);
     assert.match(await page.textContent('.guide-foot'), /1 canale non ha la guida/);
     if (SHOTS) await page.screenshot({ path: SHOTS + '/guide.png' });
+    await page.locator('.grow').nth(1).locator('.gcell.on').click(); // tap on what is on: details first, no playback
+    await page.waitForSelector('#modal:not([hidden])');
+    assert.match(await page.textContent('#modal'), /Notiziario La7.*IN ONDA/s);
+    assert.equal(await page.isHidden('#player'), true, 'tapping a programme does not start the channel');
+    await page.click('#modal-actions .btn:not(.primary)');
+    await page.waitForSelector('#modal', { state: 'hidden' });
     await page.locator('.grow').first().locator('.gcell:has-text("Film della sera")').click();
     await page.waitForSelector('#modal:not([hidden])');
     assert.match(await page.textContent('#modal'), /Film della sera/);
@@ -317,6 +323,16 @@ async function uiTests() {
     await page.waitForSelector('#player:not([hidden])');
     await waitFor(async () => /rai1\.m3u8/.test(await nowSrc()));
     assert.match(await page.textContent('#pl-prog'), /Telegiornale di prova .*Poi: Film della sera/, 'player shows the programme on now');
+    // ⓘ: whole description beside the video, which keeps playing
+    const before = await nowSrc();
+    await page.click('#pl-info');
+    await page.waitForSelector('#pl-epg:not([hidden])');
+    assert.match(await page.textContent('#pl-epg'), /Telegiornale di prova.*Notizie.*Film della sera/s);
+    assert.equal(await nowSrc(), before, 'the stream keeps playing');
+    if (SHOTS) await page.screenshot({ path: SHOTS + '/player-info.png' });
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isHidden('#pl-epg'), true);
+    assert.equal(await page.isVisible('#player'), true, 'closing the info keeps the player open');
     await page.keyboard.press('ArrowUp'); // zapping from the guide goes through the guide's channels
     await waitFor(async () => /la7\.m3u8/.test(await nowSrc()));
     assert.match(await page.textContent('#pl-prog'), /Notiziario La7/);

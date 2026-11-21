@@ -19,7 +19,7 @@ const el = {
   seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'), pip: $('pl-pip'),
   msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
   cast: $('pl-cast'), route: $('pl-route'), stats: $('pl-stats'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
-  osdName: $('pl-osd-name'), osdProg: $('pl-osd-prog'), prog: $('pl-prog'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
+  osdName: $('pl-osd-name'), osdProg: $('pl-osd-prog'), prog: $('pl-prog'), info: $('pl-info'), epg: $('pl-epg'), epgCh: $('pl-epg-ch'), epgBody: $('pl-epg-body'), epgClose: $('pl-epgclose'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
 };
 
 let hls = null;
@@ -331,6 +331,7 @@ export async function play(item, stream, opts = {}) {
 /** Remote "Back": channel list → controls (TV) → close the player. */
 export function back() {
   if (!el.panel.hidden) { closePanel(); return; }
+  if (!el.epg.hidden) { closeInfo(); return; }
   if (document.body.classList.contains('tv') && !el.ui.classList.contains('idle')) { hideControls(); return; }
   close();
 }
@@ -358,7 +359,7 @@ export function close() {
   current = null;
   channels = null;
   clearTimeout(zapTimer); clearTimeout(digitTimer); digits = ''; zapToken++;
-  el.osd.hidden = true; el.panel.hidden = true;
+  el.osd.hidden = true; el.panel.hidden = true; el.epg.hidden = true;
   toggleStats(false);
   const cb = onCloseCb; onCloseCb = null;
   if (cb) cb();
@@ -446,7 +447,7 @@ export function handleKey(e) {
     // TV remote: with the controls hidden, ▲▼ change channel, ◀▶ skip, OK shows the controls;
     // with the controls shown, the arrows move between the buttons (top bar included).
     const idle = el.ui.classList.contains('idle');
-    const inPanel = !el.panel.hidden && el.panel.contains(document.activeElement);
+    const inPanel = inSidePanel(document.activeElement);
     if ((e.key === 'ContextMenu' || e.key === 'c') && channels) { togglePanel(); wake(); return true; }
     if (idle && !inPanel) {
       if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && channels) { zap(e.key === 'ArrowUp' ? 1 : -1); return true; }
@@ -468,7 +469,7 @@ export function handleKey(e) {
     if (/^[0-9]$/.test(e.key)) { typeDigit(e.key); return true; }
     if (e.key === 'Enter' && digits) { commitDigits(); return true; }
     const a = document.activeElement;
-    const inPanel = !el.panel.hidden && el.panel.contains(a);
+    const inPanel = inSidePanel(a);
     switch (e.key) {
       case 'ArrowUp': case 'ArrowDown':
         if (inPanel || a === el.vol) return false;
@@ -477,6 +478,7 @@ export function handleKey(e) {
       case 'PageDown': case 'ChannelDown': case 'MediaTrackPrevious': zap(-1); return true;
       case 'Escape': case 'Backspace': case 'BrowserBack':
         if (!el.panel.hidden) { closePanel(); return true; }
+        if (!el.epg.hidden) { closeInfo(); return true; }
         break;
       case 'c': togglePanel(); return true;
       default: break;
@@ -484,7 +486,8 @@ export function handleKey(e) {
   }
   switch (e.key) {
     case ' ': case 'MediaPlayPause': case 'k': togglePlay(); return true;
-    case 'Escape': case 'Backspace': case 'BrowserBack': close(); return true;
+    case 'Escape': case 'Backspace': case 'BrowserBack': if (!el.epg.hidden) { closeInfo(); return true; } close(); return true;
+    case 'i': toggleInfo(); return true;
     case 'f': toggleFullscreen(); return true;
     case 'ArrowLeft': case 'ArrowRight': {
       const a = document.activeElement;
@@ -689,12 +692,61 @@ function numberChannels(list) {
 function showProgramme() {
   const it = current?.item;
   const nn = it && it.live ? epg.nowNext(it) : null;
-  el.prog.hidden = !nn;
+  el.prog.hidden = el.info.hidden = !nn;
+  if (!el.epg.hidden) { if (nn) renderInfo(); else closeInfo(); }
   if (!nn) return;
   el.prog.textContent = nn.now
     ? `${epg.hhmm(nn.now.start)}–${epg.hhmm(nn.now.stop)}  ${nn.now.title}` + (nn.next ? `   ·   Poi: ${nn.next.title}` : '')
     : `Alle ${epg.hhmm(nn.next.start)}: ${nn.next.title}`;
 }
+
+// ⓘ: the whole description of what is on now and next, beside the video (it keeps playing).
+function renderInfo() {
+  const it = current?.item;
+  if (!it) return;
+  el.epgCh.textContent = (channels ? chNumber(it, channels.index) + '  ' : '') + it.label;
+  const t = Date.now();
+  const list = epg.programmes(it, t, t + 12 * 3600000).slice(0, 8);
+  const mk = (tag, cls, text) => { const e = document.createElement(tag); e.className = cls; if (text != null) e.textContent = text; return e; };
+  const nextIdx = list.findIndex(p => p.start > t);
+  el.epgBody.replaceChildren(...list.map((p, i) => {
+    const on = p.start <= t && p.stop > t;
+    const box = mk('div', 'epg-prog focusable' + (on ? ' on' : ''));
+    box.tabIndex = 0;
+    const when = mk('div', 'ep-when', `${epg.hhmm(p.start)}–${epg.hhmm(p.stop)}` + (i === nextIdx ? ' · Dopo' : ''));
+    if (on) when.append(mk('span', 'gi-live', 'IN ONDA'));
+    box.append(when, mk('div', 'ep-title', p.title));
+    if (on) { const bar = mk('div', 'gi-bar'); const f = mk('span', ''); f.style.width = Math.round(epg.progress(p, t) * 100) + '%'; bar.append(f); box.append(bar); }
+    if (p.sub) box.append(mk('div', 'ep-sub', p.sub));
+    if (p.desc || p.cat) box.append(mk('div', 'ep-desc', [p.cat, p.desc].filter(Boolean).join(' · ')));
+    return box;
+  }));
+  if (!list.length) el.epgBody.replaceChildren(mk('div', 'ep-desc', 'Nessuna informazione sui programmi.'));
+}
+
+function openInfo() {
+  if (!current) return;
+  closePanel();
+  renderInfo();
+  el.epg.hidden = false;
+  el.epgBody.scrollTop = 0;
+  (el.epgBody.querySelector('.epg-prog') || el.epgClose).focus({ preventScroll: true });
+}
+
+function closeInfo() {
+  if (el.epg.hidden) return;
+  el.epg.hidden = true;
+  if (document.activeElement && el.epg.contains(document.activeElement)) document.activeElement.blur();
+  if (!el.info.hidden) el.info.focus({ preventScroll: true });
+  wake();
+}
+
+function toggleInfo() { if (el.epg.hidden) openInfo(); else closeInfo(); }
+const inSidePanel = (a) => (!el.panel.hidden && el.panel.contains(a)) || (!el.epg.hidden && el.epg.contains(a));
+el.info.addEventListener('click', toggleInfo);
+el.prog.addEventListener('click', openInfo);
+el.epgClose.addEventListener('click', closeInfo);
+
 setInterval(() => { if (isOpen()) showProgramme(); }, 30000);
 epg.onUpdate(() => { if (isOpen()) showProgramme(); });
 
@@ -799,6 +851,7 @@ function renderPanel() {
 
 function openPanel() {
   if (!channels) return;
+  if (!el.epg.hidden) { el.epg.hidden = true; }
   renderPanel();
   el.panel.hidden = false;
   el.chNum.value = '';
@@ -933,7 +986,7 @@ let swipe = null;          // touch start, for vertical swipes = channel up/down
 let swallowClick = false;
 el.root.addEventListener('pointerdown', (e) => {
   lastPointer = e.pointerType || 'mouse';
-  const onBackground = !e.target.closest('.player-top, .player-bottom, .player-channels');
+  const onBackground = !e.target.closest('.player-top, .player-bottom, .player-channels, .player-epg');
   // Swipes that start near the screen edges are the system's (home bar, notifications, back): ignore them.
   const H = innerHeight, W = innerWidth, edgeY = Math.max(64, H * 0.15), edgeX = 32;
   const inEdge = e.clientY < edgeY || e.clientY > H - edgeY || e.clientX < edgeX || e.clientX > W - edgeX;
@@ -964,6 +1017,7 @@ function onBackgroundTap() {
   // automatic full screen got lost (back from the floating window, back gesture…): a tap restores it
   if (lastPointer === 'touch' && autoFullscreen()) { wake(); return; }
   if (!el.panel.hidden) { closePanel(); return; }
+  if (!el.epg.hidden) { closeInfo(); return; }
   const hidden = el.ui.classList.contains('idle');
   if (lastPointer === 'mouse') { if (hidden) wake(); else togglePlay(); return; }
   if (hidden) wake(); else hideControls();

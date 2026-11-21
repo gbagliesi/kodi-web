@@ -350,13 +350,20 @@ async function uiTests() {
     await page.locator('.grow').first().locator('.gcell.on').focus();
     await page.keyboard.press('ArrowDown');
     assert.match(await page.evaluate(() => document.activeElement.textContent), /Notiziario La7/);
-    assert.match(await page.textContent('.guide-info'), /Notiziario La7/);
     await page.keyboard.press('ArrowRight');
     assert.match(await page.evaluate(() => document.activeElement.textContent), /Talk della sera/);
-    assert.match(await page.textContent('.guide-info'), /Ospiti in studio/);
     await page.keyboard.press('Enter');
     await page.waitForSelector('#modal:not([hidden])');
+    assert.match(await page.textContent('#modal'), /Ospiti in studio/, 'OK on a programme shows its description');
     await page.keyboard.press('Escape');
+    await page.evaluate(() => document.getElementById('modal')._close?.());
+    await page.waitForSelector('#modal', { state: 'hidden' });
+    // tapping a channel shows what is on now there
+    await page.locator('.gch:has-text("La7")').click();
+    await page.waitForSelector('#modal:not([hidden])');
+    assert.match(await page.textContent('#modal'), /Notiziario La7.*Dopo, alle .*Talk della sera/s);
+    assert.equal(await page.isHidden('#player'), true);
+    assert.equal(await page.locator('.guide-info').count(), 0, 'no detail box above the grid');
     await page.evaluate(() => document.getElementById('modal')._close?.());
     console.log('✓ TV guide: grid, now/next in lists, player and channel list, remote navigation');
     await page.goBack();
@@ -628,7 +635,9 @@ async function uiTests() {
       assert.match(await tv.evaluate(() => document.activeElement.textContent), /Telegiornale di prova/, 'TV guide: focus starts on what is on now');
       if (SHOTS) await tv.screenshot({ path: SHOTS + '/tv-guide.png' });
       await tv.keyboard.press('ArrowLeft');
-      assert.equal(await tv.evaluate(() => !!document.activeElement.closest('#sidebar')), true, 'TV guide: ◀ from the first programme goes to the menu');
+      assert.equal(await tv.evaluate(() => document.activeElement.classList.contains('gch')), true, 'TV guide: ◀ from the first programme goes to the channel');
+      await tv.keyboard.press('ArrowLeft');
+      assert.equal(await tv.evaluate(() => !!document.activeElement.closest('#sidebar')), true, 'TV guide: ◀ from the channel goes to the menu');
       await tvc.close();
       console.log('✓ Fire TV app: no auto-focused text field, arrows leave fields, player controls reachable, Back hides controls, menu column, quiet zapping');
     }

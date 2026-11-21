@@ -777,17 +777,6 @@ async function renderGuide(params) {
   const W = (t1 - t0) / 60000 * PX;
   const xOf = (t) => (Math.max(t0, Math.min(t1, t)) - t0) / 60000 * PX;
 
-  const info = h('div', { class: 'guide-info' });
-  const showInfo = (p, row) => {
-    const live = p.start <= Date.now() && p.stop > Date.now();
-    const day = new Date(p.start).toDateString() === new Date().toDateString() ? '' : new Date(p.start).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' }) + ' · ';
-    fill(info,
-      h('div', { class: 'gi-when' }, `${day}${epg.hhmm(p.start)}–${epg.hhmm(p.stop)} · ${row.num} ${row.c.item.label}`, live ? h('span', { class: 'gi-live' }, 'IN ONDA') : null),
-      h('div', { class: 'gi-title' }, p.title, p.sub ? h('span', { class: 'gi-sub' }, ' · ' + p.sub) : null),
-      p.desc || p.cat ? h('div', { class: 'gi-desc' }, [p.cat, p.desc].filter(Boolean).join(' · ')) : null,
-      live ? h('div', { class: 'gi-bar' }, h('span', { style: { width: Math.round(epg.progress(p) * 100) + '%' } })) : null);
-  };
-
   const play = (row) => {
     const entry = channels[row.i];
     toast('Apertura di «' + entry.item.label + '»…', 1500);
@@ -795,7 +784,7 @@ async function renderGuide(params) {
       .catch(e => toast(e.message, 5000));
   };
   // Tap / OK always shows the whole description first; watching is a separate button.
-  const pickProg = async (p, row) => {
+  const pickProg = async (p, row, next) => {
     const t = Date.now();
     const live = p.start <= t && p.stop > t;
     const when = (new Date(p.start).toDateString() === new Date().toDateString() ? 'Oggi' : new Date(p.start).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }))
@@ -807,10 +796,19 @@ async function renderGuide(params) {
         live ? h('div', { class: 'gi-bar' }, h('span', { style: { width: Math.round(epg.progress(p) * 100) + '%' } })) : null,
         p.sub ? h('p', { class: 'pd-sub' }, p.sub) : null,
         h('p', {}, p.desc || 'Nessuna descrizione disponibile.'),
-        p.cat ? h('p', { class: 'hint' }, p.cat) : null),
+        p.cat ? h('p', { class: 'hint' }, p.cat) : null,
+        next ? h('p', { class: 'hint' }, `Dopo, alle ${epg.hhmm(next.start)}: ${next.title}`) : null),
       actions: [{ label: 'Chiudi', value: false }, { label: live ? '▶ Guarda ' + row.c.item.label : 'Guarda ' + row.c.item.label + ' adesso', value: true, primary: true }],
     });
     if (watch) play(row);
+  };
+
+  const pickChannel = (row) => {
+    const t = Date.now();
+    const nn = epg.nowNext(row.c.item, t);
+    if (nn && nn.now) { pickProg(nn.now, row, nn.next); return; }
+    if (nn && nn.next) { pickProg(nn.next, row); return; }
+    play(row);
   };
 
   const rowEls = rows.map(row => {
@@ -822,14 +820,14 @@ async function renderGuide(params) {
         style: { left: x + 'px', width: w + 'px' },
         title: `${epg.hhmm(p.start)} ${p.title}`,
         onclick: () => pickProg(p, row),
-        onfocus: () => showInfo(p, row),
       }, w >= 34 ? h('span', { class: 'gc-t' }, p.title) : null, w > 70 ? h('span', { class: 'gc-h' }, epg.hhmm(p.start)) : null);
       b._p = p;
       return b;
-    }) : [h('button', { class: 'gcell focusable empty-cell', style: { left: '0px', width: W + 'px' }, onclick: () => play(row), onfocus: () => fill(info, h('div', { class: 'gi-title' }, row.c.item.label), h('div', { class: 'gi-desc' }, 'Nessun programma in guida per le prossime ore.')) }, 'Nessuna informazione')];
+    }) : [h('button', { class: 'gcell focusable empty-cell', style: { left: '0px', width: W + 'px' }, onclick: () => play(row) }, 'Nessuna informazione')];
     const logo = safeImg(row.c.item.thumb);
     return h('div', { class: 'grow' },
-      h('div', { class: 'gch', style: { width: CHW + 'px' }, title: row.c.item.label },
+      // the channel: details of what is on now, with the button to watch it
+      h('button', { class: 'gch focusable', style: { width: CHW + 'px' }, title: row.c.item.label, onclick: () => pickChannel(row) },
         h('span', { class: 'ch-num' }, String(row.num)),
         logo ? h('img', { class: 'gch-logo', src: logo, alt: '', loading: 'lazy', onerror: (e) => e.target.remove() }) : null,
         h('span', { class: 'gch-name' }, row.c.item.label)),
@@ -859,7 +857,7 @@ async function renderGuide(params) {
     focusFirst();
     return;
   }
-  fill(view, h('div', { class: 'guide' }, chips, info, grid, foot));
+  fill(view, h('div', { class: 'guide' }, chips, grid, foot));
 
   // The grid scrolls by itself (both ways) and fills the rest of the screen.
   const fit = () => {
@@ -919,7 +917,6 @@ async function renderGuide(params) {
   // start on what is on now on the first channel
   const first = cellAt(rowEls[0], cursor);
   if (document.body.classList.contains('kbd-nav')) focusCell(first);
-  else if (first._p) showInfo(first._p, rows[0]);
 }
 
 // ---------------------------------------------------------------- local files

@@ -3,6 +3,7 @@
 import { getResume, setResume, getSettings, isFavourite, toggleFavourite } from './storage.js';
 import { getProxy, proxify } from './addons.js';
 import * as cast from './cast.js';
+import * as epg from './epg.js';
 
 const UA = navigator.userAgent;
 const APPLE = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
@@ -18,7 +19,7 @@ const el = {
   seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'), pip: $('pl-pip'),
   msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
   cast: $('pl-cast'), route: $('pl-route'), stats: $('pl-stats'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
-  osdName: $('pl-osd-name'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
+  osdName: $('pl-osd-name'), osdProg: $('pl-osd-prog'), prog: $('pl-prog'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
 };
 
 let hls = null;
@@ -294,6 +295,7 @@ export async function play(item, stream, opts = {}) {
   if (audio) el.artImg.src = item.thumb || 'icons/icon.svg';
   el.video.poster = !audio && (item.fanart || item.thumb) ? (item.fanart || item.thumb) : '';
   el.title.textContent = channels ? chNumber(item, channels.index) + '  ' + item.label : item.label;
+  showProgramme();
   el.seek.value = 0; el.cur.textContent = '0:00'; el.dur.textContent = item.live ? 'LIVE' : '0:00';
   updateFavBtn();
   el.seek.disabled = el.rew.disabled = el.fwd.disabled = !!item.live;
@@ -683,6 +685,19 @@ function numberChannels(list) {
   return out.map(n => n || next++);
 }
 /** Channel numbers for a list of live items, the same ones the player uses (CH ±, digits). */
+// What is on now on a live channel, under the title (from the TV guide, see epg.js).
+function showProgramme() {
+  const it = current?.item;
+  const nn = it && it.live ? epg.nowNext(it) : null;
+  el.prog.hidden = !nn;
+  if (!nn) return;
+  el.prog.textContent = nn.now
+    ? `${epg.hhmm(nn.now.start)}–${epg.hhmm(nn.now.stop)}  ${nn.now.title}` + (nn.next ? `   ·   Poi: ${nn.next.title}` : '')
+    : `Alle ${epg.hhmm(nn.next.start)}: ${nn.next.title}`;
+}
+setInterval(() => { if (isOpen()) showProgramme(); }, 30000);
+epg.onUpdate(() => { if (isOpen()) showProgramme(); });
+
 export const channelNumbers = (items) => numberChannels(items.map(item => ({ item })));
 const chNumber = (_it, i) => String(channels?.numbers?.[i] ?? i + 1);
 
@@ -697,6 +712,8 @@ function showOsd(index, text) {
   const it = channels?.list[index]?.item;
   el.osdNum.textContent = text != null ? text : it ? chNumber(it, index) : '';
   el.osdName.textContent = text != null ? '' : it ? it.label : '';
+  const nn = text == null && it ? epg.nowNext(it) : null;
+  el.osdProg.textContent = nn?.now ? nn.now.title + ' · fino alle ' + epg.hhmm(nn.now.stop) : '';
   el.osd.hidden = false;
   clearTimeout(osdTimer);
   osdTimer = setTimeout(() => { el.osd.hidden = true; }, 2500);
@@ -771,7 +788,10 @@ function renderPanel() {
     b.className = 'ch-row focusable' + (i === cur ? ' current' : '');
     const num = document.createElement('span'); num.className = 'ch-num'; num.textContent = chNumber(c.item, i);
     const name = document.createElement('span'); name.className = 'ch-name'; name.textContent = c.item.label;
-    b.append(num, name);
+    const text = document.createElement('span'); text.className = 'ch-text'; text.append(name);
+    const nn = epg.nowNext(c.item);
+    if (nn?.now) { const pr = document.createElement('span'); pr.className = 'ch-prog'; pr.textContent = nn.now.title; text.append(pr); }
+    b.append(num, text);
     b.addEventListener('click', () => { closePanel(); if (i !== channels.index) { pendingIndex = i; showOsd(i); tune(i); } });
     return b;
   }));

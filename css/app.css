@@ -214,7 +214,9 @@ button { cursor: pointer; }
 .player-ui.idle .player-top, .player-ui.idle .player-bottom { pointer-events: none; }
 .player-ui.idle * { cursor: none; }
 .player-top { display: flex; align-items: center; gap: 12px; }
-.player-title { flex: 1; font-size: 20px; font-weight: 600; text-shadow: 0 1px 4px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-titles { flex: 1; min-width: 0; }
+.player-prog { font-size: 14px; color: #d0d7e0; text-shadow: 0 1px 4px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.player-title { font-size: 20px; font-weight: 600; text-shadow: 0 1px 4px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player .icon-btn:not(.big) { background: rgba(255, 255, 255, .12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .player-bottom { display: flex; flex-direction: column; gap: 10px; }
 .seek-row { display: flex; align-items: center; gap: 12px; font-variant-numeric: tabular-nums; font-size: 14px; }
@@ -238,7 +240,10 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
   background: rgba(0, 0, 0, .7); text-shadow: 0 1px 4px #000;
 }
 .osd-num { font-size: 34px; font-weight: 700; color: var(--accent-2); font-variant-numeric: tabular-nums; }
+.osd-text { display: flex; flex-direction: column; min-width: 0; }
 .osd-name { font-size: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osd-prog { font-size: 15px; color: #d0d7e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osd-prog:empty { display: none; }
 .player-channels {
   position: absolute; top: 0; right: 0; bottom: 0; z-index: 3; width: min(340px, 86vw);
   display: flex; flex-direction: column; background: rgba(13, 17, 23, .94);
@@ -252,6 +257,8 @@ input[type=range] { accent-color: var(--accent); height: 32px; }
 .ch-row.current { background: rgba(255, 255, 255, .1); }
 .ch-row .ch-num { width: 34px; flex: none; text-align: right; font-variant-numeric: tabular-nums; color: var(--accent-2); font-weight: 700; }
 .ch-row .ch-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-text { display: flex; flex-direction: column; min-width: 0; }
+.ch-prog { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- Modal / toast ---------- */
 .modal { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .6); display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -323,3 +330,48 @@ body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); ga
 .check-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 14px; color: var(--muted); }
 .check-row input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); }
 .dlg-ops { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+/* ---------------------------------------------------------------- TV guide */
+.guide { display: flex; flex-direction: column; gap: 10px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { border: 0; border-radius: 999px; padding: 7px 14px; background: var(--panel); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.chip.active { background: var(--accent); color: #062420; font-weight: 600; }
+.guide-info { min-height: 86px; background: var(--panel); border-radius: 12px; padding: 10px 14px; }
+.gi-when { color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.gi-live { background: #c0392b; color: #fff; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.gi-title { font-size: 19px; font-weight: 600; margin: 2px 0; }
+.gi-sub { font-weight: 400; color: var(--muted); font-size: 15px; }
+.gi-desc { color: var(--muted); font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gi-bar { height: 3px; background: var(--panel-hi); border-radius: 2px; margin-top: 6px; }
+.gi-bar span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.gscroll { overflow: auto; position: relative; border-radius: 12px; background: var(--bg2); overscroll-behavior: contain; }
+.ghead, .grow { display: flex; width: max-content; }
+.ghead { position: sticky; top: 0; z-index: 3; background: var(--bg2); height: 30px; }
+.gcorner { position: sticky; left: 0; z-index: 4; background: var(--bg2); color: var(--muted); font-size: 13px; padding: 7px 10px; flex: none; text-transform: capitalize; }
+.gtimes { position: relative; flex: none; }
+.gmark { position: absolute; top: 7px; font-size: 13px; color: var(--muted); padding-left: 4px; border-left: 1px solid var(--panel-hi); white-space: nowrap; }
+.gbody { position: relative; width: max-content; }
+.grow { height: 52px; border-top: 1px solid var(--bg); }
+.gch { position: sticky; left: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: var(--panel); overflow: hidden; }
+.gch .ch-num { flex: none; }
+.gch-logo { width: 34px; height: 34px; object-fit: contain; flex: none; }
+.gch-name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gprogs { position: relative; flex: none; }
+.gcell { position: absolute; top: 4px; bottom: 4px; border: 0; border-radius: 6px; margin: 0; padding: 4px 8px; background: var(--panel); color: var(--text);
+  font: inherit; text-align: left; overflow: hidden; display: flex; flex-direction: column; justify-content: center; cursor: pointer; box-sizing: border-box; border-right: 2px solid var(--bg2); }
+.gcell.on { background: var(--panel-hi); }
+.gcell.past { opacity: .55; }
+.gcell.empty-cell { color: var(--muted); }
+.gcell:hover { background: #2f3c50; }
+.kbd-nav .gcell:focus { box-shadow: inset 0 0 0 3px var(--accent); background: #2f3c50; opacity: 1; z-index: 1; }
+.gc-t { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gc-h { font-size: 12px; color: var(--muted); }
+.gnow { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent-2); z-index: 1; pointer-events: none; }
+.guide-foot { margin: 0; font-size: 13px; color: var(--muted); }
+@media (max-width: 700px) {
+  .grow { height: 46px; }
+  .gch { gap: 4px; padding: 0 6px; }
+  .gch-logo { width: 26px; height: 26px; }
+  .gch-name { font-size: 12px; }
+  .gi-title { font-size: 16px; }
+}

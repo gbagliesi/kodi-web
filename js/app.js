@@ -1,6 +1,7 @@
 import * as store from './storage.js';
 import * as addons from './addons.js';
 import * as player from './player.js';
+import * as epg from './epg.js';
 import { handleNavKey, focusables } from './nav.js';
 import { versionLabel } from './version.js';
 
@@ -111,6 +112,7 @@ const MENU = [
   { route: 'video', ico: '🎬', label: 'Video' },
   { route: 'music', ico: '🎵', label: 'Musica' },
   { route: 'live', ico: '📺', label: 'TV' },
+  { route: 'guide', ico: '🗓', label: 'Guida TV', short: 'Guida' },
   { route: 'files', ico: '📁', label: 'File' },
   { route: 'favourites', ico: '★', label: 'Preferiti' },
   { route: 'addons', ico: '🧩', label: 'Add-on' },
@@ -181,7 +183,7 @@ async function route() {
   searchBtn.hidden = true; viewBtn.hidden = true;
   searchBtn.onclick = null;
   // pages that can be the start page (📌): sections and add-on folders
-  pinBtn.hidden = !['video', 'music', 'live', 'files', 'favourites', 'browse'].includes(section);
+  pinBtn.hidden = !['video', 'music', 'live', 'guide', 'files', 'favourites', 'browse'].includes(section);
   updatePinBtn();
   if (section !== 'settings') store.save('lastPage', location.hash);
   try {
@@ -190,8 +192,9 @@ async function route() {
       case 'video': renderSection('video', 'Video'); break;
       case 'music': renderSection('audio', 'Musica'); break;
       case 'live': renderSection('live', 'TV in diretta'); break;
+      case 'guide': await renderGuide(params); break;
       case 'files': renderFiles(); break;
-      case 'favourites': renderFavourites(); break;
+      case 'favourites': await renderFavourites(); break;
       case 'addons': rest[0] === 'repo' ? await renderRepo() : rest[0] ? renderAddonInfo(rest[0]) : renderAddons(); break;
       case 'settings': renderSettings(); break;
       case 'browse': await renderBrowse(rest[0], params.get('p') || '', params); break;
@@ -239,7 +242,7 @@ function renderHome() {
       h('p', {}, 'Il tuo media center nel browser. Sfoglia gli add-on, apri un file o incolla l\'indirizzo di uno stream.')),
     h('div', { class: 'section-title' }, 'Sezioni'),
     h('div', { class: 'tiles' },
-      ...MENU.slice(1, 5).map(m => h('button', { class: 'tile focusable', onclick: () => go(m.route) },
+      ...MENU.slice(1, 6).map(m => h('button', { class: 'tile focusable', onclick: () => go(m.route) },
         h('span', { class: 'tile-ico' }, m.ico), h('span', { class: 'tile-name' }, m.label))),
       h('button', { class: 'tile focusable', onclick: openUrlDialog },
         h('span', { class: 'tile-ico' }, '🔗'), h('span', { class: 'tile-name' }, 'Apri URL'), h('span', { class: 'tile-sub' }, 'MP4, WebM, MP3, HLS (.m3u8)'))),
@@ -309,7 +312,7 @@ function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
       h('span', { class: 'row-thumb' + (isLogoItem(it) ? ' logo' : ''), style: bg(it.thumb) }, safeImg(it.thumb) ? '' : itemIcon(it)),
       h('span', { class: 'row-main' },
         h('div', { class: 'row-label' }, num(it), it.label, it._new ? h('span', { class: 'new-badge' }, 'NUOVO') : null),
-        (it.subtitle || it.info?.plot) && h('div', { class: 'row-sub' }, it.subtitle || it.info.plot)),
+        (subOf(it) || it.info?.plot) && h('div', { class: 'row-sub' }, subOf(it) || it.info.plot)),
       h('span', { class: 'row-end' }, it.live ? 'LIVE' : it.info?.duration ? fmtDuration(it.info.duration) : it.playable ? '▶' : '›'))));
   }
   // Channel and station logos are shown whole on square tiles; posters and covers fill theirs.
@@ -321,7 +324,13 @@ function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
       ? h('span', { class: 'thumb logo' }, h('img', { class: 'thumb-img', src: safeImg(it.thumb), alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(h('span', { class: 'thumb-ico' }, itemIcon(it))) }))
       : h('span', { class: 'thumb', style: bg(it.thumb) }, safeImg(it.thumb) ? '' : h('span', { class: 'thumb-ico' }, itemIcon(it))),
     h('span', { class: 'label' }, num(it), it.label, it._new ? h('span', { class: 'new-badge' }, 'NUOVO') : null),
-    (it.subtitle || it.info?.year) && h('span', { class: 'sub' }, it.subtitle || it.info.year))));
+    (subOf(it) || it.info?.year) && h('span', { class: 'sub' }, subOf(it) || it.info.year))));
+}
+
+// Live channels show what is on now from the TV guide (unless the add-on already says it).
+function subOf(it) {
+  if (it.live && !/(^| · )Ora: /.test(it.subtitle || '')) { const line = epg.nowLine(it); if (line) return [it.note, line].filter(Boolean).join(' · '); }
+  return it.subtitle;
 }
 
 function fmtDuration(s) {
@@ -380,6 +389,7 @@ async function renderBrowse(id, path, params) {
   } : null;
   viewBtn.onclick = () => viewAndSortDialog(listKey, listing.items, { updatedAt: listing.updatedAt, refresh });
 
+  if (listing.items.some(x => x.live)) { await epg.ready(); if (location.hash !== cacheKey) return; }
   numberLiveItems(listing.items);
   const cfg = getSort(listKey);
   trackSort(listKey, cfg, listing.items);
@@ -660,9 +670,10 @@ function openFavourite(f, favs = []) {
   }
 }
 
-function renderFavourites() {
+async function renderFavourites() {
   setCrumbs(['Preferiti']);
   const favs = store.getFavourites();
+  if (favs.some(f => f.item?.live)) { const at = location.hash; await epg.ready(); if (location.hash !== at) return; }
   if (!favs.length) {
     fill(view, h('div', { class: 'empty' }, 'Nessun preferito. Durante la riproduzione tocca ☆ per aggiungere un elemento.'));
     return;
@@ -682,6 +693,224 @@ function renderFavourites() {
     onPick: (it, i) => openFavourite(ordered[i], ordered),
   }));
   focusFirst();
+}
+
+// ---------------------------------------------------------------- TV guide
+// A grid like a TV set's guide: channels down, time across. ◀▶ move along a channel, ▲▼
+// change channel keeping the time; OK on what is on now opens the channel, on a later
+// programme shows its details.
+const IPTV = 'plugin.video.iptv';
+const GUIDE_HOURS = 12;
+let guideTimer = 0;
+
+async function guideSources() {
+  const out = [];
+  const rec = addons.getInstalled(IPTV);
+  if (rec && rec.enabled !== false) {
+    try {
+      const top = addons.normaliseListing(await addons.getHost(IPTV).call('list', ''));
+      const pls = top.items.filter(x => /^p\/\d+$/.test(x.path || ''));
+      if (pls.length) pls.forEach(x => out.push({ id: x.path, label: x.label, path: x.path + '/g/*' }));
+      else out.push({ id: 'p/0', label: 'Canali', path: 'p/0/g/*' });
+    } catch (e) { console.warn('guida', e); }
+  }
+  if (store.getFavourites().some(f => f.item?.live && !f.item.external)) out.push({ id: 'favs', label: '★ Preferiti' });
+  return out;
+}
+
+async function guideChannels(src) {
+  if (src.id === 'favs') {
+    const favs = store.getFavourites();
+    const cfg = getSort('favs');
+    const all = favs.map(f => ({ ...f.item, key: f.key, _fav: f }));
+    const ordered = sortItems(all, cfg).filter(it => it.live && !it.external);
+    for (const it of ordered) delete it._new;
+    const chans = favouriteChannels(ordered.map(it => it._fav));
+    return chans;
+  }
+  const listing = addons.normaliseListing(await addons.getHost(IPTV).call('list', src.path));
+  const listKey = listing.listId ? IPTV + '|' + listing.listId : IPTV + '|' + src.path;
+  numberLiveItems(listing.items);
+  const items = sortItems(listing.items, getSort(listKey));
+  for (const it of items) delete it._new;
+  return channelList(IPTV, items);
+}
+
+async function renderGuide(params) {
+  setCrumbs(['Guida TV']);
+  clearInterval(guideTimer);
+  loading('Carico la guida TV…');
+  const at = location.hash;
+  const [ok, sources] = await Promise.all([epg.load(), guideSources()]);
+  if (location.hash !== at) return;
+  if (!ok) {
+    fill(view, h('div', { class: 'empty' }, 'La guida TV non è disponibile in questo momento. Riprova tra qualche minuto.'),
+      h('button', { class: 'btn focusable', onclick: () => route() }, 'Riprova'));
+    focusFirst();
+    return;
+  }
+  if (!sources.length) {
+    fill(view, h('div', { class: 'empty' }, 'Per la guida TV serve l\'add-on «TV in diretta» con una playlist di canali.'));
+    return;
+  }
+  const want = params.get('s') || store.load('guideSource', '');
+  const src = sources.find(s => s.id === want) || sources[0];
+  let channels;
+  try { channels = await guideChannels(src); } catch (e) { if (location.hash === at) fill(view, errorBox(e, () => route())); return; }
+  if (location.hash !== at) return;
+
+  const numbers = player.channelNumbers(channels.map(c => c.item));
+  const rows = channels.map((c, i) => ({ c, i, num: numbers[i] ?? i + 1, g: epg.channelOf(c.item) })).filter(r => r.g);
+  const missing = channels.length - rows.length;
+
+  const now = Date.now();
+  const HALF = 30 * 60000;
+  const t0 = Math.floor(now / HALF) * HALF;
+  const t1 = t0 + GUIDE_HOURS * 3600000;
+  const narrow = window.innerWidth < 700;
+  const PX = narrow ? 3 : 4;                 // pixels per minute
+  const CHW = narrow ? 112 : 190;            // channel column
+  const W = (t1 - t0) / 60000 * PX;
+  const xOf = (t) => (Math.max(t0, Math.min(t1, t)) - t0) / 60000 * PX;
+
+  const info = h('div', { class: 'guide-info' });
+  const showInfo = (p, row) => {
+    const live = p.start <= Date.now() && p.stop > Date.now();
+    const day = new Date(p.start).toDateString() === new Date().toDateString() ? '' : new Date(p.start).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' }) + ' · ';
+    fill(info,
+      h('div', { class: 'gi-when' }, `${day}${epg.hhmm(p.start)}–${epg.hhmm(p.stop)} · ${row.num} ${row.c.item.label}`, live ? h('span', { class: 'gi-live' }, 'IN ONDA') : null),
+      h('div', { class: 'gi-title' }, p.title, p.sub ? h('span', { class: 'gi-sub' }, ' · ' + p.sub) : null),
+      p.desc || p.cat ? h('div', { class: 'gi-desc' }, [p.cat, p.desc].filter(Boolean).join(' · ')) : null,
+      live ? h('div', { class: 'gi-bar' }, h('span', { style: { width: Math.round(epg.progress(p) * 100) + '%' } })) : null);
+  };
+
+  const play = (row) => {
+    const entry = channels[row.i];
+    toast('Apertura di «' + entry.item.label + '»…', 1500);
+    entry.open().then(r => player.play(r.item, r.stream, { favEntry: r.favEntry, channels: channels.length > 1 ? { list: channels, index: row.i } : undefined }))
+      .catch(e => toast(e.message, 5000));
+  };
+  const pickProg = async (p, row) => {
+    if (p.start <= Date.now()) { play(row); return; }
+    const watch = await modal({
+      title: p.title,
+      body: h('div', {},
+        h('p', { class: 'hint' }, `${new Date(p.start).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}, ${epg.hhmm(p.start)}–${epg.hhmm(p.stop)} su ${row.c.item.label}`),
+        p.sub ? h('p', {}, p.sub) : null,
+        p.desc ? h('p', {}, p.desc) : null,
+        p.cat ? h('p', { class: 'hint' }, p.cat) : null),
+      actions: [{ label: 'Chiudi', value: false }, { label: 'Guarda ' + row.c.item.label + ' adesso', value: true, primary: true }],
+    });
+    if (watch) play(row);
+  };
+
+  const rowEls = rows.map(row => {
+    const progs = epg.programmes(row.c.item, t0, t1);
+    const cells = progs.length ? progs.map(p => {
+      const x = xOf(p.start), w = Math.max(xOf(p.stop) - x, 2);
+      const b = h('button', {
+        class: 'gcell focusable' + (p.start <= now && p.stop > now ? ' on' : p.stop <= now ? ' past' : ''),
+        style: { left: x + 'px', width: w + 'px' },
+        title: `${epg.hhmm(p.start)} ${p.title}`,
+        onclick: () => pickProg(p, row),
+        onfocus: () => showInfo(p, row),
+      }, h('span', { class: 'gc-t' }, p.title), w > 70 ? h('span', { class: 'gc-h' }, epg.hhmm(p.start)) : null);
+      b._p = p;
+      return b;
+    }) : [h('button', { class: 'gcell focusable empty-cell', style: { left: '0px', width: W + 'px' }, onclick: () => play(row), onfocus: () => fill(info, h('div', { class: 'gi-title' }, row.c.item.label), h('div', { class: 'gi-desc' }, 'Nessun programma in guida per le prossime ore.')) }, 'Nessuna informazione')];
+    const logo = safeImg(row.c.item.thumb);
+    return h('div', { class: 'grow' },
+      h('div', { class: 'gch', style: { width: CHW + 'px' }, title: row.c.item.label },
+        h('span', { class: 'ch-num' }, String(row.num)),
+        logo ? h('img', { class: 'gch-logo', src: logo, alt: '', loading: 'lazy', onerror: (e) => e.target.remove() }) : null,
+        h('span', { class: 'gch-name' }, row.c.item.label)),
+      h('div', { class: 'gprogs', style: { width: W + 'px' } }, ...cells));
+  });
+
+  const marks = [];
+  for (let t = t0; t < t1; t += HALF) {
+    const d = new Date(t);
+    const label = (d.getHours() === 0 && d.getMinutes() === 0 ? d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' }) + ' ' : '') + epg.hhmm(t);
+    marks.push(h('span', { class: 'gmark', style: { left: xOf(t) + 'px' } }, label));
+  }
+  const nowLine = h('div', { class: 'gnow', style: { left: CHW + xOf(now) + 'px' } });
+  const grid = h('div', { class: 'gscroll' },
+    h('div', { class: 'ghead' }, h('div', { class: 'gcorner', style: { width: CHW + 'px' } }, new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric' })), h('div', { class: 'gtimes', style: { width: W + 'px' } }, ...marks)),
+    h('div', { class: 'gbody' }, nowLine, ...rowEls));
+
+  const chips = sources.length > 1 ? h('div', { class: 'chips' }, ...sources.map(s => h('button', {
+    class: 'chip focusable' + (s === src ? ' active' : ''),
+    onclick: () => { store.save('guideSource', s.id); location.hash = '#/guide?s=' + encodeURIComponent(s.id); },
+  }, s.label))) : null;
+  const foot = h('p', { class: 'hint guide-foot' },
+    `Guida aggiornata ${fmtWhen(epg.generatedAt())}.` + (missing ? ` ${missing} ${missing === 1 ? 'canale non ha' : 'canali non hanno'} la guida e non ${missing === 1 ? 'è mostrato' : 'sono mostrati'}.` : ''));
+
+  if (!rows.length) {
+    fill(view, chips, h('div', { class: 'empty' }, 'Nessuno di questi canali ha la guida TV.'), foot);
+    focusFirst();
+    return;
+  }
+  fill(view, h('div', { class: 'guide' }, chips, info, grid, foot));
+
+  // The grid scrolls by itself (both ways) and fills the rest of the screen.
+  const fit = () => {
+    if (!grid.isConnected) { window.removeEventListener('resize', fit); return; }
+    grid.style.height = Math.max(220, window.innerHeight - grid.getBoundingClientRect().top - foot.offsetHeight - 30) + 'px';
+  };
+  fit(); window.addEventListener('resize', fit);
+  grid.scrollLeft = Math.max(0, xOf(now) - (narrow ? 20 : 90));
+
+  // Remote / keyboard: keep a time cursor like a TV guide.
+  let cursor = Math.max(now, t0);
+  const reveal = (b) => {
+    const row = b.closest('.grow');
+    const headH = grid.querySelector('.ghead').offsetHeight;
+    const top = headH + row.offsetTop; // rows are placed in .gbody, below the time header
+    if (row.offsetTop < grid.scrollTop) grid.scrollTop = row.offsetTop;
+    else if (top + row.offsetHeight > grid.scrollTop + grid.clientHeight) grid.scrollTop = top + row.offsetHeight - grid.clientHeight;
+    const L = CHW + b.offsetLeft, R = L + b.offsetWidth;
+    const viewL = grid.scrollLeft + CHW, viewR = grid.scrollLeft + grid.clientWidth;
+    if (L < viewL && R < viewL + 120) grid.scrollLeft = Math.max(0, L - CHW - 40);
+    else if (L > viewR - 120) grid.scrollLeft = L - CHW - 40;
+  };
+  const focusCell = (b) => { b.focus({ preventScroll: true }); reveal(b); };
+  const cellAt = (rowEl, t) => {
+    const cells = [...rowEl.querySelectorAll('.gcell')];
+    return cells.find(c => !c._p || (c._p.start <= t && c._p.stop > t)) || cells.reduce((a, c) => (Math.abs(c._p.start - t) < Math.abs(a._p.start - t) ? c : a));
+  };
+  grid.addEventListener('keydown', (e) => {
+    const b = e.target.closest('.gcell');
+    if (!b || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    document.body.classList.add('kbd-nav');
+    const rowEl = b.closest('.grow');
+    let to = null;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      to = e.key === 'ArrowLeft' ? b.previousElementSibling : b.nextElementSibling;
+      if (!to && e.key === 'ArrowLeft') return;           // leave the grid: side menu
+      if (to) cursor = Math.max(to._p ? to._p.start : t0, t0);
+    } else {
+      const other = e.key === 'ArrowUp' ? rowEl.previousElementSibling : rowEl.nextElementSibling;
+      if (!other || !other.classList.contains('grow')) { if (e.key === 'ArrowUp') return; } // up from the first row: the buttons above
+      else to = cellAt(other, cursor);
+    }
+    e.preventDefault(); e.stopPropagation();
+    if (to) focusCell(to);
+  });
+  grid.addEventListener('focusin', (e) => { const b = e.target.closest('.gcell'); if (b && !b.contains(e.relatedTarget) && !grid.contains(e.relatedTarget)) reveal(b); });
+
+  // keep the "now" line and the on-air marks current
+  guideTimer = setInterval(() => {
+    if (!nowLine.isConnected) { clearInterval(guideTimer); return; }
+    const t = Date.now();
+    if (t >= t1 - HALF) { if (!player.isOpen()) route(); return; }
+    nowLine.style.left = CHW + xOf(t) + 'px';
+    grid.querySelectorAll('.gcell').forEach(c => { if (c._p) { c.classList.toggle('on', c._p.start <= t && c._p.stop > t); c.classList.toggle('past', c._p.stop <= t); } });
+  }, 60000);
+
+  // start on what is on now on the first channel
+  const first = cellAt(rowEls[0], cursor);
+  if (document.body.classList.contains('kbd-nav')) focusCell(first);
+  else if (first._p) showInfo(first._p, rows[0]);
 }
 
 // ---------------------------------------------------------------- local files
@@ -863,7 +1092,7 @@ function renderSettings() {
   const token = h('input', { type: 'text', id: 'proxy-token', value: s.proxyToken, placeholder: 'facoltativo', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false' });
   const resume = h('input', { type: 'checkbox', id: 'resume', checked: s.autoResume });
   const autoPip = h('input', { type: 'checkbox', id: 'autopip', checked: s.autoPip });
-  const starts = [['', 'Home'], ['#/live', 'TV in diretta'], ['#/video', 'Video'], ['#/music', 'Musica'], ['#/favourites', 'Preferiti'], ['last', 'L\'ultima pagina aperta']];
+  const starts = [['', 'Home'], ['#/live', 'TV in diretta'], ['#/guide', 'Guida TV'], ['#/video', 'Video'], ['#/music', 'Musica'], ['#/favourites', 'Preferiti'], ['last', 'L\'ultima pagina aperta']];
   if (s.startPage && !starts.some(([v]) => v === s.startPage)) starts.push([s.startPage, s.startLabel || 'Pagina scelta con 📌']);
   const startSel = h('select', { id: 'startpage' }, ...starts.map(([v, l]) => h('option', { value: v, selected: s.startPage === v }, l)));
   const viewSel = h('select', { id: 'viewmode' }, ...[['auto', 'Automatica'], ['grid', 'Griglia'], ['list', 'Elenco']].map(([v, l]) => h('option', { value: v, selected: s.viewMode === v }, l)));

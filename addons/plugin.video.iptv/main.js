@@ -20,7 +20,7 @@ const TGR = [
 ];
 
 function playlistsFromSettings(ctx) {
-  const presets = ctx.settings.presets === false ? [] : PRESETS;
+  const presets = ctx.settings.presets === false ? [] : PRESETS.map(p => ({ ...p, preset: true }));
   return [...presets, ...userPlaylists(ctx)];
 }
 
@@ -260,10 +260,12 @@ function toItem(ch, epg) {
     nn ? `Ora: ${nn.now.title} (fino alle ${hhmm(nn.now.stop)})` + (nn.next ? ` · Poi: ${nn.next.title}` : '') : (notes.length ? '' : ch.group),
   ].filter(Boolean).join(' · ');
   if (youtube) {
-    return { key: ch.key, label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(), subtitle: sub, thumb: /^https:/.test(ch.logo) ? ch.logo : '', external: ch.url, playable: true, live: true, type: 'video' };
+    return { key: ch.key, guide: ch.id ? { id: ch.id } : undefined, note: notes.join(' · ') || undefined, label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(), subtitle: sub, thumb: /^https:/.test(ch.logo) ? ch.logo : '', external: ch.url, playable: true, live: true, type: 'video' };
   }
   return {
     key: ch.key,
+    guide: ch.id ? { id: ch.id } : undefined,
+    note: notes.join(' · ') || undefined, // shown next to the TV guide line
     label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(),
     number: channelNumber(ch),
     subtitle: sub,
@@ -289,7 +291,10 @@ async function context(i, ctx) {
   // The guide is a bonus: never keep the channel list waiting for it. If it is not
   // ready within a few seconds the list shows without it and the guide keeps loading
   // in the background for the next visit.
-  const epgUrl = pickEpgUrl(ctx.settings.epg || data.epg);
+  // Salotto's own guide of Italian channels (epg/it.json, refreshed every few hours) is
+  // applied by the app; an XMLTV file is only read here when the user sets one, or for
+  // their own playlists that name one (the public playlists point to a 13 MB listing).
+  const epgUrl = pickEpgUrl(ctx.settings.epg || (pl.preset ? '' : data.epg));
   const epg = await Promise.race([loadEpg(epgUrl, ctx), new Promise(r => setTimeout(() => r(null), EPG_WAIT))]);
   return { pl, data, epg, meta: entry.meta };
 }

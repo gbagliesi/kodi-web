@@ -2,10 +2,18 @@ name: EPG inspect (temporary)
 on:
   push:
     branches: ['claude/**']
-    paths: ['tools/epg-inspect.mjs', '.github/workflows/epg-inspect.yml']
+    paths: ['tools/build-epg.mjs', '.github/workflows/epg-inspect.yml']
 jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: node tools/epg-inspect.mjs "https://epgshare01.online/epgshare01/epg_ripper_IT1.xml.gz,https://www.open-epg.com/files/italy1.xml,https://epg.pw/xmltv/epg_IT.xml"
+      - run: |
+          node tools/build-epg.mjs /tmp/it.json
+          node -e '
+            const g=require("/tmp/it.json");
+            const ids=["Rai1.it","Rai2.it","Rai3.it","Rete.4.it","Canale.5.it","Italia.1.it","LA7.HD.it","TV8.HD.it","Nove.it","20.it","Rai4.it","DeejayTV.it","SuperTennis.it","GamberoRosso.it","TV2000.va","Rai.News.24..508.it"];
+            for (const k of Object.keys(g.alias).sort()) process.stdout.write(k+"→"+g.alias[k]+"; ");
+            console.log();
+            const c=g.ch[g.alias.rai1]; console.log(JSON.stringify(c.p.slice(0,4)));
+            console.log(JSON.stringify(g.ch[g.alias.canale5].p.slice(0,3)));'

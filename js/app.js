@@ -308,7 +308,7 @@ function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
     return h('div', { class: 'list' }, ...items.map((it, i) => h('button', { class: 'row focusable', onclick: () => onPick(it, i) },
       h('span', { class: 'row-thumb' + (isLogoItem(it) ? ' logo' : ''), style: bg(it.thumb) }, safeImg(it.thumb) ? '' : itemIcon(it)),
       h('span', { class: 'row-main' },
-        h('div', { class: 'row-label' }, num(it), it.label),
+        h('div', { class: 'row-label' }, num(it), it.label, it._new ? h('span', { class: 'new-badge' }, 'NUOVO') : null),
         (it.subtitle || it.info?.plot) && h('div', { class: 'row-sub' }, it.subtitle || it.info.plot)),
       h('span', { class: 'row-end' }, it.live ? 'LIVE' : it.info?.duration ? fmtDuration(it.info.duration) : it.playable ? '▶' : '›'))));
   }
@@ -320,7 +320,7 @@ function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
     isLogoItem(it) && safeImg(it.thumb)
       ? h('span', { class: 'thumb logo' }, h('img', { class: 'thumb-img', src: safeImg(it.thumb), alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(h('span', { class: 'thumb-ico' }, itemIcon(it))) }))
       : h('span', { class: 'thumb', style: bg(it.thumb) }, safeImg(it.thumb) ? '' : h('span', { class: 'thumb-ico' }, itemIcon(it))),
-    h('span', { class: 'label' }, num(it), it.label),
+    h('span', { class: 'label' }, num(it), it.label, it._new ? h('span', { class: 'new-badge' }, 'NUOVO') : null),
     (it.subtitle || it.info?.year) && h('span', { class: 'sub' }, it.subtitle || it.info.year))));
 }
 
@@ -365,30 +365,105 @@ async function renderBrowse(id, path, params) {
     };
   }
   viewBtn.hidden = false;
-  const listKey = id + '|' + (query != null ? 'q:' + query : path || '');
-  viewBtn.onclick = () => viewAndSortDialog(listKey, listing.items);
+  // Lists that say which playlist/group they are (listId) keep their order even if the
+  // playlists are reordered in the settings; older saved orders are moved over once.
+  const oldKey = id + '|' + (query != null ? 'q:' + query : path || '');
+  const listKey = listing.listId ? id + '|' + listing.listId : oldKey;
+  if (listKey !== oldKey) migrateSort(oldKey, listKey);
+  const refresh = listing.updatedAt ? async () => {
+    loading();
+    try {
+      listing = addons.normaliseListing(await addons.getHost(id).callWith({ refresh: true }, 'list', path));
+      listingCache.set(cacheKey, listing);
+    } catch (e) { toast(e.message, 5000); }
+    if (location.hash === cacheKey) route();
+  } : null;
+  viewBtn.onclick = () => viewAndSortDialog(listKey, listing.items, { updatedAt: listing.updatedAt, refresh });
 
   numberLiveItems(listing.items);
-  const items = sortItems(listing.items, getSort(listKey));
+  const cfg = getSort(listKey);
+  trackSort(listKey, cfg, listing.items);
+  const items = sortItems(listing.items, cfg);
   const channels = channelList(id, items);
   const onPick = (it) => pick(id, it, titleTrail, channels);
+  const notice = listing.notice ? h('p', { class: 'list-notice' + (listing.noticeKind === 'warn' ? ' warn' : '') }, listing.notice) : null;
+  if (listing.notice && listing.noticeOnce) { delete listing.notice; }
   fill(view,
     listing.message ? h('p', { class: 'empty' }, listing.message) : null,
+    notice,
+    sortBadge(cfg),
     items.length ? renderItems(items, { onPick, listing }) : h('div', { class: 'empty' }, 'Nessun elemento.'),
   );
   focusFirst();
 }
 
 // ---------------------------------------------------------------- list order (▦ button)
-// Each list remembers its own order. Items are recognised by their address, so when the
-// source list is updated the order survives: new channels go to the end (in source order),
-// channels that disappeared are simply dropped.
-const itemKey = (it) => String(it.path || it.url || it.id || it.label);
+// Each list remembers its own order: { mode, order: [keys], seen: {key: time}, gone: {key: time}, newAtEnd }.
+// The saved custom order stays even while another order is shown, until it is deleted.
+// Items are recognised by a stable key from the add-on (tvg-id or channel name), falling back
+// to address, path or label, so a channel that changes address keeps its place.
+const DAY = 24 * 3600 * 1000;
+const NEW_DAYS = 7, GONE_DAYS = 30;
+const itemKeys = (it) => [it.key, it.url, it.external, it.path, it.id, it.label].filter(Boolean).map(String);
+const itemKey = (it) => itemKeys(it)[0] || '';
 const getSort = (listKey) => store.load('sort', {})[listKey] || { mode: 'source' };
 function setSort(listKey, cfg) {
   const all = store.load('sort', {});
-  if (!cfg || cfg.mode === 'source') delete all[listKey]; else all[listKey] = cfg;
+  if (!cfg || (cfg.mode === 'source' && !cfg.order)) delete all[listKey]; else all[listKey] = cfg;
   store.save('sort', all);
+}
+function migrateSort(oldKey, newKey) {
+  const all = store.load('sort', {});
+  if (all[oldKey] && !all[newKey]) { all[newKey] = all[oldKey]; delete all[oldKey]; store.save('sort', all); }
+}
+
+/** Matches the saved order to the current items: Map item -> position in cfg.order. */
+function matchOrder(items, order) {
+  const pos = new Map();
+  order.forEach((k, i) => { if (!pos.has(k)) pos.set(k, i); });
+  const used = new Set(), placed = new Map();
+  for (const it of items) {
+    for (const k of itemKeys(it)) {
+      if (pos.has(k) && !used.has(k)) { placed.set(it, pos.get(k)); used.add(k); break; }
+    }
+  }
+  return { placed, used };
+}
+
+/** Keeps a saved custom order in step with the list: new keys, new channels, channels gone. */
+function trackSort(listKey, cfg, items) {
+  if (!cfg.order) return;
+  const now = Date.now();
+  const { placed } = matchOrder(items, cfg.order);
+  let changed = false;
+  const order = [...cfg.order], seen = { ...(cfg.seen || {}) }, gone = { ...(cfg.gone || {}) };
+  for (const [it, i] of placed) {
+    const k = itemKey(it);
+    if (order[i] !== k) { order[i] = k; changed = true; } // e.g. saved by address, now by name
+    if (gone[k]) { delete gone[k]; changed = true; }
+  }
+  for (const it of items) {
+    if (placed.has(it)) continue;
+    const k = itemKey(it);
+    if (!seen[k]) { seen[k] = now; changed = true; }
+  }
+  const present = new Set(placed.values());
+  const keep = [];
+  for (const [i, k] of order.entries()) {
+    if (present.has(i)) { keep.push(k); continue; }
+    if (!gone[k]) { gone[k] = now; changed = true; }
+    if (now - gone[k] > GONE_DAYS * DAY) { delete gone[k]; changed = true; continue; } // gone for good
+    keep.push(k);
+  }
+  for (const k of Object.keys(seen)) if (now - seen[k] > NEW_DAYS * DAY) { delete seen[k]; changed = true; }
+  if (changed) setSort(listKey, { ...cfg, order: keep, seen, gone });
+}
+
+/** A short line under the title saying which order is shown (only when it is not the original). */
+function sortBadge(cfg) {
+  const labels = { number: 'per numero di canale', name: 'per nome (A–Z)', custom: 'il tuo ordine personalizzato' };
+  if (!labels[cfg.mode]) return null;
+  return h('p', { class: 'list-notice' }, 'Ordine: ' + labels[cfg.mode] + ' · cambialo con ▦');
 }
 
 /** Fixes each live channel's number from the source order, so sorting never renumbers them. */
@@ -399,13 +474,10 @@ function numberLiveItems(items) {
 }
 
 function sortItems(items, cfg) {
+  for (const it of items) delete it._new; // set again below for the custom order
   const mode = cfg?.mode || 'source';
   if (mode === 'source') return items;
-  if (mode === 'custom') {
-    const pos = new Map((cfg.order || []).map((k, i) => [k, i]));
-    const known = items.filter(it => pos.has(itemKey(it))).sort((a, b) => pos.get(itemKey(a)) - pos.get(itemKey(b)));
-    return [...known, ...items.filter(it => !pos.has(itemKey(it)))];
-  }
+  if (mode === 'custom') return applyCustom(items, cfg);
   // folders stay first, in their order; playable entries are sorted
   const folders = items.filter(it => !it.playable), rest = items.filter(it => it.playable);
   const num = (it) => parseInt(it.number, 10) || Infinity;
@@ -414,33 +486,98 @@ function sortItems(items, cfg) {
   return [...folders, ...rest];
 }
 
-async function viewAndSortDialog(listKey, sourceItems) {
+/** The saved order applied to the current list. Channels not in it (new ones) go next to the
+ *  channel that precedes them in the source list, or at the end if the user prefers. */
+function applyCustom(items, cfg) {
+  const { placed } = matchOrder(items, cfg.order || []);
+  const now = Date.now();
+  const out = items.filter(it => placed.has(it)).sort((a, b) => placed.get(a) - placed.get(b));
+  const fresh = items.filter(it => !placed.has(it));
+  for (const it of fresh) {
+    const t = cfg.seen?.[itemKey(it)];
+    if (out.length && (!t || now - t < NEW_DAYS * DAY)) it._new = true;
+  }
+  if (cfg.newAtEnd) return [...out, ...fresh];
+  for (const it of fresh) {
+    let at = 0;
+    for (let j = items.indexOf(it) - 1; j >= 0; j--) {
+      const idx = out.indexOf(items[j]);
+      if (idx >= 0) { at = idx + 1; break; }
+    }
+    out.splice(at, 0, it);
+  }
+  return out;
+}
+
+function fmtWhen(t) {
+  const d = new Date(t), today = new Date();
+  const hm = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === today.toDateString()) return 'oggi alle ' + hm;
+  return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) + ' alle ' + hm;
+}
+
+async function viewAndSortDialog(listKey, sourceItems, { updatedAt, refresh, onSave, sourceLabel, sourceHint } = {}) {
   const s = store.getSettings();
   const cur = getSort(listKey);
+  const hasOrder = !!cur.order?.length;
   const hasNumbers = sourceItems.some(it => it.live && it.number);
   const viewSel = h('select', { id: 'dlg-view' }, ...[['auto', 'Automatica'], ['list', 'Elenco'], ['grid', 'Icone']].map(([v, l]) => h('option', { value: v, selected: s.viewMode === v }, l)));
-  const sorts = [['source', 'Come la lista originale'], ...(hasNumbers ? [['number', 'Per numero di canale']] : []), ['name', 'Per nome'], ['custom', 'Personalizzato']];
+  const sorts = [
+    ['source', sourceLabel || 'Lista originale (senza modifiche)', (sourceHint || 'Esattamente come la pubblica la sorgente.') + ' Il tuo ordine personalizzato, se c\'è, resta salvato.'],
+    ...(hasNumbers ? [['number', 'Per numero di canale', 'Come sul telecomando: 1 Rai 1, 2 Rai 2, …']] : []),
+    ['name', 'Per nome (A–Z)', 'In ordine alfabetico.'],
+    ['custom', 'Il mio ordine personalizzato', hasOrder
+      ? 'Il tuo ordine salvato.' + (sourceLabel ? '' : ' Quando la lista si aggiorna, i canali restano al loro posto; quelli nuovi sono segnati NUOVO.')
+      : 'Non hai ancora un ordine tuo: premi OK e sposta i canali con ▲ ▼.'],
+  ];
   const sortSel = h('select', { id: 'dlg-sort' }, ...sorts.map(([v, l]) => h('option', { value: v, selected: cur.mode === v }, l)));
+  const hint = h('div', { class: 'hint' });
+  const newEnd = h('input', { type: 'checkbox', id: 'dlg-newend', checked: !!cur.newAtEnd });
+  const newEndRow = h('label', { class: 'check-row', for: 'dlg-newend' }, newEnd, ' Metti i canali nuovi in fondo (invece che vicino alla loro posizione originale)');
+  const sync = () => {
+    hint.textContent = (sorts.find(x => x[0] === sortSel.value) || [])[2] || '';
+    newEndRow.hidden = sortSel.value !== 'custom' || !hasOrder;
+  };
+  sortSel.addEventListener('change', sync);
+  sync();
+  // List operations sit next to what they act on; the dialog's own buttons are only Annulla / OK
+  const opBtn = (label, value, extra = '') => h('button', { type: 'button', class: 'btn focusable ' + extra, onclick: () => $('modal')._close(value) }, label);
   const body = h('div', {},
     h('div', { class: 'field' }, h('label', { for: 'dlg-view' }, 'Vista'), viewSel),
-    h('div', { class: 'field' }, h('label', { for: 'dlg-sort' }, 'Ordine'), sortSel,
-      h('div', { class: 'hint' }, 'Vale solo per questo elenco. Se la lista viene aggiornata, i canali nuovi finiscono in fondo e quelli tolti spariscono.')));
-  const res = await modal({ title: 'Vista e ordine', body, actions: [{ label: 'Annulla', value: false }, { label: 'Riordina a mano', value: 'reorder' }, { label: 'OK', value: true, primary: true }] });
+    h('div', { class: 'field' }, h('label', { for: 'dlg-sort' }, 'Ordine di questo elenco'), sortSel, hint, newEndRow,
+      h('div', { class: 'dlg-ops' },
+        opBtn(hasOrder ? 'Modifica il mio ordine' : 'Riordina a mano', 'reorder'),
+        hasOrder ? opBtn('Cancella il mio ordine', 'reset', 'danger') : null)),
+    refresh ? h('div', { class: 'field' }, h('label', {}, 'Aggiornamento della lista'),
+      h('div', { class: 'hint' }, (updatedAt ? 'Scaricata ' + fmtWhen(updatedAt) + '. ' : '') + 'Si aggiorna da sola all\'avvio e ogni 6 ore; se il download non riesce resta la copia precedente.'),
+      h('div', { class: 'dlg-ops' }, opBtn('Aggiorna la lista adesso', 'refresh'))) : null);
+  const actions = [{ label: 'Annulla', value: false }, { label: 'OK', value: true, primary: true }];
+  const res = await modal({ title: 'Vista e ordine', body, actions });
   if (!res) return;
   store.setSettings({ viewMode: viewSel.value });
-  if (res === 'reorder' || (sortSel.value === 'custom' && cur.mode !== 'custom')) {
-    const start = sortItems(sourceItems, sortSel.value === 'custom' ? cur : { mode: sortSel.value });
-    reorderView(listKey, start);
+  const save = (cfg) => { setSort(listKey, cfg); onSave ? onSave() : route(); };
+  if (res === 'refresh') { setSort(listKey, { ...cur, mode: sortSel.value, newAtEnd: newEnd.checked }); refresh(); return; }
+  if (res === 'reset') {
+    const ok = await confirmBox('Cancellare il tuo ordine?', 'Il tuo ordine personalizzato di questo elenco verrà cancellato e la lista tornerà com\'è nella sorgente.', 'Cancella', true);
+    if (ok) save({ mode: 'source' });
     return;
   }
-  setSort(listKey, sortSel.value === 'custom' ? cur : { mode: sortSel.value });
-  route();
+  if (res === 'reorder' || (sortSel.value === 'custom' && !hasOrder)) {
+    const start = sortItems(sourceItems, hasOrder ? { ...cur, mode: 'custom' } : { mode: sortSel.value === 'custom' ? 'source' : sortSel.value });
+    reorderView(listKey, start, onSave);
+    return;
+  }
+  save({ ...cur, mode: sortSel.value, newAtEnd: newEnd.checked });
 }
 
 /** Manual order: ▲ ▼ on each row (works with touch, mouse and TV remote). */
-function reorderView(listKey, items) {
+function reorderView(listKey, items, onSave) {
   const list = [...items];
-  const done = h('button', { class: 'btn primary focusable', onclick: () => { setSort(listKey, { mode: 'custom', order: list.map(itemKey) }); route(); } }, 'Fatto');
+  const done = h('button', { class: 'btn primary focusable', onclick: () => {
+    const cur = getSort(listKey);
+    setSort(listKey, { ...cur, mode: 'custom', order: list.map(itemKey), seen: {}, gone: {} });
+    onSave ? onSave() : route();
+  } }, 'Fatto');
   const cancel = h('button', { class: 'btn focusable', onclick: () => route() }, 'Annulla');
   const rowsBox = h('div', { class: 'list reorder' });
   const draw = (focusKey, dir) => {
@@ -530,9 +667,19 @@ function renderFavourites() {
     fill(view, h('div', { class: 'empty' }, 'Nessun preferito. Durante la riproduzione tocca ☆ per aggiungere un elemento.'));
     return;
   }
-  fill(view, renderItems(favs.map(f => ({ ...f.item, subtitle: addons.getInstalled(f.addonId)?.manifest.name || f.item.subtitle })), {
+  // Favourites can be ordered like any list (by hand, by name, by number); "original" is the
+  // order in which they were added.
+  const all = favs.map(f => ({ ...f.item, key: f.key, _fav: f, subtitle: addons.getInstalled(f.addonId)?.manifest.name || f.item.subtitle }));
+  const cfg = getSort('favs');
+  trackSort('favs', cfg, all);
+  const items = sortItems(all, cfg);
+  for (const it of items) delete it._new; // no NUOVO badge on favourites
+  const ordered = items.map(it => it._fav);
+  viewBtn.hidden = false;
+  viewBtn.onclick = () => viewAndSortDialog('favs', all, { sourceLabel: 'Ordine di aggiunta', sourceHint: 'Nell\'ordine in cui li hai aggiunti.' });
+  fill(view, sortBadge(cfg), renderItems(items, {
     mode: 'list',
-    onPick: (it, i) => openFavourite(favs[i], favs),
+    onPick: (it, i) => openFavourite(ordered[i], ordered),
   }));
   focusFirst();
 }

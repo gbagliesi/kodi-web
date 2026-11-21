@@ -255,7 +255,10 @@ class AddonHost {
     }
   }
 
-  async call(method, ...args) {
+  call(method, ...args) { return this.callWith({}, method, ...args); }
+
+  /** Like call(), with options for the add-on (ctx.refresh: download fresh data). */
+  async callWith(opts, method, ...args) {
     await this.ready;
     const id = ++this.seq;
     return new Promise((resolve, reject) => {
@@ -264,7 +267,7 @@ class AddonHost {
         reject(new Error(`L'add-on non ha risposto entro ${CALL_TIMEOUT / 1000} secondi`));
       }, CALL_TIMEOUT);
       this.pending.set(id, { resolve, reject, timer });
-      this.worker.postMessage({ type: 'call', id, method, args, settings: getAddonSettings(this.id) });
+      this.worker.postMessage({ type: 'call', id, method, args, opts, settings: getAddonSettings(this.id) });
     });
   }
 

@@ -193,7 +193,7 @@ async function uiTests() {
     });
     await page.reload();
     await page.waitForSelector('.hero');
-    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.3.2');
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.4.0');
     console.log('✓ outdated bundled add-ons are updated at start-up');
     assert.ok(await page.evaluate(() => window.salotto.addons.getProxy().includes('/proxy?url=')), 'proxy auto-detected');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/home.png' });
@@ -378,7 +378,7 @@ async function uiTests() {
       await page.click('#view-btn');
       await page.waitForSelector('#dlg-sort');
       if (value) await page.selectOption('#dlg-sort', value);
-      await page.click(`#modal-actions button:has-text("${button}")`);
+      await page.click(button === "OK" ? "#modal-actions button:has-text(\"OK\")" : `#modal-body button:has-text("${button}")`);
     };
     await page.goto(G);
     await page.waitForSelector('.row:has-text("La7")');
@@ -395,20 +395,32 @@ async function uiTests() {
     await waitFor(async () => (await rowLabels()).slice(0, 2).join('|') === '7La7|1Rai 1');
     const sortCfg = await page.evaluate(() => Object.values(window.salotto.store.load('sort', {}))[0]);
     assert.equal(sortCfg.mode, 'custom');
-    // source updated: a channel no longer present is dropped, new ones go to the end in source order
+    // source updated: the saved order is matched by channel key (an old order saved by address is
+    // migrated), channels missing from the list are remembered, new ones go next to their source
+    // neighbour and are marked NUOVO
     await page.evaluate(() => {
       const all = window.salotto.store.load('sort', {}); const k = Object.keys(all)[0];
-      all[k].order = ['https://example.org/live/la7.m3u8', 'https://example.org/gone.m3u8'];
+      all[k] = { mode: 'custom', order: ['https://www.youtube.com/user/euronewsit/live', 'https://example.org/live/la7.m3u8', 'https://example.org/gone.m3u8'] };
       window.salotto.store.save('sort', all);
     });
     await page.reload();
     await page.waitForSelector('.row:has-text("La7")');
     const after = await rowLabels();
-    assert.equal(after[0], '7La7', 'saved order kept');
-    assert.deepEqual(after.slice(1), source.filter(l => l !== '7La7'), 'other channels follow in source order');
+    assert.deepEqual(after.map(l => l.replace(/^\d+/, '')), ['Rai 1NUOVO', 'Euronews', 'Rai 1NUOVO', 'La7'], 'saved order kept, new channels next to their source neighbour: ' + after.join('|'));
+    const cfg2 = await page.evaluate(() => Object.values(window.salotto.store.load('sort', {}))[0]);
+    assert.deepEqual(cfg2.order, ['n:euronews', 'id:la7.it', 'https://example.org/gone.m3u8'], 'order migrated to channel keys, missing channel remembered');
+    assert.ok(cfg2.gone['https://example.org/gone.m3u8'], 'missing channel tracked');
+    // the original list can be shown without losing the custom order, which can then be deleted
     await sortDlg('source');
     await waitFor(async () => (await rowLabels()).join('|') === source.join('|'));
-    console.log('✓ list order: by name, by number, manual, kept when the source list changes');
+    assert.equal((await page.evaluate(() => Object.values(window.salotto.store.load('sort', {}))[0])).order.length, 3, 'custom order kept while the original list is shown');
+    await page.click('#view-btn');
+    await page.waitForSelector('#dlg-sort');
+    await page.click('#modal-body button:has-text("Cancella il mio ordine")');
+    await page.waitForSelector('#modal-title:has-text("Cancellare il tuo ordine?")');
+    await page.click('#modal-actions button:has-text("Cancella")');
+    await waitFor(async () => Object.keys(await page.evaluate(() => window.salotto.store.load('sort', {}))).length === 0);
+    console.log('✓ list order: by name, by number, manual, kept when the source list changes, original list and reset');
 
     // Keyboard / remote navigation
     await page.goto(BASE + '#/');
@@ -419,6 +431,53 @@ async function uiTests() {
     const f2 = await page.evaluate(() => document.activeElement.textContent);
     assert.ok(f1 && f2 && f1 !== f2, `focus moved: ${f1} -> ${f2}`);
     console.log('✓ arrow-key navigation moves focus');
+
+    // Favourites can be ordered too
+    await page.evaluate(() => window.salotto.store.save('favourites', [
+      { key: 'u|https://example.org/b.m3u8', item: { label: 'Bravo', url: 'https://example.org/b.m3u8', playable: true } },
+      { key: 'u|https://example.org/a.m3u8', item: { label: 'Alfa', url: 'https://example.org/a.m3u8', playable: true } },
+      { key: 'u|https://example.org/c.m3u8', item: { label: 'Charlie', url: 'https://example.org/c.m3u8', playable: true } },
+    ]));
+    await page.goto(BASE + '#/favourites');
+    await page.waitForSelector('.row:has-text("Bravo")');
+    assert.deepEqual(await rowLabels(), ['Bravo', 'Alfa', 'Charlie']);
+    await sortDlg('name');
+    await waitFor(async () => (await rowLabels()).join('|') === 'Alfa|Bravo|Charlie');
+    await sortDlg('', 'Riordina a mano');
+    await page.waitForSelector('.reorder-row');
+    await page.locator('.reorder-row').last().locator('button[aria-label="Su"]').click();
+    await page.click('.reorder-bar button:has-text("Fatto")');
+    await waitFor(async () => (await rowLabels()).join('|') === 'Alfa|Charlie|Bravo');
+    console.log('✓ favourites: by name and in a custom order');
+
+    // Playlist updates: summary after a manual update, last good copy when the download fails
+    {
+      const uc = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
+      await mock(uc);
+      let body = M3U, fail = false;
+      await uc.route(/^https:\/\/(raw\.githubusercontent\.com|iptv-org\.github\.io)\//, r => fail
+        ? r.fulfill({ status: 500, body: '' })
+        : r.fulfill({ status: 200, contentType: 'audio/x-mpegurl', body, headers: { 'access-control-allow-origin': '*' } }));
+      const up = await uc.newPage();
+      await up.goto(G);
+      await up.waitForSelector('.row:has-text("La7")');
+      body = M3U.replace('https://example.org/live/la7.m3u8', 'https://example.org/live/la7-new.m3u8')
+        + '#EXTINF:-1 group-title="Generalisti",Canale Nuovo\nhttps://example.org/live/nuovo.m3u8\n';
+      await up.click('#view-btn');
+      await up.waitForSelector('#dlg-sort');
+      assert.match(await up.textContent('#modal-body'), /Scaricata oggi alle/);
+      if (SHOTS) await up.screenshot({ path: SHOTS + '/sort-dialog.png' });
+      await up.click('#modal-body button:has-text("Aggiorna la lista adesso")');
+      await up.waitForSelector('.list-notice:has-text("Lista aggiornata: 1 nuovo, 1 con indirizzo cambiato.")');
+      await up.waitForSelector('.row:has-text("Canale Nuovo")');
+      if (SHOTS) await up.screenshot({ path: SHOTS + '/list-updated.png' });
+      fail = true;
+      await up.reload();
+      await up.waitForSelector('.row:has-text("Canale Nuovo")'); // the saved copy
+      await up.waitForSelector('.list-notice.warn:has-text("Non ho potuto aggiornare la lista")');
+      await uc.close();
+      console.log('✓ playlist updates: manual update with summary, last good copy kept when the download fails');
+    }
 
     // Fire TV app (user agent "SalottoTV"): remote-control navigation
     {

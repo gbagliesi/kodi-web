@@ -85,11 +85,84 @@ function parseM3U(text) {
       cur = null;
     }
   }
+  assignKeys(channels);
   return { epg: header['url-tvg'] || header['x-tvg-url'] || '', channels };
 }
 
+// A stable key for each channel, so the app can keep the user's order when the playlist is
+// updated: the playlist's channel code (tvg-id) or else the name without quality marks;
+// duplicates get #2, #3… in playlist order.
+function normName(name) {
+  return String(name).replace(/[ⒼⓎ]/g, '').replace(/\s*\((?:\d{3,4}p|hd|sd|fhd|uhd|4k)\)|\s+(?:hd|fhd|sd|uhd|4k)$/gi, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+function assignKeys(channels) {
+  const seen = new Map();
+  for (const c of channels) {
+    const base = c.id ? 'id:' + c.id.toLowerCase() : 'n:' + normName(c.name);
+    const n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    c.key = n > 1 ? base + '#' + n : base;
+  }
+}
+
+// ---------------------------------------------------------------- playlist download
+// The last good copy of each playlist is kept (ctx.store): if a download fails, or the new
+// list looks broken (empty, or less than half the channels), the old one stays in use.
+// Downloaded at the first use after start-up, then every 6 hours, or on request (ctx.refresh).
+const REFRESH = 6 * 3600 * 1000;
+const RETRY = 10 * 60 * 1000;
+const lists = new Map(); // url -> { at, data, meta }
+
+function diffLists(prev, next) {
+  const before = new Map(prev.channels.map(c => [c.key, c.url]));
+  const after = new Map(next.channels.map(c => [c.key, c.url]));
+  let added = 0, removed = 0, moved = 0;
+  for (const [k, u] of after) { if (!before.has(k)) added++; else if (before.get(k) !== u) moved++; }
+  for (const k of before.keys()) if (!after.has(k)) removed++;
+  return { added, removed, moved };
+}
+
+function when(t) {
+  const d = new Date(t);
+  return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) + ' alle ' + hhmm(t);
+}
+
 async function loadPlaylist(url, ctx) {
-  return cached('m3u:' + url, async () => parseM3U(await ctx.http.text(url)));
+  const mem = lists.get(url);
+  if (mem && !ctx.refresh && Date.now() - mem.at < REFRESH) return mem;
+  let prev = mem ? { at: mem.savedAt, data: mem.data } : null;
+  if (!prev && ctx.store) {
+    const saved = await ctx.store.get('m3u:' + url).catch(() => null);
+    if (saved && saved.text) prev = { at: saved.at, data: parseM3U(saved.text) };
+  }
+  let text = '', data = null, problem = '';
+  try {
+    text = await ctx.http.text(url, { timeout: 20000 });
+    data = parseM3U(text);
+    if (!data.channels.length) problem = 'la lista scaricata è vuota';
+    else if (prev && data.channels.length < prev.data.channels.length / 2) problem = `la lista scaricata ha solo ${data.channels.length} canali invece di ${prev.data.channels.length}`;
+  } catch (e) {
+    problem = e.message || String(e);
+  }
+  if (problem) {
+    if (!prev) throw new Error('Impossibile scaricare la playlist: ' + problem);
+    const entry = { at: Date.now() - REFRESH + RETRY, savedAt: prev.at, data: prev.data,
+      meta: { updatedAt: prev.at, notice: `Non ho potuto aggiornare la lista (${problem}): uso la copia del ${when(prev.at)}.`, warn: true } };
+    lists.set(url, entry);
+    return entry;
+  }
+  const now = Date.now();
+  if (ctx.store) await ctx.store.set('m3u:' + url, { at: now, text }).catch(() => {});
+  let notice = '';
+  if (prev) {
+    const d = diffLists(prev.data, data);
+    const parts = [d.added && `${d.added} ${d.added === 1 ? 'nuovo' : 'nuovi'}`, d.removed && `${d.removed} ${d.removed === 1 ? 'rimosso' : 'rimossi'}`, d.moved && `${d.moved} con indirizzo cambiato`].filter(Boolean);
+    if (parts.length) notice = 'Lista aggiornata: ' + parts.join(', ') + '.';
+    else if (ctx.refresh) notice = 'Lista aggiornata: nessun cambiamento.';
+  }
+  const entry = { at: now, savedAt: now, data, meta: { updatedAt: now, notice, warn: false } };
+  lists.set(url, entry);
+  return entry;
 }
 
 // ---------------------------------------------------------------- EPG
@@ -187,9 +260,10 @@ function toItem(ch, epg) {
     nn ? `Ora: ${nn.now.title} (fino alle ${hhmm(nn.now.stop)})` + (nn.next ? ` · Poi: ${nn.next.title}` : '') : (notes.length ? '' : ch.group),
   ].filter(Boolean).join(' · ');
   if (youtube) {
-    return { label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(), subtitle: sub, thumb: /^https:/.test(ch.logo) ? ch.logo : '', external: ch.url, playable: true, live: true, type: 'video' };
+    return { key: ch.key, label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(), subtitle: sub, thumb: /^https:/.test(ch.logo) ? ch.logo : '', external: ch.url, playable: true, live: true, type: 'video' };
   }
   return {
+    key: ch.key,
     label: ch.name.replace(/\s*[ⒼⓎ]/g, '').trim(),
     number: channelNumber(ch),
     subtitle: sub,
@@ -210,13 +284,21 @@ async function context(i, ctx) {
   const pls = playlistsFromSettings(ctx);
   const pl = pls[i];
   if (!pl) throw new Error('Playlist non trovata');
-  const data = await loadPlaylist(pl.url, ctx);
+  const entry = await loadPlaylist(pl.url, ctx);
+  const data = entry.data;
   // The guide is a bonus: never keep the channel list waiting for it. If it is not
   // ready within a few seconds the list shows without it and the guide keeps loading
   // in the background for the next visit.
   const epgUrl = pickEpgUrl(ctx.settings.epg || data.epg);
   const epg = await Promise.race([loadEpg(epgUrl, ctx), new Promise(r => setTimeout(() => r(null), EPG_WAIT))]);
-  return { pl, data, epg };
+  return { pl, data, epg, meta: entry.meta };
+}
+
+/** Update time, and the update summary or warning once (the first listing after it). */
+function listMeta(meta, pl, group) {
+  const out = { updatedAt: meta.updatedAt, listId: 'pl:' + pl.url + (group != null ? '|g:' + group : '') };
+  if (meta.notice) { out.notice = meta.notice; out.noticeKind = meta.warn ? 'warn' : 'info'; out.noticeOnce = true; if (!meta.warn) meta.notice = ''; }
+  return out;
 }
 
 addon.register({
@@ -247,7 +329,7 @@ addon.register({
     }
     const parts = path.split('/');
     const i = Number(parts[1]);
-    const { data, epg } = await context(i, ctx);
+    const { pl, data, epg, meta } = await context(i, ctx);
     const group = parts[2] === 'g' ? decodeURIComponent(parts.slice(3).join('/')) : null;
     if (group === null && ctx.settings.groups !== false) {
       const groups = new Map();
@@ -257,6 +339,7 @@ addon.register({
       if (groups.size > 1) {
         return {
           view: 'list',
+          ...listMeta(meta, pl, null),
           items: [
             { label: 'Cerca un canale…', action: 'search' },
             { label: 'Tutti i canali', subtitle: data.channels.length + ' canali', path: `p/${i}/g/*` },
@@ -268,7 +351,7 @@ addon.register({
     const chans = group && group !== '*'
       ? data.channels.filter(c => c.group.split(';').map(s => s.trim() || 'Altri').includes(group))
       : data.channels;
-    return { view: 'list', items: chans.map(c => toItem(c, epg)) };
+    return { view: 'list', ...listMeta(meta, pl, group), items: chans.map(c => toItem(c, epg)) };
   },
 
   async search(text, ctx) {

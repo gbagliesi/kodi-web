@@ -375,3 +375,25 @@ body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); ga
   .gch-name { font-size: 12px; }
   .gi-title { font-size: 16px; }
 }
+.prog-detail p { margin: 0 0 10px; line-height: 1.45; }
+.prog-detail .gi-live { margin-left: 8px; }
+.prog-detail .gi-bar { margin: -4px 0 12px; }
+.pd-sub { font-weight: 600; }
+
+/* what is on (ⓘ in the player): beside the video, which keeps playing */
+.player-epg {
+  position: absolute; top: 0; left: 0; bottom: 0; z-index: 3; width: min(420px, 92vw);
+  display: flex; flex-direction: column; background: rgba(13, 17, 23, .94);
+  padding: calc(12px + var(--safe-top)) 12px calc(12px + var(--safe-bottom)) calc(12px + var(--safe-left));
+  box-shadow: 10px 0 40px rgba(0, 0, 0, .6);
+}
+.epg-ch { flex: 1; min-width: 0; font-size: 18px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.epg-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 4px; margin: 0 -4px; }
+.epg-prog { display: block; padding: 10px; border-radius: 10px; margin-bottom: 6px; outline: none; }
+.epg-prog.on { background: rgba(255, 255, 255, .08); }
+.epg-prog .ep-when { font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.epg-prog .ep-title { font-size: 17px; font-weight: 600; margin: 2px 0 4px; }
+.epg-prog .ep-sub { font-size: 14px; font-weight: 600; color: #d0d7e0; margin-bottom: 4px; }
+.epg-prog .ep-desc { font-size: 14px; line-height: 1.45; color: #d0d7e0; }
+.epg-prog .gi-bar { margin: 4px 0 6px; }
+.player-prog { cursor: pointer; }

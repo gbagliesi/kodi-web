@@ -11,7 +11,7 @@ const SOURCES = process.argv.slice(3).length ? process.argv.slice(3) : [
   // TV listings published by epgshare01 (the guide the Free-TV playlist itself points to).
   'https://epgshare01.online/epgshare01/epg_ripper_IT1.xml.gz',
 ];
-const BEFORE = 3 * 3600, AFTER = 30 * 3600, DESC = 280;
+const BEFORE = 3 * 3600, AFTER = 30 * 3600, DESC = 900;
 
 /** Same rule as the add-on (keep the two in sync): lower case, no accents, no quality or
  *  broadcast-number marks, letters and digits only. */

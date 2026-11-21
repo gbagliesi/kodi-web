@@ -40,6 +40,8 @@ const EPG = `<?xml version="1.0"?><tv>
 <programme start="${xmltvNow(-30)}" stop="${xmltvNow(30)}" channel="Rai1.it"><title>Telegiornale di prova</title><desc>Notizie</desc></programme>
 <programme start="${xmltvNow(30)}" stop="${xmltvNow(90)}" channel="Rai1.it"><title>Film della sera</title></programme>
 <channel id="LA7.HD.it"><display-name>LA7 HD</display-name></channel>
+<programme start="${xmltvNow(-100)}" stop="${xmltvNow(-90)}" channel="LA7.HD.it"><title>Prima pagina</title><desc>Le notizie del mattino lette e commentate in studio. Le notizie del mattino lette e commentate in studio.</desc></programme>
+<programme start="${xmltvNow(-90)}" stop="${xmltvNow(-80)}" channel="LA7.HD.it"><title>Prima pagina</title></programme>
 <programme start="${xmltvNow(-40)}" stop="${xmltvNow(20)}" channel="LA7.HD.it"><title>Notiziario La7</title><category>Informazione</category></programme>
 <programme start="${xmltvNow(20)}" stop="${xmltvNow(80)}" channel="LA7.HD.it"><title>Talk della sera</title><desc>Ospiti in studio</desc></programme>
 </tv>`;
@@ -52,6 +54,13 @@ function buildGuide() {
   return fs.readFileSync(path.join(dir, 'it.json'), 'utf8');
 }
 const GUIDE = buildGuide();
+{
+  const la7 = JSON.parse(GUIDE).ch['LA7.HD.it'].p;
+  const pp = la7.filter(p => p[2] === 'Prima pagina');
+  assert.equal(pp.length, 1, 'guide: parts of a programme with the same title are merged');
+  assert.equal(pp[0][1] - pp[0][0], 20 * 60);
+  assert.equal(pp[0][3], 'Le notizie del mattino lette e commentate in studio.', 'guide: repeated description kept once');
+}
 
 const RADIO = [{ stationuuid: 'u1', name: 'Radio Prova', url_resolved: 'https://example.org/radio.mp3', country: 'Italy', tags: 'pop', bitrate: 128, favicon: '' },
   { stationuuid: 'u2', name: 'Solo HTTP', url_resolved: 'http://example.org/radio.mp3', country: 'Italy', tags: '', bitrate: 64, favicon: '' }];
@@ -306,7 +315,7 @@ async function uiTests() {
     await page.evaluate(() => { location.hash = '#/guide'; });
     await page.waitForSelector('.guide .grow');
     const gnames = await page.locator('.gch-name').allTextContents();
-    assert.deepEqual(gnames, ['Rai 1', 'La7', 'Rai 1'], 'guide rows: channels with a guide, matched by code or by name');
+    assert.deepEqual(gnames, ['Rai 1', 'La7'], 'guide rows: channels with a guide, matched by code or by name, one row per channel');
     assert.match(await page.locator('.grow').nth(1).locator('.gcell.on').textContent(), /Notiziario La7/);
     assert.match(await page.textContent('.guide-foot'), /1 canale non ha la guida/);
     if (SHOTS) await page.screenshot({ path: SHOTS + '/guide.png' });

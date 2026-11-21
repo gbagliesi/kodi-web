@@ -760,8 +760,12 @@ async function renderGuide(params) {
   if (location.hash !== at) return;
 
   const numbers = player.channelNumbers(channels.map(c => c.item));
-  const rows = channels.map((c, i) => ({ c, i, num: numbers[i] ?? i + 1, g: epg.channelOf(c.item) })).filter(r => r.g);
-  const missing = channels.length - rows.length;
+  // One row per guide channel: playlists often list the same channel twice (e.g. Rai 1 and its
+  // regional/geo copy 900), the first one is kept.
+  const seenG = new Set();
+  const rows = channels.map((c, i) => ({ c, i, num: numbers[i] ?? i + 1, g: epg.channelOf(c.item) }))
+    .filter(r => r.g && !seenG.has(r.g.id) && seenG.add(r.g.id));
+  const missing = channels.filter(c => !epg.channelOf(c.item)).length;
 
   const now = Date.now();
   const HALF = 30 * 60000;
@@ -819,7 +823,7 @@ async function renderGuide(params) {
         title: `${epg.hhmm(p.start)} ${p.title}`,
         onclick: () => pickProg(p, row),
         onfocus: () => showInfo(p, row),
-      }, h('span', { class: 'gc-t' }, p.title), w > 70 ? h('span', { class: 'gc-h' }, epg.hhmm(p.start)) : null);
+      }, w >= 34 ? h('span', { class: 'gc-t' }, p.title) : null, w > 70 ? h('span', { class: 'gc-h' }, epg.hhmm(p.start)) : null);
       b._p = p;
       return b;
     }) : [h('button', { class: 'gcell focusable empty-cell', style: { left: '0px', width: W + 'px' }, onclick: () => play(row), onfocus: () => fill(info, h('div', { class: 'gi-title' }, row.c.item.label), h('div', { class: 'gi-desc' }, 'Nessun programma in guida per le prossime ore.')) }, 'Nessuna informazione')];
@@ -863,7 +867,7 @@ async function renderGuide(params) {
     grid.style.height = Math.max(220, window.innerHeight - grid.getBoundingClientRect().top - foot.offsetHeight - 30) + 'px';
   };
   fit(); window.addEventListener('resize', fit);
-  grid.scrollLeft = Math.max(0, xOf(now) - (narrow ? 20 : 90));
+  grid.scrollLeft = 0; // the grid starts at the current half hour: nothing hidden under the channel names
 
   // Remote / keyboard: keep a time cursor like a TV guide.
   let cursor = Math.max(now, t0);

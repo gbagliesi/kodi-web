@@ -33,6 +33,15 @@ const decode = (s) => String(s || '').replace(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*
 const tag = (src, t) => { const m = new RegExp(`<${t}(?:\\s[^>]*)?>([\\s\\S]*?)</${t}>`, 'i').exec(src); return m ? decode(m[1]) : ''; };
 const attrs = (s) => { const o = {}; for (const m of s.matchAll(/([\w:-]+)="([^"]*)"/g)) o[m[1]] = decode(m[2]); return o; };
 
+/** Some listings repeat the description twice ("A. B. A. B…"): keep it once. */
+function dedupe(desc) {
+  const d = desc.replace(/(\.\.\.|…)$/, '').trim();
+  const head = d.slice(0, 40);
+  if (head.length < 40) return desc;
+  const again = d.indexOf(head, 20);
+  return again > 0 ? d.slice(0, again).trim() : desc;
+}
+
 function xmltvTime(s) {
   const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?/.exec(s || '');
   if (!m) return 0;
@@ -70,7 +79,7 @@ for (const url of SOURCES) {
     const start = xmltvTime(a.start), stop = xmltvTime(a.stop);
     if (!start || !stop || stop <= now - BEFORE || start >= now + AFTER) continue;
     const c = ch[a.channel] = ch[a.channel] || { n: a.channel, p: [] };
-    let desc = tag(m[2], 'desc');
+    let desc = dedupe(tag(m[2], 'desc'));
     if (desc.length > DESC) desc = desc.slice(0, DESC - 1).replace(/\s+\S*$/, '') + '…';
     const sub = tag(m[2], 'sub-title'), cat = tag(m[2], 'category');
     // [start, stop, title, description?, episode?, category?] (times in seconds)
@@ -86,6 +95,14 @@ for (const url of SOURCES) {
 for (const [id, c] of Object.entries(ch)) {
   c.p.sort((x, y) => x[0] - y[0]);
   c.p = c.p.filter((p, i, arr) => i === 0 || p[0] >= arr[i - 1][0] + 60);
+  // A programme split in many short parts with the same title (e.g. "Prima pagina" every
+  // few minutes) becomes one, so the grid shows one readable box instead of slivers.
+  c.p = c.p.reduce((out, p) => {
+    const last = out[out.length - 1];
+    if (last && last[2] === p[2] && p[0] - last[1] <= 60) { last[1] = Math.max(last[1], p[1]); if (!last[3] && p[3]) last[3] = p[3]; }
+    else out.push(p);
+    return out;
+  }, []);
   if (!c.p.length) delete ch[id];
 }
 

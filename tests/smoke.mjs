@@ -1,7 +1,9 @@
 // End-to-end smoke test: starts server.js, opens the app in Chromium with an
 // iPad-sized viewport and mocks every external service the add-ons call.
 // Run: node tests/smoke.mjs   (needs the `playwright` package)
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
@@ -37,7 +39,19 @@ function xmltvNow(offsetMin) {
 const EPG = `<?xml version="1.0"?><tv>
 <programme start="${xmltvNow(-30)}" stop="${xmltvNow(30)}" channel="Rai1.it"><title>Telegiornale di prova</title><desc>Notizie</desc></programme>
 <programme start="${xmltvNow(30)}" stop="${xmltvNow(90)}" channel="Rai1.it"><title>Film della sera</title></programme>
+<channel id="LA7.HD.it"><display-name>LA7 HD</display-name></channel>
+<programme start="${xmltvNow(-40)}" stop="${xmltvNow(20)}" channel="LA7.HD.it"><title>Notiziario La7</title><category>Informazione</category></programme>
+<programme start="${xmltvNow(20)}" stop="${xmltvNow(80)}" channel="LA7.HD.it"><title>Talk della sera</title><desc>Ospiti in studio</desc></programme>
 </tv>`;
+
+// Salotto's own guide (epg/it.json), built from the XMLTV above by the same script the Pages workflow runs.
+function buildGuide() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'salotto-epg-'));
+  fs.writeFileSync(path.join(dir, 'it.xml'), EPG);
+  execFileSync(process.execPath, [path.join(ROOT, 'tools/build-epg.mjs'), path.join(dir, 'it.json'), path.join(dir, 'it.xml')], { env: { ...process.env, EPG_MIN_CHANNELS: '1' } });
+  return fs.readFileSync(path.join(dir, 'it.json'), 'utf8');
+}
+const GUIDE = buildGuide();
 
 const RADIO = [{ stationuuid: 'u1', name: 'Radio Prova', url_resolved: 'https://example.org/radio.mp3', country: 'Italy', tags: 'pop', bitrate: 128, favicon: '' },
   { stationuuid: 'u2', name: 'Solo HTTP', url_resolved: 'http://example.org/radio.mp3', country: 'Italy', tags: '', bitrate: 64, favicon: '' }];
@@ -69,6 +83,7 @@ const FAKE_CAST = `(() => {
 })();`;
 
 async function mock(context) {
+  await context.route(BASE + 'epg/it.json', r => r.fulfill({ status: 200, contentType: 'application/json', body: GUIDE }));
   await context.route(/^https:\/\/(raw\.githubusercontent\.com|iptv-org\.github\.io)\//, r => r.fulfill({ status: 200, contentType: 'audio/x-mpegurl', body: M3U.replace('#EXTM3U', `#EXTM3U x-tvg-url="https://epg.example.org/epg_DE1.xml.gz, https://epg.example.org/epg_IT1.xml, https://epg.example.org/epg_US1.xml.gz"`), headers: { 'access-control-allow-origin': '*' } }));
   await context.route('https://epg.example.org/**', r => r.request().url().endsWith('/epg_IT1.xml') ? r.fulfill({ status: 200, contentType: 'application/xml', body: EPG, headers: { 'access-control-allow-origin': '*' } }) : r.fulfill({ status: 404, body: '' }));
   await context.route('https://de1.api.radio-browser.info/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(RADIO), headers: { 'access-control-allow-origin': '*' } }));
@@ -193,7 +208,7 @@ async function uiTests() {
     });
     await page.reload();
     await page.waitForSelector('.hero');
-    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.4.0');
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.5.0');
     console.log('✓ outdated bundled add-ons are updated at start-up');
     assert.ok(await page.evaluate(() => window.salotto.addons.getProxy().includes('/proxy?url=')), 'proxy auto-detected');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/home.png' });
@@ -272,8 +287,9 @@ async function uiTests() {
     await waitFor(async () => /rai1\.m3u8/.test(await nowSrc()));
     await page.click('#pl-chlist');
     await page.waitForSelector('#pl-channels:not([hidden])');
-    const rows = await page.locator('.ch-row').allTextContents();
+    const rows = await page.locator('.ch-row').evaluateAll(els => els.map(e => e.querySelector('.ch-num').textContent + e.querySelector('.ch-name').textContent));
     assert.deepEqual(rows, ['1Rai 1', '7La7', '8Rai 1'], 'channel list: broadcast numbers, YouTube channels left out');
+    assert.equal(await page.locator('.ch-row:has-text("La7") .ch-prog').textContent(), 'Notiziario La7', 'channel list shows what is on');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/channels.png' });
     await page.click('.ch-row:has-text("8")');
     await waitFor(async () => /relinkerServlet/.test(await nowSrc()));
@@ -285,6 +301,40 @@ async function uiTests() {
     await page.keyboard.press('Escape');
     assert.equal(await page.isVisible('#player'), false);
     console.log('✓ live TV: change channel inside the player (CH +/−, arrows, number, channel list)');
+
+    // TV guide: grid of channels and times, OK on what is on opens the channel
+    await page.evaluate(() => { location.hash = '#/guide'; });
+    await page.waitForSelector('.guide .grow');
+    const gnames = await page.locator('.gch-name').allTextContents();
+    assert.deepEqual(gnames, ['Rai 1', 'La7', 'Rai 1'], 'guide rows: channels with a guide, matched by code or by name');
+    assert.match(await page.locator('.grow').nth(1).locator('.gcell.on').textContent(), /Notiziario La7/);
+    assert.match(await page.textContent('.guide-foot'), /1 canale non ha la guida/);
+    if (SHOTS) await page.screenshot({ path: SHOTS + '/guide.png' });
+    await page.locator('.grow').first().locator('.gcell:has-text("Film della sera")').click();
+    await page.waitForSelector('#modal:not([hidden])');
+    assert.match(await page.textContent('#modal'), /Film della sera/);
+    await page.click('#modal-actions .btn.primary');
+    await page.waitForSelector('#player:not([hidden])');
+    await waitFor(async () => /rai1\.m3u8/.test(await nowSrc()));
+    assert.match(await page.textContent('#pl-prog'), /Telegiornale di prova .*Poi: Film della sera/, 'player shows the programme on now');
+    await page.keyboard.press('ArrowUp'); // zapping from the guide goes through the guide's channels
+    await waitFor(async () => /la7\.m3u8/.test(await nowSrc()));
+    assert.match(await page.textContent('#pl-prog'), /Notiziario La7/);
+    await page.keyboard.press('Escape');
+    // remote: ▼ keeps the time and moves to the next channel
+    await page.locator('.grow').first().locator('.gcell.on').focus();
+    await page.keyboard.press('ArrowDown');
+    assert.match(await page.evaluate(() => document.activeElement.textContent), /Notiziario La7/);
+    assert.match(await page.textContent('.guide-info'), /Notiziario La7/);
+    await page.keyboard.press('ArrowRight');
+    assert.match(await page.evaluate(() => document.activeElement.textContent), /Talk della sera/);
+    assert.match(await page.textContent('.guide-info'), /Ospiti in studio/);
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#modal:not([hidden])');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => document.getElementById('modal')._close?.());
+    console.log('✓ TV guide: grid, now/next in lists, player and channel list, remote navigation');
+    await page.goBack();
 
     // Live rewind: the broadcaster's window (seekable range) drives the seek bar, ⟲10 and LIVE
     await page.locator('.row:has-text("Rai 1")').first().click();
@@ -545,6 +595,15 @@ async function uiTests() {
       await tv.evaluate(() => { const s = document.getElementById('pl-seek'); s.disabled = false; s.focus(); });
       await tv.keyboard.press('ArrowRight');
       assert.equal(await focusedTag(), 'pl-dur', 'TV: ▶ on the position bar goes to the LIVE button');
+      // TV guide with the remote: opens on what is on now, ◀ from the first programme reaches the menu
+      await tv.evaluate(() => window.salottoBack());
+      await tv.evaluate(() => { location.hash = '#/guide'; });
+      await tv.waitForSelector('.guide .gcell');
+      await tv.waitForFunction(() => document.activeElement?.classList.contains('gcell'));
+      assert.match(await tv.evaluate(() => document.activeElement.textContent), /Telegiornale di prova/, 'TV guide: focus starts on what is on now');
+      if (SHOTS) await tv.screenshot({ path: SHOTS + '/tv-guide.png' });
+      await tv.keyboard.press('ArrowLeft');
+      assert.equal(await tv.evaluate(() => !!document.activeElement.closest('#sidebar')), true, 'TV guide: ◀ from the first programme goes to the menu');
       await tvc.close();
       console.log('✓ Fire TV app: no auto-focused text field, arrows leave fields, player controls reachable, Back hides controls, menu column, quiet zapping');
     }

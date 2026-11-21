@@ -109,8 +109,28 @@ const xml = {
   },
 };
 
-function makeCtx() {
+// Small persistent storage for the add-on (survives restarts): Cache Storage, else memory.
+const memStore = new Map();
+const storeUrl = (key) => new URL('__addon-store/' + encodeURIComponent(manifest.id) + '/' + encodeURIComponent(key), self.location.href).href;
+const store = {
+  async get(key) {
+    try {
+      if (self.caches) { const r = await (await caches.open('salotto-addon-data')).match(storeUrl(key)); return r ? r.json() : null; }
+    } catch { /* fall back to memory */ }
+    return memStore.has(key) ? memStore.get(key) : null;
+  },
+  async set(key, value) {
+    memStore.set(key, value);
+    try {
+      if (self.caches) await (await caches.open('salotto-addon-data')).put(storeUrl(key), new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }));
+    } catch { /* memory only */ }
+  },
+};
+
+function makeCtx(opts = {}) {
   return {
+    refresh: !!opts.refresh,
+    store,
     addon: { id: manifest.id, name: manifest.name, version: manifest.version },
     settings: { ...currentSettings },
     http,
@@ -145,12 +165,12 @@ self.onmessage = async (ev) => {
   }
   if (msg.type === 'proxy') { proxy = msg.proxy || ''; return; }
   if (msg.type === 'call') {
-    const { id, method, args = [], settings = {} } = msg;
+    const { id, method, args = [], settings = {}, opts = {} } = msg;
     currentSettings = settings;
     try {
       const fn = impl && impl[method];
       if (typeof fn !== 'function') throw new Error(`Metodo non supportato dall'add-on: ${method}`);
-      const result = await fn.call(impl, ...args, makeCtx());
+      const result = await fn.call(impl, ...args, makeCtx(opts));
       post({ type: 'result', id, result: result === undefined ? null : JSON.parse(JSON.stringify(result)) });
     } catch (e) {
       post({ type: 'error', id, message: e && e.message ? e.message : String(e) });

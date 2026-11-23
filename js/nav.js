@@ -19,6 +19,8 @@ function scope() {
     if (panel && !panel.hidden && panel.contains(document.activeElement)) return panel;
     const info = document.getElementById('pl-epg');
     if (info && !info.hidden && info.contains(document.activeElement)) return info;
+    const sync = document.getElementById('pl-syncbox');
+    if (sync && !sync.hidden && sync.contains(document.activeElement)) return sync;
     return player;
   }
   return document.getElementById('app');

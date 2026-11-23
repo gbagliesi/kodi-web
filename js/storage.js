@@ -74,3 +74,15 @@ export function setResume(key, seconds, duration) {
   if (keys.length > 300) for (const k of keys.slice(0, keys.length - 300)) delete all[k];
   save('resume', all);
 }
+
+// ---- Audio/video sync, per channel (ms: > 0 = sound later than the picture) ----
+export function getAvSync(key) {
+  const v = load('avsync', {})[key];
+  return typeof v === 'number' && isFinite(v) ? v : 0;
+}
+
+export function setAvSync(key, ms) {
+  const all = load('avsync', {});
+  if (ms) all[key] = ms; else delete all[key];
+  save('avsync', all);
+}

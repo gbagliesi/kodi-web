@@ -400,3 +400,20 @@ body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); ga
 .epg-prog .ep-desc { font-size: 14px; line-height: 1.45; color: #d0d7e0; }
 .epg-prog .gi-bar { margin: 4px 0 6px; }
 .player-prog { cursor: pointer; }
+
+/* audio/video sync (A/V in the player): small box above the controls, the video keeps playing */
+.sync-btn { font-weight: 700; font-size: 14px; min-width: 52px; position: relative; }
+.sync-btn.active { color: var(--accent); }
+.sync-badge { display: block; font-size: 10px; font-weight: 600; line-height: 1; }
+.sync-badge:empty { display: none; }
+.player-sync {
+  position: absolute; left: 50%; bottom: calc(150px + var(--safe-bottom)); transform: translateX(-50%); z-index: 3;
+  width: min(460px, 94vw); padding: 12px 14px 14px; border-radius: 16px; background: rgba(13, 17, 23, .94);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .6);
+}
+.sync-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sync-step { padding: 10px 14px; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.sync-step:disabled, #pl-syncreset:disabled { opacity: .35; }
+.sync-val { flex: 1; text-align: center; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sync-note { margin: 10px 2px 0; font-size: 14px; line-height: 1.45; color: #d0d7e0; }
+.sync-actions { display: flex; justify-content: flex-end; margin-top: 10px; }

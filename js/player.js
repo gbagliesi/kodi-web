@@ -1,9 +1,10 @@
 // Full-screen media player: native HTML5 playback, HLS via native support
 // (Safari / every iPad browser) or hls.js (desktop Chrome, Firefox, Android).
-import { getResume, setResume, getSettings, isFavourite, toggleFavourite } from './storage.js';
+import { getResume, setResume, getSettings, isFavourite, toggleFavourite, getAvSync, setAvSync } from './storage.js';
 import { getProxy, proxify } from './addons.js';
 import * as cast from './cast.js';
 import * as epg from './epg.js';
+import * as avsync from './avsync.js';
 
 const UA = navigator.userAgent;
 const APPLE = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
@@ -19,7 +20,9 @@ const el = {
   seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'), pip: $('pl-pip'),
   msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
   cast: $('pl-cast'), route: $('pl-route'), stats: $('pl-stats'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
-  osdName: $('pl-osd-name'), osdProg: $('pl-osd-prog'), prog: $('pl-prog'), info: $('pl-info'), epg: $('pl-epg'), epgCh: $('pl-epg-ch'), epgBody: $('pl-epg-body'), epgClose: $('pl-epgclose'), panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
+  osdName: $('pl-osd-name'), osdProg: $('pl-osd-prog'), prog: $('pl-prog'), info: $('pl-info'), epg: $('pl-epg'), epgCh: $('pl-epg-ch'), epgBody: $('pl-epg-body'), epgClose: $('pl-epgclose'), sync: $('pl-sync'), syncBadge: $('pl-syncbadge'), syncBox: $('pl-syncbox'), syncVal: $('pl-syncval'), syncNote: $('pl-syncnote'),
+  syncEarlier: $('pl-syncearlier'), syncLater: $('pl-synclater'), syncReset: $('pl-syncreset'), syncClose: $('pl-syncclose'),
+  panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
 };
 
 let hls = null;
@@ -37,6 +40,8 @@ let casting = false;      // a Google Cast session is playing the current item
 let localAttached = false; // the local <video> has the stream loaded
 let airplayAvailable = false;
 let channels = null;      // { list: [{ item, open() }], index } when zapping between live channels
+let avMs = 0;             // audio/video sync of the current channel, ms (> 0 = sound later)
+let avNative = false;     // hls.js failed with the sync on: back to the native player, no sync
 
 export const isOpen = () => !el.root.hidden;
 
@@ -164,7 +169,9 @@ async function attach(stream) {
   // is more reliable than the browser's own support, when Media Source is available.
   // The Fire TV app tries the WebView's own HLS player first (Giuseppe's choice: lighter on the
   // Stick, about the same lip sync as hls.js), falling back to hls.js on error.
-  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && (APPLE || !hasMse() || (TV_APP && nativeStage < 2));
+  // A channel with an audio/video sync needs hls.js (only Media Source can move the sound).
+  const avShift = !!avMs && hasMse() && !avNative;
+  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && !avShift && (APPLE || !hasMse() || (TV_APP && nativeStage < 2));
   if (looksHls(stream.url, stream.mime) && !native) {
     await loadScript(HLS_CDN);
     if (!window.Hls || !window.Hls.isSupported()) {
@@ -172,6 +179,7 @@ async function attach(stream) {
       throw new Error('HLS non supportato da questo browser');
     }
     hls = new window.Hls({ enableWorker: true, lowLatencyMode: !!current?.item.live });
+    avsync.hookHls(hls, () => avMs / 1000);
     hls.on(window.Hls.Events.ERROR, (_, data) => {
       if (!data.fatal) return;
       if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR && getProxy() && !triedProxy && !stream.proxy) {
@@ -181,6 +189,14 @@ async function attach(stream) {
         return;
       }
       if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; }
+      // hls.js was used only for the audio sync and fails here: the native player still works
+      if (avMs && !avNative && v.canPlayType('application/vnd.apple.mpegurl') && (APPLE || TV_APP || !hasMse())) {
+        avNative = true;
+        showMsg('Su questo dispositivo la sincronia audio non funziona con questo canale: lo riproduco senza.', 5000);
+        renderSync();
+        attach(stream).then(() => v.play().catch(() => {}));
+        return;
+      }
       const cors = data.type === window.Hls.ErrorTypes.NETWORK_ERROR && !getProxy();
       showMsg(cors
         ? 'Questo stream non permette la riproduzione da un sito web in questo browser (CORS). Su iPad e Safari di solito funziona; altrove serve il proxy (Impostazioni).'
@@ -286,6 +302,10 @@ export async function play(item, stream, opts = {}) {
   updateChannelUi();
   const audio = item.type === 'audio' || /^audio\//.test(stream.mime || '');
   current = { item, stream, key: stream.url, audio, favEntry: opts.favEntry };
+  avMs = audio ? 0 : getAvSync(avKey());
+  avNative = false;
+  clearTimeout(avTimer);
+  updateSyncBtn();
   el.route.hidden = true;
   onCloseCb = opts.onClose || null;
   el.root.hidden = false;
@@ -330,6 +350,7 @@ export async function play(item, stream, opts = {}) {
 
 /** Remote "Back": channel list → controls (TV) → close the player. */
 export function back() {
+  if (!el.syncBox.hidden) { closeSync(); return; }
   if (!el.panel.hidden) { closePanel(); return; }
   if (!el.epg.hidden) { closeInfo(); return; }
   if (document.body.classList.contains('tv') && !el.ui.classList.contains('idle')) { hideControls(); return; }
@@ -359,7 +380,8 @@ export function close() {
   current = null;
   channels = null;
   clearTimeout(zapTimer); clearTimeout(digitTimer); digits = ''; zapToken++;
-  el.osd.hidden = true; el.panel.hidden = true; el.epg.hidden = true;
+  el.osd.hidden = true; el.panel.hidden = true; el.epg.hidden = true; el.syncBox.hidden = true;
+  clearTimeout(avTimer);
   toggleStats(false);
   const cb = onCloseCb; onCloseCb = null;
   if (cb) cb();
@@ -477,6 +499,7 @@ export function handleKey(e) {
       case 'PageUp': case 'ChannelUp': case 'MediaTrackNext': zap(1); return true;
       case 'PageDown': case 'ChannelDown': case 'MediaTrackPrevious': zap(-1); return true;
       case 'Escape': case 'Backspace': case 'BrowserBack':
+        if (!el.syncBox.hidden) { closeSync(); return true; }
         if (!el.panel.hidden) { closePanel(); return true; }
         if (!el.epg.hidden) { closeInfo(); return true; }
         break;
@@ -486,7 +509,10 @@ export function handleKey(e) {
   }
   switch (e.key) {
     case ' ': case 'MediaPlayPause': case 'k': togglePlay(); return true;
-    case 'Escape': case 'Backspace': case 'BrowserBack': if (!el.epg.hidden) { closeInfo(); return true; } close(); return true;
+    case 'Escape': case 'Backspace': case 'BrowserBack':
+      if (!el.syncBox.hidden) { closeSync(); return true; }
+      if (!el.epg.hidden) { closeInfo(); return true; }
+      close(); return true;
     case 'i': toggleInfo(); return true;
     case 'f': toggleFullscreen(); return true;
     case 'ArrowLeft': case 'ArrowRight': {
@@ -510,6 +536,7 @@ function statsRows() {
   rows.push(['Percorso', routeLabel || '—']);
   if (casting) { rows.push(['Riproduzione', 'sulla TV (' + cast.deviceName() + ')']); return rows; }
   rows.push(['Motore', hls ? 'hls.js' + (nativeErr ? ' (HLS nativo non riuscito, errore ' + nativeErr + ')' : '') : (looksHls(current?.stream.url || '', current?.stream.mime) ? 'HLS nativo del browser' : 'lettore del browser')]);
+  if (avMs) rows.push(['Sincronia audio', fmtAv(avMs) + (avsync.separateAudio(hls) ? '' : ' (non applicata)')]);
   rows.push(['Risoluzione', v.videoWidth ? v.videoWidth + '×' + v.videoHeight : (current?.audio ? 'solo audio' : '—')]);
   if (hls && hls.levels?.length) {
     const lv = hls.levels[hls.currentLevel] || hls.levels[hls.loadLevel];
@@ -636,6 +663,7 @@ cast.initCast({
   onSession: (active) => {
     casting = active;
     updateCastBtn();
+    updateSyncBtn();
     if (!isOpen() || !current) return;
     if (active) sendToCast(localAttached ? el.video.currentTime : 0);
     else {
@@ -727,6 +755,7 @@ function renderInfo() {
 function openInfo() {
   if (!current) return;
   closePanel();
+  el.syncBox.hidden = true;
   renderInfo();
   el.epg.hidden = false;
   el.epgBody.scrollTop = 0;
@@ -742,10 +771,90 @@ function closeInfo() {
 }
 
 function toggleInfo() { if (el.epg.hidden) openInfo(); else closeInfo(); }
-const inSidePanel = (a) => (!el.panel.hidden && el.panel.contains(a)) || (!el.epg.hidden && el.epg.contains(a));
+const inSidePanel = (a) => (!el.panel.hidden && el.panel.contains(a)) || (!el.epg.hidden && el.epg.contains(a)) || (!el.syncBox.hidden && el.syncBox.contains(a));
 el.info.addEventListener('click', toggleInfo);
 el.prog.addEventListener('click', openInfo);
 el.epgClose.addEventListener('click', closeInfo);
+
+// ---------------------------------------------------------------- audio/video sync (A/V button)
+// Moves the sound earlier or later than the picture, like Kodi's audio offset. Saved per channel
+// (until "Azzera"). It works where the player uses hls.js (Media Source): see avsync.js.
+const AV_STEP = 50, AV_MAX = 3000;
+let avTimer = 0;
+const avKey = () => current ? (current.favEntry?.key || current.key) : '';
+const fmtAv = (ms) => (ms > 0 ? '+' : ms < 0 ? '−' : '') + Math.abs(ms) + ' ms';
+/** Why the sync can't work for the current video, or '' if it can. */
+function avBlocked() {
+  if (!current || current.audio) return 'Solo per i video.';
+  if (casting) return 'Durante la trasmissione alla TV la sincronia la regola la TV.';
+  if (!hasMse()) return 'Questo dispositivo non permette di spostare l\'audio (serve Media Source, assente su iPhone).';
+  if (!looksHls(current.stream.url, current.stream.mime)) return 'Disponibile per i canali in diretta e gli stream HLS, non per i file video semplici.';
+  if (avNative) return 'Con questo canale su questo dispositivo funziona solo il lettore di sistema, che non permette di spostare l\'audio.';
+  const sb = hls?.bufferController?.sourceBuffer;
+  if (hls && sb && Object.keys(sb).length && !avsync.separateAudio(hls)) return 'Questo canale trasmette audio e video in un unico flusso: la sincronia non si può regolare.';
+  return '';
+}
+function updateSyncBtn() {
+  el.sync.hidden = !current || current.audio || casting;
+  el.sync.classList.toggle('active', !!avMs);
+  el.syncBadge.textContent = avMs ? fmtAv(avMs) : '';
+  el.sync.title = 'Sincronia audio' + (avMs ? ': ' + fmtAv(avMs) + ' (salvata per questo canale)' : ': voce prima o dopo il video');
+}
+function renderSync() {
+  updateSyncBtn();
+  if (el.syncBox.hidden) return;
+  const blocked = avBlocked();
+  el.syncVal.textContent = fmtAv(avMs);
+  el.syncEarlier.disabled = !!blocked || avMs <= -AV_MAX;
+  el.syncLater.disabled = !!blocked || avMs >= AV_MAX;
+  el.syncReset.disabled = !avMs;
+  el.syncNote.textContent = blocked || (avMs
+    ? `La voce esce ${Math.abs(avMs)} ms ${avMs > 0 ? 'dopo' : 'prima'} rispetto al canale originale. Resta salvato per questo canale finché non premi Azzera.`
+    : 'Se senti la voce prima del movimento delle labbra premi «Voce dopo», se la senti in ritardo premi «Voce prima». Ogni tocco sposta di 50 ms e il valore resta salvato per questo canale.');
+}
+function setAv(ms) {
+  if (!current) return;
+  ms = Math.max(-AV_MAX, Math.min(AV_MAX, Math.round(ms / AV_STEP) * AV_STEP));
+  if (ms === avMs) return;
+  avMs = ms;
+  setAvSync(avKey(), ms);
+  renderSync();
+  clearTimeout(avTimer);
+  avTimer = setTimeout(applyAv, 700); // wait for the last of a series of taps
+}
+/** Apply a changed sync to what is playing: reload the buffer, or move from the native player to hls.js. */
+function applyAv() {
+  if (!current || casting || !localAttached) return;
+  if (hls) { avsync.reload(hls); renderSync(); return; }
+  if (!avMs || avBlocked()) return;
+  const v = el.video, t = v.currentTime, live = isLive();
+  showMsg('Passo al lettore che permette la sincronia…', 2500);
+  attach(current.stream).then(() => {
+    if (!live && t > 1) v.addEventListener('loadedmetadata', () => { v.currentTime = t; }, { once: true });
+    return v.play().catch(() => {});
+  }).catch(e => showMsg(e.message)).then(renderSync);
+}
+function openSync() {
+  if (!current) return;
+  closePanel();
+  if (!el.epg.hidden) el.epg.hidden = true;
+  el.syncBox.hidden = false;
+  renderSync();
+  const first = [el.syncLater, el.syncEarlier, el.syncReset].find(b => !b.disabled) || el.syncClose;
+  first.focus({ preventScroll: true });
+}
+function closeSync() {
+  if (el.syncBox.hidden) return;
+  el.syncBox.hidden = true;
+  if (document.activeElement && el.syncBox.contains(document.activeElement)) document.activeElement.blur();
+  if (!el.sync.hidden) el.sync.focus({ preventScroll: true });
+  wake();
+}
+el.sync.addEventListener('click', () => { if (el.syncBox.hidden) openSync(); else closeSync(); });
+el.syncClose.addEventListener('click', closeSync);
+el.syncEarlier.addEventListener('click', () => setAv(avMs - AV_STEP));
+el.syncLater.addEventListener('click', () => setAv(avMs + AV_STEP));
+el.syncReset.addEventListener('click', () => { setAv(0); (el.syncLater.disabled ? el.syncClose : el.syncLater).focus({ preventScroll: true }); });
 
 setInterval(() => { if (isOpen()) showProgramme(); }, 30000);
 epg.onUpdate(() => { if (isOpen()) showProgramme(); });
@@ -852,6 +961,7 @@ function renderPanel() {
 function openPanel() {
   if (!channels) return;
   if (!el.epg.hidden) { el.epg.hidden = true; }
+  el.syncBox.hidden = true;
   renderPanel();
   el.panel.hidden = false;
   el.chNum.value = '';
@@ -986,7 +1096,7 @@ let swipe = null;          // touch start, for vertical swipes = channel up/down
 let swallowClick = false;
 el.root.addEventListener('pointerdown', (e) => {
   lastPointer = e.pointerType || 'mouse';
-  const onBackground = !e.target.closest('.player-top, .player-bottom, .player-channels, .player-epg');
+  const onBackground = !e.target.closest('.player-top, .player-bottom, .player-channels, .player-epg, .player-sync');
   // Swipes that start near the screen edges are the system's (home bar, notifications, back): ignore them.
   const H = innerHeight, W = innerWidth, edgeY = Math.max(64, H * 0.15), edgeX = 32;
   const inEdge = e.clientY < edgeY || e.clientY > H - edgeY || e.clientX < edgeX || e.clientX > W - edgeX;
@@ -1016,6 +1126,7 @@ function onBackgroundTap() {
   if (swallowClick) { swallowClick = false; return; }
   // automatic full screen got lost (back from the floating window, back gesture…): a tap restores it
   if (lastPointer === 'touch' && autoFullscreen()) { wake(); return; }
+  if (!el.syncBox.hidden) { closeSync(); return; }
   if (!el.panel.hidden) { closePanel(); return; }
   if (!el.epg.hidden) { closeInfo(); return; }
   const hidden = el.ui.classList.contains('idle');

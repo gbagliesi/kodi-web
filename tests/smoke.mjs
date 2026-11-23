@@ -311,6 +311,49 @@ async function uiTests() {
     assert.equal(await page.isVisible('#player'), false);
     console.log('✓ live TV: change channel inside the player (CH +/−, arrows, number, channel list)');
 
+    // Audio/video sync: A/V button, ±50 ms steps, saved per channel, Azzera
+    await page.locator('.row:has-text("Rai 1")').first().click();
+    await page.waitForSelector('#player:not([hidden])');
+    await waitFor(async () => /rai1\.m3u8/.test(await nowSrc()));
+    const wasNative = await page.evaluate(() => { const n = !window.__hlsSrc; window.__hlsSrc = ''; return n; });
+    assert.equal(await page.isVisible('#pl-sync'), true, 'A/V button visible for video');
+    await page.click('#pl-sync');
+    await page.waitForSelector('#pl-syncbox:not([hidden])');
+    assert.equal(await page.isDisabled('#pl-syncreset'), true);
+    for (let i = 0; i < 3; i++) await page.click('#pl-synclater');
+    assert.equal(await page.textContent('#pl-syncval'), '+150 ms');
+    assert.match(await page.textContent('#pl-syncnote'), /150 ms dopo/);
+    assert.equal(await page.textContent('#pl-syncbadge'), '+150 ms');
+    const avSaved = await page.evaluate(() => JSON.parse(localStorage.getItem('salotto:avsync')));
+    assert.deepEqual(Object.values(avSaved), [150], 'sync saved for one channel');
+    assert.match(Object.keys(avSaved)[0], /Rai 1|rai1/);
+    if (SHOTS) await page.screenshot({ path: SHOTS + '/avsync.png' });
+    // a native player (iPad) switches to hls.js so the sound can be moved
+    if (wasNative) {
+      await waitFor(async () => /rai1\.m3u8/.test(await page.evaluate(() => window.__hlsSrc)));
+      await page.evaluate(() => { window.__hlsSrc = ''; });
+    }
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isVisible('#pl-syncbox'), false, 'Escape closes the sync box first');
+    assert.equal(await page.isVisible('#player'), true);
+    await page.click('#pl-chup');
+    await waitFor(async () => /la7\.m3u8/.test(await nowSrc()));
+    assert.equal(await page.textContent('#pl-syncbadge'), '', 'another channel keeps its own sync (none)');
+    await page.click('#pl-chdown');
+    await waitFor(async () => /rai1\.m3u8/.test(await nowSrc()));
+    assert.equal(await page.textContent('#pl-syncbadge'), '+150 ms', 'the channel remembers its sync');
+    await page.click('#pl-sync');
+    await page.click('#pl-syncearlier');
+    assert.equal(await page.textContent('#pl-syncval'), '+100 ms');
+    await page.click('#pl-syncreset');
+    assert.equal(await page.textContent('#pl-syncval'), '0 ms');
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('salotto:avsync'))), {}, 'Azzera forgets the channel sync');
+    await page.click('#pl-syncclose');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isVisible('#player'), false);
+    await page.evaluate(() => { window.__hlsSrc = ''; });
+    console.log('✓ audio/video sync: A/V button, steps, saved per channel, reset');
+
     // TV guide: grid of channels and times, OK on what is on opens the channel
     await page.evaluate(() => { location.hash = '#/guide'; });
     await page.waitForSelector('.guide .grow');

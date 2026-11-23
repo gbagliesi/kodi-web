@@ -73,6 +73,7 @@
           <button class="icon-btn focusable" id="pl-fwd" aria-label="Avanti 30 secondi">30 &#8635;</button>
           <button class="icon-btn focusable ch-btn" id="pl-chup" aria-label="Canale successivo" hidden>CH +</button>
           <div class="spacer"></div>
+          <button class="icon-btn focusable sync-btn" id="pl-sync" aria-label="Sincronia audio" title="Sincronia audio: voce prima o dopo il video" hidden>A/V<span class="sync-badge" id="pl-syncbadge"></span></button>
           <input type="range" id="pl-vol" class="focusable" min="0" max="100" value="100" aria-label="Volume">
           <button class="icon-btn focusable" id="pl-pip" aria-label="Finestra mobile" title="Finestra mobile" hidden><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19 11h-8v6h8v-6zm4 8V5a2 2 0 0 0-2-2H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2zm-2 0H3V5h18v14z"/></svg></button>
           <button class="icon-btn focusable" id="pl-fs" aria-label="Schermo intero">&#9974;</button>
@@ -85,6 +86,16 @@
     <div class="player-epg" id="pl-epg" hidden>
       <div class="channels-head"><div class="epg-ch" id="pl-epg-ch"></div><button class="icon-btn focusable" id="pl-epgclose" aria-label="Chiudi">&#10005;</button></div>
       <div class="epg-list" id="pl-epg-body"></div>
+    </div>
+    <div class="player-sync" id="pl-syncbox" hidden>
+      <div class="channels-head"><div class="epg-ch">Sincronia audio</div><button class="icon-btn focusable" id="pl-syncclose" aria-label="Chiudi">&#10005;</button></div>
+      <div class="sync-row">
+        <button class="icon-btn focusable sync-step" id="pl-syncearlier" aria-label="Voce prima (50 ms)">&#9664; Voce prima</button>
+        <div class="sync-val" id="pl-syncval">0 ms</div>
+        <button class="icon-btn focusable sync-step" id="pl-synclater" aria-label="Voce dopo (50 ms)">Voce dopo &#9654;</button>
+      </div>
+      <div class="sync-note" id="pl-syncnote"></div>
+      <div class="sync-actions"><button class="btn focusable" id="pl-syncreset">Azzera</button></div>
     </div>
     <div class="player-channels" id="pl-channels" hidden>
       <div class="channels-head">

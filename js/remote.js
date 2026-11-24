@@ -1,6 +1,7 @@
 // Phone remote (remote/index.html). Talks to one Salotto screen through the relay of the Cloudflare
 // Worker: see remote-host.js for the screen side and the messages.
 import * as epg from './epg.js';
+import { BUILD, versionLabel } from './version.js';
 
 const $ = (id) => document.getElementById(id);
 const KEY = 'salotto-remote:screens';
@@ -606,3 +607,32 @@ setView();
 epg.load().then(renderState);
 connect();
 window.salottoRemote = { get state() { return state; }, get list() { return list; }, get sources() { return sources; } };
+
+// ---------------------------------------------------------------- updates
+// The installed app updates itself: when a newer Salotto is published (checked at start and
+// every time the app comes back on screen) it reloads; «Forza aggiornamento» also empties the cache.
+$('r-version').textContent = 'Versione ' + versionLabel();
+function freshReload() {
+  const u = new URL(location.href);
+  u.searchParams.set('r', Date.now());
+  location.replace(u.href);
+}
+async function forceUpdate() {
+  toast('Aggiornamento…');
+  try { if (window.caches) for (const k of await caches.keys()) if (k !== 'salotto-addon-data') await caches.delete(k); } catch { /* ignore */ }
+  try { for (const r of await navigator.serviceWorker?.getRegistrations?.() || []) await r.update(); } catch { /* ignore */ }
+  freshReload();
+}
+$('r-update').addEventListener('click', forceUpdate);
+let lastCheck = 0;
+async function checkUpdate() {
+  if (BUILD.startsWith('__') || Date.now() - lastCheck < 60000) return;
+  lastCheck = Date.now();
+  try {
+    const txt = await (await fetch(new URL('version.js?t=' + Date.now(), import.meta.url), { cache: 'no-store' })).text();
+    const m = txt.match(/BUILD = '([^']*)'/);
+    if (m && !m[1].startsWith('__') && m[1] !== BUILD) { toast('Nuova versione, aggiorno…'); setTimeout(forceUpdate, 800); }
+  } catch { /* offline */ }
+}
+setTimeout(checkUpdate, 3000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });

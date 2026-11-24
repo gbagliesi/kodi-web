@@ -112,10 +112,16 @@ async function sendChannels(src) {
 
 // Keys from the phone's arrows: they go through the same handlers as a keyboard or TV remote.
 function pressKey(key) {
-  if (key === 'Back') { handlers?.back(); return; }
+  if (key === 'Back') {
+    // in the player: list / info → controls → close, like a TV remote
+    if (player.isOpen() && document.getElementById('modal')?.hidden !== false) player.back(true);
+    else handlers?.back();
+    return;
+  }
   document.body.classList.add('kbd-nav');
   const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : document;
   const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  ev.salottoRemote = true; // the player then treats the arrows like a TV remote's
   target.dispatchEvent(ev);
   if (ev.defaultPrevented || key !== 'Enter') return;
   // a synthetic Enter doesn't press the focused button by itself

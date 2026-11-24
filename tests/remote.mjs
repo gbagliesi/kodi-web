@@ -205,6 +205,38 @@ async function uiTests() {
     await waitFor(() => tv.evaluate(() => !document.getElementById('video').muted));
     console.log('✓ volume and mute');
 
+    // arrows like a TV remote: controls hidden → ▲▼ change channel; OK shows the controls,
+    // then ▲▼ move among them without changing channel; Back hides them again
+    const press = async (sel) => { await ph.dispatchEvent(sel, 'pointerdown'); await ph.dispatchEvent(sel, 'pointerup'); };
+    const titleNow = () => tv.textContent('#pl-title');
+    await tv.evaluate(() => { document.activeElement?.blur(); document.getElementById('player-ui').classList.add('idle'); });
+    const before = await titleNow();
+    await press('.r-dpad .up');
+    await waitFor(() => titleNow().then(t => t !== before), 5000, 'd-pad zaps when the controls are hidden');
+    await waitFor(() => tv.evaluate(() => !document.getElementById('pl-msg').textContent.startsWith('Sintonizzo')), 5000);
+    // controls shown by the mouse (not by the phone): the first OK must not press ⏯
+    await tv.evaluate(() => {
+      const v = document.getElementById('video'); window.__pp = 0;
+      v.play = () => { window.__pp++; return Promise.resolve(); }; v.pause = () => { window.__pp++; };
+      document.getElementById('pl-play').focus();
+    });
+    await tv.mouse.move(600, 300); await tv.mouse.move(640, 320);
+    await ph.click('.r-dpad .ok');
+    await waitFor(() => tv.evaluate(() => !document.getElementById('player-ui').classList.contains('idle') && document.activeElement?.id === 'pl-play'), 5000, 'OK shows controls');
+    assert.equal(await tv.evaluate(() => window.__pp), 0, 'first OK only opens the menu');
+    await ph.click('.r-dpad .ok');
+    await waitFor(() => tv.evaluate(() => window.__pp === 1), 5000, 'second OK presses ⏯');
+    const shown = await titleNow();
+    await press('.r-dpad .down');
+    await press('.r-dpad .up');
+    await new Promise(r => setTimeout(r, 900));
+    assert.equal(await titleNow(), shown, 'with the controls shown the arrows do not change channel');
+    assert.equal(await tv.evaluate(() => document.getElementById('player').contains(document.activeElement)), true);
+    await ph.click('[data-key=Back]');
+    await waitFor(() => tv.evaluate(() => document.getElementById('player-ui').classList.contains('idle')), 5000, 'Back hides controls');
+    assert.equal(await tv.evaluate(() => window.salotto.player.isOpen()), true);
+    console.log('✓ phone arrows: zap with controls hidden, navigate the controls after OK, Back hides them');
+
     // full screen: entered at once or after a tap on the screen, left from the phone
     await ph.click('#r-fs');
     await waitFor(() => tv.evaluate(() => !!document.fullscreenElement || !document.getElementById('fs-hint').hidden), 5000, 'fs asked');
@@ -251,9 +283,9 @@ async function uiTests() {
     }
     const focused = await tv.evaluate(() => document.activeElement.textContent.trim());
     await ph.click('.r-dpad .ok');
-    await waitFor(() => tv.evaluate(() => location.hash !== '#/'), 5000, 'OK pressed ' + focused);
+    await waitFor(() => tv.evaluate(() => location.hash !== '#/' || !document.getElementById('modal').hidden), 5000, 'OK pressed ' + focused);
     await ph.click('[data-key=Back]');
-    await waitFor(() => tv.evaluate(() => location.hash === '#/' || location.hash === ''), 5000, 'back');
+    await waitFor(() => tv.evaluate(() => (location.hash === '#/' || location.hash === '') && document.getElementById('modal').hidden), 5000, 'back');
     console.log('✓ arrows, OK and Back move around the screen (' + focused + ')');
 
     // stop from the phone

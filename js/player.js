@@ -351,11 +351,11 @@ export async function play(item, stream, opts = {}) {
 }
 
 /** Remote "Back": channel list → controls (TV) → close the player. */
-export function back() {
+export function back(remote = false) {
   if (!el.syncBox.hidden) { closeSync(); return; }
   if (!el.panel.hidden) { closePanel(); return; }
   if (!el.epg.hidden) { closeInfo(); return; }
-  if (document.body.classList.contains('tv') && !el.ui.classList.contains('idle')) { hideControls(); return; }
+  if ((remote || document.body.classList.contains('tv')) && !el.ui.classList.contains('idle')) { hideControls(); return; }
   close();
 }
 
@@ -469,16 +469,20 @@ export function handleKey(e) {
     if (e.key === 'Enter') { const n = parseInt(el.chNum.value, 10); if (n) { closePanel(); jumpTo(n); } return true; }
     return false; // typing in the channel number box
   }
-  if (document.body.classList.contains('tv')) {
+  // the phone remote's arrows work like a TV remote's, whatever the screen
+  if (document.body.classList.contains('tv') || e.salottoRemote === true) {
     // TV remote: with the controls hidden, ▲▼ change channel, ◀▶ skip, OK shows the controls;
     // with the controls shown, the arrows move between the buttons (top bar included).
-    const idle = el.ui.classList.contains('idle');
+    // The phone opens the menu only with its own OK: controls shown by a mouse move or a new
+    // channel count as hidden, so its first OK never presses ⏯ by mistake.
+    const idle = el.ui.classList.contains('idle') || (e.salottoRemote === true && !remoteMenu);
     const inPanel = inSidePanel(document.activeElement);
+    if (e.salottoRemote === true && (inPanel || (!idle && (e.key === 'Enter' || e.key.startsWith('Arrow'))))) remoteMenu = true;
     if ((e.key === 'ContextMenu' || e.key === 'c') && channels) { togglePanel(); wake(); return true; }
     if (idle && !inPanel) {
       if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && channels) { zap(e.key === 'ArrowUp' ? 1 : -1); return true; }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { skip(e.key === 'ArrowLeft' ? -10 : 30); return true; }
-      if (e.key === 'Enter') { wake(); el.play.focus({ preventScroll: true }); return true; }
+      if (e.key === 'Enter') { wake(); el.play.focus({ preventScroll: true }); if (e.salottoRemote === true) remoteMenu = true; return true; }
     }
     // Position bar: ◀ goes back 10 s, ▶ jumps to the LIVE button on live TV (OK returns to the
     // live broadcast) or forward 30 s on a video; the bar's own 1/1000 steps are useless on a remote
@@ -1259,3 +1263,7 @@ export async function remoteFullscreen() {
   try { await enterPageFs(); return 'on'; } catch { armFs(true); setTimeout(() => armFs(false), 20000); return 'blocked'; }
 }
 export const isFullscreen = () => !!fsElement();
+
+// the phone's OK opened the controls ("menu"); cleared when they hide again
+let remoteMenu = false;
+new MutationObserver(() => { if (el.ui.classList.contains('idle')) remoteMenu = false; }).observe(el.ui, { attributes: true, attributeFilter: ['class'] });

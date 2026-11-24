@@ -8,8 +8,8 @@ const MOBILE = /iPad|iPhone|iPod|Android|Mobile|Silk|AFT/.test(UA) || TOUCH_MAC;
 
 export const MODELS = {
   base: { id: 'onnx-community/whisper-base', label: 'Veloce', size: 'circa 150 MB', note: 'leggero, sbaglia più spesso' },
-  small: { id: 'onnx-community/whisper-small', label: 'Bilanciata', size: 'circa 300 MB', note: 'consigliata' },
-  turbo: { id: 'onnx-community/whisper-large-v3-turbo', label: 'Massima', size: 'circa 1,2 GB', note: 'solo computer potenti' },
+  small: { id: 'onnx-community/whisper-small', label: 'Bilanciata', size: 'circa 400 MB', note: 'consigliata' },
+  turbo: { id: 'onnx-community/whisper-large-v3-turbo', label: 'Massima', size: 'circa 1,5 GB', note: 'solo computer potenti' },
 };
 
 // Chrome and Edge copy the sound with captureStream(), which leaves the video alone. Elsewhere

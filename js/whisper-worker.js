@@ -32,16 +32,28 @@ async function load({ model, device, dtype }) {
   const { pipeline, env } = await import(LIB);
   env.allowLocalModels = false;
   const progress = (p) => { if (p.status === 'progress_total') post({ type: 'progress', loaded: p.loaded, total: p.total }); };
-  const make = (dev, dt) => pipeline('automatic-speech-recognition', model, { device: dev, dtype: dt, progress_callback: progress });
-  try {
-    transcriber = await make(device, dtype);
-  } catch (e) {
-    // half precision is not available on every graphics card: retry in full precision
-    if (device === 'webgpu' && dtype?.encoder_model === 'fp16') transcriber = await make(device, { ...dtype, encoder_model: 'fp32' });
-    else throw e;
+  const make = (m, dev, dt) => pipeline('automatic-speech-recognition', m, { device: dev, dtype: dt, progress_callback: progress });
+  const warm = (t) => t(new Float32Array(RATE), { language: 'italian', task: 'transcribe' });
+  const attempts = [[model, device, dtype]];
+  // half precision is not available on every graphics card: retry in full precision
+  if (device === 'webgpu' && dtype?.encoder_model === 'fp16') attempts.push([model, device, { ...dtype, encoder_model: 'fp32' }]);
+  // no usable WebGPU in this worker (it happens in Safari): the light model on the processor
+  if (device === 'webgpu') attempts.push(['onnx-community/whisper-base', 'wasm', 'q8']);
+  let lastErr = null;
+  for (const [m, dev, dt] of attempts) {
+    try {
+      const t = await make(m, dev, dt);
+      // first run compiles the graphics shaders: do it now on silence, not on the first sentence
+      await warm(t);
+      transcriber = t;
+      if (dev !== device) post({ type: 'fallback', message: String(lastErr?.message || lastErr || '') });
+      break;
+    } catch (e) {
+      lastErr = e;
+      post({ type: 'error', message: dev + ': ' + String(e?.message || e) });
+    }
   }
-  // first run compiles the graphics shaders: do it now on silence, not on the first sentence
-  await transcriber(new Float32Array(RATE), { language: 'italian', task: 'transcribe' });
+  if (!transcriber) throw lastErr;
   post({ type: 'ready' });
 }
 

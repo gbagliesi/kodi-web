@@ -70,8 +70,11 @@ vecchi link e QR funzionano ancora.
     scelto;
   - con l'elenco dei canali, l'info o la sincronia audio aperti sullo schermo,
     ▲▼ si muovono dentro l'elenco (la voce scelta è evidenziata) e OK la
-    apre, anche se la finestra di Salotto non è in primo piano;
-  - fuori dal video le frecce si muovono nei menu di Salotto.
+    apre;
+  - fuori dal video le frecce si muovono nei menu di Salotto e nella Guida TV.
+- Tutto questo funziona anche se la finestra di Salotto non è in primo piano
+  (per esempio sul Mac con un'altra app davanti): la voce scelta resta
+  evidenziata e, quando torni alla finestra, il cursore è lì.
 - **↩ Indietro** chiude l'elenco o l'info, poi il menu, poi il video. Fuori
   dal video torna alla pagina precedente.
 - **⌂ Home**, **☰ Elenco** (l'elenco dei canali sullo schermo), **ⓘ Info**

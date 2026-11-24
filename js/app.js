@@ -1,3 +1,4 @@
+import { focused, hooks as focusHooks } from './focus.js';
 import * as store from './storage.js';
 import * as addons from './addons.js';
 import * as player from './player.js';
@@ -53,7 +54,7 @@ export function toast(msg, ms = 3000) {
 function modal({ title, body, actions }) {
   return new Promise((resolve) => {
     const m = $('modal');
-    const prevFocus = document.activeElement;
+    const prevFocus = focused();
     $('modal-title').textContent = title;
     const b = $('modal-body'); fill(b, body || '');
     const a = $('modal-actions'); fill(a);
@@ -1240,7 +1241,7 @@ document.addEventListener('keydown', (e) => {
   const modalEl = $('modal');
   if (!modalEl.hidden && e.key === 'Escape') { modalEl._close?.(undefined); e.preventDefault(); return; }
   if (player.handleKey(e)) { e.preventDefault(); return; }
-  const a = document.activeElement;
+  const a = focused();
   const typing = a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !['checkbox', 'range', 'button'].includes(a.type)));
   if ((e.key === 'Backspace' || e.key === 'Escape' || e.key === 'BrowserBack') && !typing && modalEl.hidden) {
     if (location.hash && location.hash !== '#/') { history.back(); e.preventDefault(); }
@@ -1289,7 +1290,7 @@ console.info('Salotto', versionLabel());
 })();
 
 // exposed for debugging / tests
-window.salotto = { addons, store, player };
+window.salotto = { addons, store, player, focusHooks };
 
 // ---------------------------------------------------------------- Fire TV / Android TV app
 // The TV app (android/) is a window on this site: its user agent ends with "SalottoTV".

@@ -3,6 +3,7 @@
 // (remote/) connect to the same room. The room id is random and travels only in the QR code.
 // Messages are small JSON objects: the phone sends {t:'cmd'|'hello'|'get'}, the screen answers
 // with {t:'state'|'list'|'sources'|'channels'|'toast'}.
+import { focused } from './focus.js';
 import { load, save, getSettings } from './storage.js';
 import { buildProxyUrl } from './addons.js';
 import * as player from './player.js';
@@ -119,13 +120,13 @@ function pressKey(key) {
     return;
   }
   document.body.classList.add('kbd-nav');
-  const target = document.activeElement && document.activeElement !== document.body ? document.activeElement : document;
+  const target = focused() && focused() !== document.body ? focused() : document;
   const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
   ev.salottoRemote = true; // the player then treats the arrows like a TV remote's
   target.dispatchEvent(ev);
   if (ev.defaultPrevented || key !== 'Enter') return;
   // a synthetic Enter doesn't press the focused button by itself
-  const a = document.activeElement;
+  const a = focused();
   if (a && a !== document.body && typeof a.click === 'function' && !(a.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(a.type))) a.click();
 }
 

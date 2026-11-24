@@ -130,10 +130,18 @@ function toAdts(d, cfg) {
 }
 
 // ---- following an hls.js instance
-/** Remember the audio init segment from the start (the tap may begin later). */
+/** Remember the audio init segment and the last pieces from the start: the tap may begin later,
+ * when hls.js has already buffered the next ~20 s (they would be missed, and the first words
+ * would wait for the video to reach the first piece appended after it). */
 export function watchInit(hls) {
+  hls.__audioPieces = [];
   hls.on(window.Hls.Events.BUFFER_APPENDING, (_, d) => {
-    if (d.type === 'audio' && d.data?.length && find(d.data, 0, d.data.length, ['moov'])) hls.__audioInit = d.data;
+    if (d.type !== 'audio' || !d.data?.length) return;
+    if (find(d.data, 0, d.data.length, ['moov'])) { hls.__audioInit = d.data.slice(); return; }
+    const start = (d.part || d.frag)?.start;
+    if (typeof start !== 'number') return;
+    hls.__audioPieces.push({ data: d.data.slice(), start });
+    if (hls.__audioPieces.length > 12) hls.__audioPieces.shift();
   });
 }
 
@@ -151,6 +159,10 @@ export function tapHls(hls, video, cb) {
   let generation = 0;
   const onAppend = (_, d) => {
     if (d.type !== 'audio' || !d.data?.length) return;
+    take(d.data, (d.part || d.frag)?.start ?? video.currentTime);
+  };
+  const take = (data, start) => {
+    const d = { data };
     try {
       if (find(d.data, 0, d.data.length, ['moov'])) {
         const c = audioConfig(d.data);
@@ -160,7 +172,6 @@ export function tapHls(hls, video, cb) {
       if (!cfg) return;
       const adts = toAdts(d.data, cfg);
       if (!adts) return;
-      const start = (d.part || d.frag)?.start ?? video.currentTime;
       const gen = generation;
       decodeCtx().decodeAudioData(adts.buffer.slice(0)).then((buf) => {
         if (gen !== generation) return;
@@ -178,11 +189,15 @@ export function tapHls(hls, video, cb) {
     const t = video.currentTime;
     while (queue.length && queue[0].start <= t) {
       const q = queue.shift();
-      if (q.end < t - 10) continue; // long gone (a jump forward)
-      cb(q.pcm, q.rate);
+      if (q.end <= t - 1) continue; // already heard (buffered before the tap, or a jump forward)
+      // a piece already playing: from about now (a second of margin for the words in progress)
+      const skip = Math.max(0, Math.floor((t - 1 - q.start) * q.rate));
+      cb(skip ? q.pcm.slice(skip) : q.pcm, q.rate);
     }
   }, 250);
   const onSeek = () => { generation++; queue = queue.filter(q => q.end > video.currentTime); };
+  // what hls.js buffered before the tap began, still ahead of (or at) the video
+  for (const p of hls.__audioPieces || []) if (p.start > video.currentTime - 15) take(p.data, p.start);
   hls.on(E.BUFFER_APPENDING, onAppend);
   video.addEventListener('seeking', onSeek);
   return () => {

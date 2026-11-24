@@ -203,8 +203,27 @@ try {
   // another channel: generated again by themselves, through hls.js from the start
   await sp.evaluate(() => import('/js/player.js').then(p => p.play({ label: 'Safari 2', type: 'video' }, { url: 'https://media.test/av.m3u8?2' })));
   await waitFor(() => sp.evaluate(() => /Buongiorno/.test(document.getElementById('pl-subs').textContent)), 20000, 'Safari next channel');
+  // a Rai «Ⓖ» channel: a redirector without CORS; the proxy says where it leads and hls.js
+  // fetches the real stream itself
+  await saf.route('https://relinker.test/**', r => r.fulfill({ status: 302, headers: { location: 'https://media.test/av.m3u8?3' } }));
+  let resolved = 0;
+  await saf.route(u => u.pathname.endsWith('/proxy') && u.searchParams.get('resolve') === '1', r => {
+    resolved++;
+    assert.equal(new URL(r.request().url()).searchParams.get('url'), 'https://relinker.test/rel?cont=1');
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: 'https://media.test/av.m3u8?3', status: 200, type: 'application/vnd.apple.mpegurl' }), headers: { 'access-control-allow-origin': '*' } });
+  });
+  await sp.evaluate(() => { document.getElementById('pl-subs').textContent = ''; });
+  await sp.evaluate(() => import('/js/player.js').then(p => p.play({ label: 'Rai G', type: 'video', live: true }, { url: 'https://relinker.test/rel?cont=1', mime: 'application/vnd.apple.mpegurl' })));
+  await waitFor(() => sp.evaluate(() => /Buongiorno/.test(document.getElementById('pl-subs').textContent)), 20000, 'Safari relinker channel');
+  assert.equal(resolved, 1, 'redirector resolved once through the proxy');
+  assert.match(await sp.textContent('#pl-route'), /Diretto/, 'the real stream is fetched directly');
+  // Spenti: for every channel, and Safari goes back to its own player
+  await sp.evaluate(() => import('/js/player.js').then(p => p.toggleSubs()));
+  assert.equal(await sp.evaluate(() => import('/js/subtitles.js').then(s => s.wantsMse() || s.state().on)), false, 'off: no hls.js needed any more');
+  await sp.evaluate(() => import('/js/player.js').then(p => p.play({ label: 'Safari 4', type: 'video' }, { url: 'https://media.test/av.m3u8?4' })));
+  assert.equal(await sp.evaluate(() => import('/js/subtitles.js').then(s => s.state().on)), false, 'still off on the next channel');
   await saf.close();
-  console.log('✓ Safari-like browser: the sound reaches Whisper from hls.js audio pieces (ADTS + decodeAudioData), "Generati" remembered');
+  console.log('✓ Safari-like browser: the sound reaches Whisper from hls.js audio pieces (ADTS + decodeAudioData), "Generati" remembered, Rai «Ⓖ» redirector resolved through the proxy');
 
   // ---- iPad: no generated subtitles (too heavy), the reason is shown
   const ipad = await browser.newContext({ ...devices['iPad Pro 11 landscape'], serviceWorkers: 'block' });

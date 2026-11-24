@@ -162,6 +162,12 @@ function showRoute(proxied, where = '') {
   el.route.hidden = false;
 }
 
+function nativeWanted() {
+  const avShift = !!avMs && hasMse() && !avNative;
+  const subsMse = subs.wantsMse() && hasMse() && !subsNative;
+  return !!el.video.canPlayType('application/vnd.apple.mpegurl') && !avShift && !subsMse && (APPLE || !hasMse() || (TV_APP && nativeStage < 2));
+}
+
 async function attach(stream) {
   destroyHls();
   const v = el.video;
@@ -174,15 +180,18 @@ async function attach(stream) {
   // Stick, about the same lip sync as hls.js), falling back to hls.js on error.
   // A channel with an audio/video sync needs hls.js (only Media Source can move the sound).
   // Generated subtitles on Safari: only hls.js lets the page hear the sound (see whisper.js).
-  const avShift = !!avMs && hasMse() && !avNative;
   const subsMse = subs.wantsMse() && hasMse() && !subsNative;
-  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && !avShift && !subsMse && (APPLE || !hasMse() || (TV_APP && nativeStage < 2));
+  const native = nativeWanted();
   // hls.js needs the channel's site to allow it (CORS): ask once instead of waiting ~30 s for its
   // errors, and go through the proxy straight away when it doesn't
   if (subsMse && !native && !stream.proxy && getProxy() && looksHls(stream.url, stream.mime) && !(await corsOk(stream.url))) {
-    stream = { ...stream, proxy: true };
-    if (current && current.stream.url === stream.url) current.stream = stream;
-    return attach(stream);
+    // a redirector without CORS (Rai «Ⓖ» relinker): the proxy only says where it leads, and the
+    // real stream (which allows it) is then fetched from here, from Italy, like the system player
+    const real = !stream.resolvedFrom && !stream.headers ? await resolveRedirect(stream.url) : '';
+    if (real && real !== stream.url && /\.m3u8(\?|$)/i.test(real) && await corsOk(real)) {
+      return attach({ ...stream, url: real, resolvedFrom: stream.url });
+    }
+    return attach({ ...stream, proxy: true });
   }
   if (looksHls(stream.url, stream.mime) && !native) {
     await loadScript(HLS_CDN);
@@ -214,7 +223,7 @@ async function attach(stream) {
       if (subsMse && v.canPlayType('application/vnd.apple.mpegurl')) {
         subsNative = true;
         subs.mseFailed();
-        attach(stream).then(() => v.play().catch(() => {}));
+        attach(stream.resolvedFrom ? { ...stream, url: stream.resolvedFrom, resolvedFrom: undefined } : stream).then(() => v.play().catch(() => {}));
         return;
       }
       const cors = data.type === window.Hls.ErrorTypes.NETWORK_ERROR && !getProxy();
@@ -251,6 +260,18 @@ async function corsOk(url) {
     })());
   }
   return corsCache.get(url);
+}
+
+/** Where a redirector leads, asked to the proxy ('' when it can't tell). */
+async function resolveRedirect(url) {
+  if (!getProxy()) return '';
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 6000);
+  try {
+    const r = await fetch(proxify(url) + '&resolve=1', { signal: ctl.signal, cache: 'no-store' });
+    const j = await r.json();
+    return j && j.status >= 200 && j.status < 300 && typeof j.url === 'string' ? j.url : '';
+  } catch { return ''; } finally { clearTimeout(timer); }
 }
 
 function destroyHls() {
@@ -990,9 +1011,11 @@ subs.init({
   hasProxy: () => !!getProxy(),
   wake: () => wake(),
   beforeOpen: () => { closePanel(); el.epg.hidden = true; el.syncBox.hidden = true; },
-  // generated subtitles on Safari: move from the system player to hls.js, where the sound can be heard
+  // generated subtitles on Safari: move from the system player to hls.js, where the sound can be
+  // heard, and back to the system player (direct, when the channel allows it) when they are off
   reattach: () => {
-    if (!current || casting || !localAttached || hls) return;
+    if (!current || casting || !localAttached || !looksHls(current.stream.url, current.stream.mime)) return;
+    if (nativeWanted() === !hls) return;
     const v = el.video, t = v.currentTime, live = isLive();
     attach(current.stream).then(() => {
       if (!live && t > 1) v.addEventListener('loadedmetadata', () => { v.currentTime = t; }, { once: true });
@@ -1150,7 +1173,13 @@ el.dur.addEventListener('click', () => { if (isLive() && el.dur.classList.contai
 const tvIdle = () => document.body.classList.contains('tv') && el.ui.classList.contains('idle');
 v.addEventListener('playing', () => { showMsg(''); el.play.innerHTML = '&#10074;&#10074;'; if (!tvIdle()) wake(); });
 v.addEventListener('pause', () => { el.play.innerHTML = '&#9654;'; if (!tvIdle()) wake(); saveResume(true); });
-v.addEventListener('waiting', () => showMsg('Buffering…'));
+// short waits (a channel change, a quick reload of the playlist) don't flash «Buffering…»
+let waitTimer = 0;
+v.addEventListener('waiting', () => {
+  clearTimeout(waitTimer);
+  waitTimer = setTimeout(() => { if (v.readyState < 3 && !v.paused) showMsg('Buffering…'); }, 1200);
+});
+for (const ev of ['playing', 'canplay', 'pause', 'emptied']) v.addEventListener(ev, () => clearTimeout(waitTimer));
 for (const ev of ['play', 'pause', 'playing', 'volumechange']) v.addEventListener(ev, () => changed());
 v.addEventListener('volumechange', () => { el.vol.value = Math.round(v.volume * 100); });
 v.addEventListener('ended', () => { if (current) setResume(current.key, 0, 0); el.play.innerHTML = '&#9654;'; });

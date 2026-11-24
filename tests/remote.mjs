@@ -272,6 +272,38 @@ async function uiTests() {
     await waitFor(() => tv.isVisible('#pl-epg'), 5000, 'info on screen');
     if (SHOTS) await ph.screenshot({ path: path.join(SHOTS, 'remote-pad.png') });
 
+    // the screen's window in the background: focus() does nothing there. With the info or the
+    // channel list open, the phone's ▲▼ still move inside them and never change channel
+    await ph.click('[data-key=Back]');
+    await waitFor(() => tv.evaluate(() => document.getElementById('pl-epg').hidden), 5000);
+    await tv.evaluate(() => { window.__focus = HTMLElement.prototype.focus; document.activeElement?.blur(); HTMLElement.prototype.focus = function () {}; });
+    await ph.click('[data-cmd=info]');
+    await waitFor(() => tv.isVisible('#pl-epg'), 5000, 'info on screen');
+    const inBox = () => tv.evaluate(() => !!document.querySelector('#pl-epg .rsel'));
+    await waitFor(inBox, 5000, 'info highlighted');
+    const inInfo = await titleNow();
+    await press('.r-dpad .down');
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(await inBox(), true, 'down stays inside the info');
+    await new Promise(r => setTimeout(r, 600));
+    assert.equal(await titleNow(), inInfo, 'info open: ▼ does not change channel');
+    await ph.click('[data-key=Back]');
+    await waitFor(() => tv.evaluate(() => document.getElementById('pl-epg').hidden), 5000, 'Back closes the info');
+    await ph.click('[data-cmd=panel]');
+    await waitFor(() => tv.isVisible('#pl-channels'), 5000, 'list on screen');
+    await waitFor(() => tv.evaluate(() => document.querySelector('.rsel')?.classList.contains('current')), 5000, 'list starts on the current channel');
+    const last = await tv.evaluate(() => document.querySelector('.rsel') === document.querySelector('#pl-chitems').lastElementChild);
+    await press(last ? '.r-dpad .up' : '.r-dpad .down');
+    await waitFor(() => tv.evaluate(() => { const r = document.querySelector('.rsel'); return r && r.classList.contains('ch-row') && !r.classList.contains('current'); }), 5000, 'arrow moves in the list');
+    await new Promise(r => setTimeout(r, 600));
+    assert.equal(await titleNow(), inInfo, 'list open: the arrow does not change channel');
+    const picked = await tv.evaluate(() => document.querySelector('.rsel .ch-name').textContent);
+    await ph.click('.r-dpad .ok');
+    await waitFor(() => titleNow().then(t => t.includes(picked)), 5000, 'OK opens the highlighted channel');
+    await tv.evaluate(() => { HTMLElement.prototype.focus = window.__focus; });
+    await waitFor(() => tv.evaluate(() => !document.getElementById('pl-msg').textContent.startsWith('Sintonizzo')), 5000);
+    console.log('✓ window in the background: ▲▼ move in the info and the channel list, OK opens the channel');
+
     // guide tab
     await ph.click('.r-tabbtn[data-tab=guide]');
     await ph.waitForSelector('.r-g-title:has-text("Telegiornale di prova")');

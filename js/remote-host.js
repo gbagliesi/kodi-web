@@ -141,9 +141,9 @@ async function onCommand(m) {
     case 'av': if (m.reset) player.avReset(); else player.avStep(m.d); break;
     case 'skip': if (st.open) player.skip(m.s); break;
     case 'live': if (st.open) player.goLive(); break;
-    case 'panel': if (st.open) player.togglePanel(); break;
-    case 'info': if (st.open) player.toggleInfo(); break;
-    case 'sync': if (st.open) player.toggleSync(); break;
+    case 'panel': if (st.open) { player.togglePanel(); player.remoteMarkBox(); } break;
+    case 'info': if (st.open) { player.toggleInfo(); player.remoteMarkBox(); } break;
+    case 'sync': if (st.open) { player.toggleSync(); player.remoteMarkBox(); } break;
     case 'stop': player.close(); break;
     case 'fs': {
       const r = await player.remoteFullscreen();

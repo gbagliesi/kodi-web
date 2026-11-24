@@ -469,6 +469,9 @@ export function handleKey(e) {
     if (e.key === 'Enter') { const n = parseInt(el.chNum.value, 10); if (n) { closePanel(); jumpTo(n); } return true; }
     return false; // typing in the channel number box
   }
+  // the phone remote in the channel list, programme info or A/V box: the open box decides,
+  // not the keyboard focus (a window in the background may not take focus())
+  if (e.salottoRemote === true && remoteBoxKey(e.key)) return true;
   // the phone remote's arrows work like a TV remote's, whatever the screen
   if (document.body.classList.contains('tv') || e.salottoRemote === true) {
     // TV remote: with the controls hidden, ▲▼ change channel, ◀▶ skip, OK shows the controls;
@@ -779,6 +782,70 @@ function closeInfo() {
 }
 
 export function toggleInfo() { if (el.epg.hidden) openInfo(); else closeInfo(); }
+// ---------------------------------------------------------------- phone remote inside a side box
+// The phone's arrows move a highlight of their own among the items of the open box (channel
+// list, programme info, A/V sync), and OK presses the highlighted one. Focus follows when the
+// browser allows it: a window that is not in front can ignore focus(), and then the arrows used
+// to fall through to the video and change channel.
+let remoteSel = null;
+function openBox() {
+  if (!el.syncBox.hidden) return el.syncBox;
+  if (!el.panel.hidden) return el.panel;
+  if (!el.epg.hidden) return el.epg;
+  return null;
+}
+function boxItems(box) {
+  return [...box.querySelectorAll('button, [tabindex="0"]')].filter(b => !b.hidden && !b.disabled && b.getClientRects().length);
+}
+function markRemote(b) {
+  if (remoteSel && remoteSel !== b) remoteSel.classList.remove('rsel');
+  remoteSel = b || null;
+  if (!b) return;
+  b.classList.add('rsel');
+  try { b.focus({ preventScroll: true }); } catch { /* ignore */ }
+  b.scrollIntoView({ block: 'nearest' });
+}
+function clearRemoteSel() { if (remoteSel) remoteSel.classList.remove('rsel'); remoteSel = null; }
+function selIn(items) {
+  const a = document.activeElement;
+  return items.includes(a) ? a : items.includes(remoteSel) ? remoteSel : null;
+}
+// where the highlight starts: the current channel, the programme on air, the first A/V step
+function startItem(box, items) {
+  if (box === el.panel) return box.querySelector('.ch-row.current') || items.find(b => b.classList.contains('ch-row')) || items[0];
+  if (box === el.epg) return box.querySelector('.epg-prog') || items[0];
+  return [el.syncLater, el.syncEarlier, el.syncReset].find(b => items.includes(b)) || items[0];
+}
+/** After the phone opened a box: highlight where its arrows start. */
+export function remoteMarkBox() {
+  const box = openBox();
+  if (!box) { clearRemoteSel(); return; }
+  remoteMenu = true;
+  const items = boxItems(box);
+  if (items.length) markRemote(selIn(items) || startItem(box, items));
+}
+function remoteBoxKey(key) {
+  const box = openBox();
+  if (!box) { clearRemoteSel(); return false; }
+  if (key !== 'Enter' && !key.startsWith('Arrow')) return false;
+  remoteMenu = true;
+  wake();
+  const items = boxItems(box);
+  if (!items.length) return true;
+  let cur = selIn(items);
+  if (!cur) {
+    // nothing highlighted yet: the first press shows where the highlight starts
+    cur = startItem(box, items);
+    if (key !== 'Enter') { markRemote(cur); return true; }
+  }
+  if (key === 'Enter') { markRemote(cur); cur.click(); return true; }
+  const horiz = key === 'ArrowLeft' || key === 'ArrowRight';
+  if (horiz && box !== el.syncBox) { markRemote(cur); return true; } // lists: ◀▶ do nothing
+  const d = key === 'ArrowUp' || key === 'ArrowLeft' ? -1 : 1;
+  markRemote(items[Math.max(0, Math.min(items.length - 1, items.indexOf(cur) + d))]);
+  return true;
+}
+
 const inSidePanel = (a) => (!el.panel.hidden && el.panel.contains(a)) || (!el.epg.hidden && el.epg.contains(a)) || (!el.syncBox.hidden && el.syncBox.contains(a));
 el.info.addEventListener('click', toggleInfo);
 el.prog.addEventListener('click', openInfo);

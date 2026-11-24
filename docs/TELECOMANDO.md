@@ -68,6 +68,9 @@ vecchi link e QR funzionano ancora.
   - il primo **OK** apre il menu dei comandi e non mette mai in pausa;
   - con il menu aperto le frecce si muovono tra i pulsanti e OK preme quello
     scelto;
+  - con l'elenco dei canali, l'info o la sincronia audio aperti sullo schermo,
+    ▲▼ si muovono dentro l'elenco (la voce scelta è evidenziata) e OK la
+    apre, anche se la finestra di Salotto non è in primo piano;
   - fuori dal video le frecce si muovono nei menu di Salotto.
 - **↩ Indietro** chiude l'elenco o l'info, poi il menu, poi il video. Fuori
   dal video torna alla pagina precedente.

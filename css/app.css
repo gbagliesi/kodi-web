@@ -104,6 +104,7 @@ button { cursor: pointer; }
 
 .focusable:focus { outline: none; }
 .focusable:focus-visible, .kbd-nav .focusable:focus { box-shadow: var(--focus); }
+.focusable.rsel { box-shadow: var(--focus); } /* phone remote highlight, even when the window is not in front */
 
 /* ---------- Home ---------- */
 .section-title { font-size: 15px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin: 22px 4px 12px; }

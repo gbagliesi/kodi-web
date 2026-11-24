@@ -84,7 +84,7 @@ Apri il Worker → **Edit code**, sostituisci tutto il codice con quello di
 
 ## Telecomando dal cellulare
 
-Il telecomando (Impostazioni → **Collega il cellulare**) passa dallo stesso
+Il telecomando (menu **📱 Telecomando** di Salotto) passa dallo stesso
 Worker: lo schermo e il cellulare si collegano a una "stanza" del Worker
 (un Durable Object, incluso nel piano gratuito), così funzionano anche se non
 sono sulla stessa rete Wi-Fi.

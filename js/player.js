@@ -294,6 +294,8 @@ function updateFavBtn() {
  *               lets the viewer switch live channel (CH +/−, swipe, arrows, number) without leaving.
  */
 export async function play(item, stream, opts = {}) {
+  // the guide may not be loaded yet (a channel opened from the phone, straight from Home)
+  if (item?.live || opts.channels) epg.load();
   triedProxy = false;
   triedHls = false;
   nativeStage = 0; nativeErr = 0;
@@ -766,6 +768,7 @@ function renderInfo() {
 
 function openInfo() {
   if (!current) return;
+  if (!epg.available()) epg.load();
   closePanel();
   el.syncBox.hidden = true;
   renderInfo();
@@ -934,7 +937,12 @@ el.syncLater.addEventListener('click', () => setAv(avMs + AV_STEP));
 el.syncReset.addEventListener('click', () => { setAv(0); (el.syncLater.disabled ? el.syncClose : el.syncLater).focus({ preventScroll: true }); });
 
 setInterval(() => { if (isOpen()) showProgramme(); }, 30000);
-epg.onUpdate(() => { if (isOpen()) showProgramme(); });
+epg.onUpdate(() => {
+  if (!isOpen()) return;
+  showProgramme();
+  if (!el.epg.hidden) renderInfo();
+  changed();
+});
 
 export const channelNumbers = (items) => numberChannels(items.map(item => ({ item })));
 const chNumber = (_it, i) => String(channels?.numbers?.[i] ?? i + 1);
@@ -943,7 +951,6 @@ function updateChannelUi() {
   const on = !!channels;
   el.chUp.hidden = el.chDown.hidden = el.chList.hidden = !on;
   if (!on) { el.panel.hidden = true; return; }
-  if (!el.panel.hidden) renderPanel();
 }
 
 function showOsd(index, text) {

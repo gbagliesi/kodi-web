@@ -1,6 +1,8 @@
 // Spatial navigation for keyboard, TV remotes and game pads (arrow keys + Enter).
 // Touch and mouse work natively; this only kicks in on key presses.
 
+import { focused } from './focus.js';
+
 const DIRS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
 function visible(el) {
@@ -16,11 +18,11 @@ function scope() {
   if (!player.hidden) {
     // the channel list covers part of the controls: while it has the focus, stay inside it
     const panel = document.getElementById('pl-channels');
-    if (panel && !panel.hidden && panel.contains(document.activeElement)) return panel;
+    if (panel && !panel.hidden && panel.contains(focused())) return panel;
     const info = document.getElementById('pl-epg');
-    if (info && !info.hidden && info.contains(document.activeElement)) return info;
+    if (info && !info.hidden && info.contains(focused())) return info;
     const sync = document.getElementById('pl-syncbox');
-    if (sync && !sync.hidden && sync.contains(document.activeElement)) return sync;
+    if (sync && !sync.hidden && sync.contains(focused())) return sync;
     return player;
   }
   return document.getElementById('app');
@@ -70,7 +72,7 @@ function sameRegion(cur, dir, list) {
 export function move(dir, repeating = false) {
   const list = focusables();
   if (!list.length) return false;
-  const cur = document.activeElement;
+  const cur = focused();
   if (!cur || !list.includes(cur)) {
     list[0].focus();
     return true;
@@ -90,7 +92,7 @@ export function move(dir, repeating = false) {
 export function handleNavKey(e) {
   const dir = DIRS[e.key];
   if (!dir) return false;
-  const a = document.activeElement;
+  const a = focused();
   // Let text fields and sliders keep their own horizontal arrow behaviour.
   // Text fields keep left/right for the cursor, but the arrow leaves the field at its ends
   // (otherwise a TV remote gets stuck in it); sliders keep left/right for their value.

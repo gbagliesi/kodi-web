@@ -1,5 +1,6 @@
 // Full-screen media player: native HTML5 playback, HLS via native support
 // (Safari / every iPad browser) or hls.js (desktop Chrome, Firefox, Android).
+import { focused } from './focus.js';
 import { getResume, setResume, getSettings, isFavourite, toggleFavourite, getAvSync, setAvSync } from './storage.js';
 import { getProxy, proxify } from './addons.js';
 import * as cast from './cast.js';
@@ -331,7 +332,7 @@ export async function play(item, stream, opts = {}) {
   if (casting) {
     const resume = getSettings().autoResume && !item.live ? getResume(current.key) : 0;
     await sendToCast(resume);
-    if (!opts.keepFocus || !el.root.contains(document.activeElement)) el.play.focus({ preventScroll: true });
+    if (!opts.keepFocus || !el.root.contains(focused())) el.play.focus({ preventScroll: true });
     changed(true);
     return;
   }
@@ -347,7 +348,7 @@ export async function play(item, stream, opts = {}) {
     showMsg(e.message);
   }
   changed(true);
-  if (!opts.keepFocus || !el.root.contains(document.activeElement)) el.play.focus({ preventScroll: true });
+  if (!opts.keepFocus || !el.root.contains(focused())) el.play.focus({ preventScroll: true });
 }
 
 /** Remote "Back": channel list → controls (TV) → close the player. */
@@ -464,7 +465,7 @@ document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 /** Keyboard / remote handling while the player is open. Returns true if handled. */
 export function handleKey(e) {
   if (!isOpen()) return false;
-  if (document.activeElement === el.chNum) {
+  if (focused() === el.chNum) {
     if (e.key === 'Escape') { closePanel(); return true; }
     if (e.key === 'Enter') { const n = parseInt(el.chNum.value, 10); if (n) { closePanel(); jumpTo(n); } return true; }
     return false; // typing in the channel number box
@@ -479,7 +480,7 @@ export function handleKey(e) {
     // The phone opens the menu only with its own OK: controls shown by a mouse move or a new
     // channel count as hidden, so its first OK never presses ⏯ by mistake.
     const idle = el.ui.classList.contains('idle') || (e.salottoRemote === true && !remoteMenu);
-    const inPanel = inSidePanel(document.activeElement);
+    const inPanel = inSidePanel(focused());
     if (e.salottoRemote === true && (inPanel || (!idle && (e.key === 'Enter' || e.key.startsWith('Arrow'))))) remoteMenu = true;
     if ((e.key === 'ContextMenu' || e.key === 'c') && channels) { togglePanel(); wake(); return true; }
     if (idle && !inPanel) {
@@ -489,7 +490,7 @@ export function handleKey(e) {
     }
     // Position bar: ◀ goes back 10 s, ▶ jumps to the LIVE button on live TV (OK returns to the
     // live broadcast) or forward 30 s on a video; the bar's own 1/1000 steps are useless on a remote
-    if (document.activeElement === el.seek && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    if (focused() === el.seek && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       wake();
       if (e.key === 'ArrowRight' && isLive()) el.dur.focus({ preventScroll: true });
       else skip(e.key === 'ArrowLeft' ? -10 : 30);
@@ -501,7 +502,7 @@ export function handleKey(e) {
   if (channels) {
     if (/^[0-9]$/.test(e.key)) { typeDigit(e.key); return true; }
     if (e.key === 'Enter' && digits) { commitDigits(); return true; }
-    const a = document.activeElement;
+    const a = focused();
     const inPanel = inSidePanel(a);
     switch (e.key) {
       case 'ArrowUp': case 'ArrowDown':
@@ -527,7 +528,7 @@ export function handleKey(e) {
     case 'i': toggleInfo(); return true;
     case 'f': toggleFullscreen(); return true;
     case 'ArrowLeft': case 'ArrowRight': {
-      const a = document.activeElement;
+      const a = focused();
       if (a && a !== el.seek && el.root.contains(a) && a.matches('button, input')) return false;
       skip(e.key === 'ArrowLeft' ? -10 : 30);
       return true;
@@ -776,7 +777,7 @@ function openInfo() {
 function closeInfo() {
   if (el.epg.hidden) return;
   el.epg.hidden = true;
-  if (document.activeElement && el.epg.contains(document.activeElement)) document.activeElement.blur();
+  if (focused() && el.epg.contains(focused())) focused().blur();
   if (!el.info.hidden) el.info.focus({ preventScroll: true });
   wake();
 }
@@ -807,7 +808,7 @@ function markRemote(b) {
 }
 function clearRemoteSel() { if (remoteSel) remoteSel.classList.remove('rsel'); remoteSel = null; }
 function selIn(items) {
-  const a = document.activeElement;
+  const a = focused();
   return items.includes(a) ? a : items.includes(remoteSel) ? remoteSel : null;
 }
 // where the highlight starts: the current channel, the programme on air, the first A/V step
@@ -922,7 +923,7 @@ function openSync() {
 function closeSync() {
   if (el.syncBox.hidden) return;
   el.syncBox.hidden = true;
-  if (document.activeElement && el.syncBox.contains(document.activeElement)) document.activeElement.blur();
+  if (focused() && el.syncBox.contains(focused())) focused().blur();
   if (!el.sync.hidden) el.sync.focus({ preventScroll: true });
   wake();
 }
@@ -1049,7 +1050,7 @@ function openPanel() {
 function closePanel() {
   if (el.panel.hidden) return;
   el.panel.hidden = true;
-  if (document.activeElement && el.panel.contains(document.activeElement)) document.activeElement.blur();
+  if (focused() && el.panel.contains(focused())) focused().blur();
   el.chList.focus({ preventScroll: true });
   wake();
 }
@@ -1198,7 +1199,7 @@ for (const bar of el.ui.querySelectorAll('.player-top, .player-bottom')) bar.add
 function hideControls() {
   clearTimeout(idleTimer);
   el.ui.classList.add('idle');
-  if (el.ui.contains(document.activeElement)) document.activeElement.blur();
+  if (el.ui.contains(focused())) focused().blur();
 }
 
 function onBackgroundTap() {

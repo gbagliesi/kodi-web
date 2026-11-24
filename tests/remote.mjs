@@ -225,6 +225,12 @@ async function uiTests() {
 
     // arrows like a TV remote: controls hidden → ▲▼ change channel; OK shows the controls,
     // then ▲▼ move among them without changing channel; Back hides them again
+    // the screen's window in the background: focus() does nothing and the document has no focus
+    const background = (on) => tv.evaluate((on) => {
+      const h = window.salotto.focusHooks;
+      if (on) { window.__nf = window.__nf || h.focus; document.activeElement?.blur(); h.focus = function () {}; h.hasFocus = () => false; }
+      else { h.focus = window.__nf; h.hasFocus = () => document.hasFocus(); }
+    }, on);
     const press = async (sel) => { await ph.dispatchEvent(sel, 'pointerdown'); await ph.dispatchEvent(sel, 'pointerup'); };
     const titleNow = () => tv.textContent('#pl-title');
     await tv.evaluate(() => { document.activeElement?.blur(); document.getElementById('player-ui').classList.add('idle'); });
@@ -276,7 +282,7 @@ async function uiTests() {
     // channel list open, the phone's ▲▼ still move inside them and never change channel
     await ph.click('[data-key=Back]');
     await waitFor(() => tv.evaluate(() => document.getElementById('pl-epg').hidden), 5000);
-    await tv.evaluate(() => { window.__focus = HTMLElement.prototype.focus; document.activeElement?.blur(); HTMLElement.prototype.focus = function () {}; });
+    await background(true);
     await ph.click('[data-cmd=info]');
     await waitFor(() => tv.isVisible('#pl-epg'), 5000, 'info on screen');
     const inBox = () => tv.evaluate(() => !!document.querySelector('#pl-epg .rsel'));
@@ -300,7 +306,7 @@ async function uiTests() {
     const picked = await tv.evaluate(() => document.querySelector('.rsel .ch-name').textContent);
     await ph.click('.r-dpad .ok');
     await waitFor(() => titleNow().then(t => t.includes(picked)), 5000, 'OK opens the highlighted channel');
-    await tv.evaluate(() => { HTMLElement.prototype.focus = window.__focus; });
+    await background(false);
     await waitFor(() => tv.evaluate(() => !document.getElementById('pl-msg').textContent.startsWith('Sintonizzo')), 5000);
     console.log('✓ window in the background: ▲▼ move in the info and the channel list, OK opens the channel');
 
@@ -337,6 +343,34 @@ async function uiTests() {
     await ph.click('[data-key=Back]');
     await waitFor(() => tv.evaluate(() => (location.hash === '#/' || location.hash === '') && document.getElementById('modal').hidden), 5000, 'back');
     console.log('✓ arrows, OK and Back move around the screen (' + focused + ')');
+
+    // the same with the window in the background and no video: the highlight moves, OK opens
+    await background(true);
+    const vf = () => tv.evaluate(() => { const v = document.querySelector('.vfocus'); return v ? v.textContent.trim().slice(0, 40) : ''; });
+    await press('.r-dpad .down');
+    await waitFor(() => vf().then(Boolean), 5000, 'background: highlight shown');
+    const vf1 = await vf();
+    await press('.r-dpad .down');
+    await waitFor(() => vf().then(t => t && t !== vf1), 5000, 'background: highlight moves');
+    const at = await tv.evaluate(() => location.hash);
+    await ph.click('.r-dpad .ok');
+    await waitFor(() => tv.evaluate((at) => location.hash !== at || !document.getElementById('modal').hidden, at), 5000, 'background: OK opens ' + await vf());
+    await ph.click('[data-key=Back]');
+    await waitFor(() => tv.evaluate(() => (location.hash === '#/' || location.hash === '') && document.getElementById('modal').hidden), 5000, 'background: back');
+    // TV guide on the screen: the arrows move among the programmes
+    await ph.click('[data-go=guide]');
+    await waitFor(() => tv.evaluate(() => location.hash.startsWith('#/guide') && !!document.querySelector('.gcell')), 8000, 'guide');
+    await new Promise(r => setTimeout(r, 300));
+    await press('.r-dpad .down');
+    await waitFor(() => tv.evaluate(() => !!document.querySelector('.gcell.vfocus, .gch.vfocus, .vfocus')), 5000, 'background: highlight in the guide');
+    const g1 = await vf();
+    await press('.r-dpad .up');
+    await waitFor(() => vf().then(t => t && t !== g1), 5000, 'background: highlight moves in the guide from ' + g1);
+    const g2 = await vf();
+    await background(false);
+    await ph.click('[data-go=""]');
+    await waitFor(() => tv.evaluate(() => location.hash === '#/'), 5000, 'home');
+    console.log('✓ window in the background, no video: arrows and OK on Home and in the TV guide (' + vf1 + ' → … ; ' + g1 + ' → ' + g2 + ')');
 
     // stop from the phone
     await ph.click('.r-tabbtn[data-tab=channels]');

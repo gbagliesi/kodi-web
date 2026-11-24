@@ -27,6 +27,10 @@ execFileSync('ffmpeg', ['-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size
   '-hls_segment_filename', path.join(DIR, 'av%d.ts'), path.join(DIR, 'av.m3u8')]);
 fs.writeFileSync(path.join(DIR, 'sub.vtt'), 'WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:126000,LOCAL:00:00:00.000\n\n00:00:00.200 --> 00:00:39.000\nBuonasera, questo è il <i>telegiornale</i>\n');
 fs.writeFileSync(path.join(DIR, 'sub.m3u8'), '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:40\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:40,\nsub.vtt\n#EXT-X-ENDLIST\n');
+fs.writeFileSync(path.join(DIR, 'empty.vtt'), 'WEBVTT\nX-TIMESTAMP-MAP=MPEGTS:126000,LOCAL:00:00:00.000\n\n');
+fs.writeFileSync(path.join(DIR, 'empty.m3u8'), '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:40\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:40,\nempty.vtt\n#EXT-X-ENDLIST\n');
+fs.writeFileSync(path.join(DIR, 'master-empty.m3u8'), '#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Sottotitoli",URI="empty.m3u8"\n' +
+  '#EXT-X-STREAM-INF:BANDWIDTH=600000,CODECS="avc1.42c01e,mp4a.40.2",SUBTITLES="subs"\nav.m3u8\n');
 fs.writeFileSync(path.join(DIR, 'master.m3u8'), '#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Italiano",LANGUAGE="it",DEFAULT=NO,AUTOSELECT=YES,URI="sub.m3u8"\n' +
   '#EXT-X-STREAM-INF:BANDWIDTH=600000,CODECS="avc1.42c01e,mp4a.40.2",SUBTITLES="subs"\nav.m3u8\n');
 
@@ -119,6 +123,16 @@ try {
   assert.equal(await page.locator('.cc-model').count(), 3, 'three qualities');
   assert.match(await page.textContent('.cc-model.on'), /Bilanciata/);
   console.log('✓ generated subtitles: start by themselves on a channel without subtitles, the video\'s sound reaches Whisper in pieces of 3–5.5 s');
+  // a subtitle track that never carries text (Safari shows one on many channels): set aside, generated instead
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => import('/js/player.js').then(p => p.close()));
+  await play('https://media.test/master-empty.m3u8', 'Traccia vuota');
+  await waitFor(() => page.evaluate(() => import('/js/player.js').then(p => p.remoteState().subs?.label === 'Sottotitoli')), 8000, 'empty track picked first');
+  await waitFor(() => page.evaluate(() => import('/js/player.js').then(p => p.remoteState().subs?.active === 'gen')), 30000, 'empty track set aside');
+  await waitFor(async () => /Buongiorno/.test(await overlay()), 15000, 'generated after the empty track');
+  await clickCc();
+  assert.match(await page.textContent('.cc-opt:has-text("Sottotitoli") small'), /Finora vuoti/);
+  console.log('✓ a channel subtitle track that stays empty gives way to the generated subtitles');
   // the phone remote: off and on again
   await page.evaluate(() => import('/js/player.js').then(p => p.toggleSubs()));
   assert.equal(await overlay(), '', 'off from the remote');

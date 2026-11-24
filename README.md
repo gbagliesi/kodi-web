@@ -17,7 +17,8 @@ con browser. Supporta gli **add-on**, scritti in JavaScript.
   Per i canali che richiedono il proxy, la TV riceve l'indirizzo del proxy
 - Telecomando dal cellulare: inquadri un codice QR e il telefono cambia
   canale, regola volume e sincronia audio, mette in pausa, mostra canali e
-  guida TV e muove le frecce dello schermo (passa dal Worker Cloudflare)
+  guida TV e muove le frecce dello schermo (passa dal Worker Cloudflare,
+  guida in [docs/TELECOMANDO.md](docs/TELECOMANDO.md))
 - File locali (dall'app File di iPad, iCloud, chiavette USB), senza caricarli
   da nessuna parte
 - Apri URL diretti di stream
@@ -67,6 +68,8 @@ Per l'app pubblicata online il modo più semplice è un proxy gratuito su
 Cloudflare Workers: guida passo passo in [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md).
 
 Fire TV Stick: app da installare con Downloader, guida in [docs/FIRETV.md](docs/FIRETV.md).
+
+Telecomando dal cellulare: abbinamento con QR, funzioni, installazione come app, guida in [docs/TELECOMANDO.md](docs/TELECOMANDO.md).
 
 `server.js` espone `/proxy?url=…`, usato automaticamente dall'app quando il
 browser blocca una richiesta. Aggiunge gli header richiesti dagli stream

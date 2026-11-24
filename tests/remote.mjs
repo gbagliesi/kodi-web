@@ -197,6 +197,8 @@ async function uiTests() {
     await waitFor(() => tv.textContent('#pl-title').then(t => t.includes('Rai 1')));
     await waitFor(() => ph.textContent('#r-title').then(t => t === 'Rai 1'), 8000, 'phone shows channel');
     await waitFor(() => ph.textContent('#r-prog').then(t => t.includes('Telegiornale di prova')));
+    // the screen loads the guide too, even if the channel was opened straight from the phone
+    await waitFor(() => tv.textContent('#pl-prog').then(t => t.includes('Telegiornale di prova')), 8000, 'programme on the screen');
     console.log('✓ channel list on the phone opens the channel on the screen, now playing shown');
 
     // channel up

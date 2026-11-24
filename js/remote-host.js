@@ -222,7 +222,7 @@ function scheduleRetry() {
 
 /** Starts listening for phones (remembered: after a restart it listens again). */
 export function start() {
-  setConfig({ enabled: true });
+  setConfig({ enabled: true, off: false });
   stopped = false;
   connect();
 }
@@ -234,7 +234,7 @@ export function stop(forget = false) {
   if (ws) { const s = ws; ws = null; wsOpen = false; remotes = 0; try { s.close(1000); } catch { /* ignore */ } }
   clearInterval(pingTimer);
   player.setRemoteActive(false);
-  setConfig(forget ? { enabled: false, room: randomId() } : { enabled: false });
+  setConfig(forget ? { enabled: false, room: randomId() } : { enabled: false, off: true });
   emitStatus();
 }
 

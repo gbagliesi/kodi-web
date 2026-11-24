@@ -116,6 +116,7 @@ const MENU = [
   { route: 'guide', ico: '🗓', label: 'Guida TV', short: 'Guida' },
   { route: 'files', ico: '📁', label: 'File' },
   { route: 'favourites', ico: '★', label: 'Preferiti' },
+  { route: 'remote', ico: '📱', label: 'Telecomando', short: 'Remote' },
   { route: 'addons', ico: '🧩', label: 'Add-on' },
   { route: 'settings', ico: '⚙', label: 'Impostazioni', short: 'Opzioni' },
 ];
@@ -1180,8 +1181,15 @@ const remoteLine = (st) => !st.enabled ? 'Telecomando spento.' : !st.connected ?
   : st.remotes ? `Collegato: ${st.remotes === 1 ? '1 cellulare' : st.remotes + ' cellulari'} ✓` : 'Pronto: in attesa del cellulare.';
 
 async function renderRemote() {
-  setCrumbs(['Impostazioni', 'Telecomando']);
-  backBtn.hidden = false;
+  setCrumbs(['Telecomando']);
+  if (remote.config().off) {
+    // switched off on purpose: stays off until asked
+    fill(view, h('div', { class: 'form remote-page' },
+      h('p', {}, 'Il telecomando dal cellulare è spento: i cellulari collegati non possono comandare questo schermo.'),
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary focusable', onclick: () => { remote.start(); route(); } }, '📱 Accendi il telecomando'))));
+    focusFirst();
+    return;
+  }
   loading('Controllo il server del telecomando…');
   const at = location.hash;
   const ok = await remote.check();
@@ -1219,7 +1227,7 @@ async function renderRemote() {
       navigator.clipboard ? h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => navigator.clipboard.writeText(url).then(() => toast('Link copiato')) }, 'Copia il link')) : null,
       h('div', { class: 'hint' }, 'Il link contiene la chiave di questo schermo: dallo solo a chi può usare il telecomando.')),
     h('div', { class: 'actions' },
-      h('button', { class: 'btn focusable', onclick: () => { remote.stop(false); toast('Telecomando spento'); go('settings'); } }, 'Spegni il telecomando'),
+      h('button', { class: 'btn focusable', onclick: () => { remote.stop(false); toast('Telecomando spento'); route(); } }, 'Spegni il telecomando'),
       h('button', { class: 'btn danger focusable', onclick: async () => {
         if (await confirmBox('Scollega i cellulari', 'I cellulari collegati smetteranno di funzionare e serve un nuovo codice QR.', 'Scollega', true)) { remote.stop(true); remote.start(); route(); }
       } }, 'Scollega tutti i cellulari')),

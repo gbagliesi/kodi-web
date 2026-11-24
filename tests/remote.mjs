@@ -339,6 +339,19 @@ async function uiTests() {
     await waitFor(() => ph.getAttribute('#r-dot', 'class').then(c => /\bwait\b/.test(c)), 8000, 'old pairing offline');
     console.log('✓ phone remembers the screen; «Scollega» makes a new code');
 
+    // own entry in the side menu; switched off it stays off until «Accendi»
+    await tv.goto(BASE + '#/');
+    await tv.click('#menu .menu-item[aria-label="Telecomando"]');
+    await tv.waitForSelector('.qr-box svg');
+    await tv.click('text=Spegni il telecomando');
+    await tv.waitForSelector('text=Accendi il telecomando');
+    await waitFor(() => ph.getAttribute('#r-dot', 'class').then(c => !/\bon\b/.test(c)), 8000, 'screen off');
+    await tv.reload();
+    await tv.waitForSelector('text=Accendi il telecomando');
+    await tv.click('text=Accendi il telecomando');
+    await tv.waitForSelector('.qr-box svg');
+    console.log('✓ «Telecomando» in the side menu; off stays off until «Accendi»');
+
     // unpaired phone
     const fresh = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
     await mock(fresh);

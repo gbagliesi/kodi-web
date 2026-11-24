@@ -504,7 +504,7 @@ function renderScreens(ask = true) {
 }
 function addFromLink(input) {
   const h = fromHash(input.value.trim());
-  if (!h) { toast('Link non valido: copialo dalla pagina «Collega il cellulare» dello schermo'); return; }
+  if (!h) { toast('Link non valido: copialo dalla pagina «Telecomando» di Salotto sullo schermo'); return; }
   const old = screens.find(s => s.room === h.room);
   if (old) Object.assign(old, h); else screens.push(h);
   saveScreens(screens);

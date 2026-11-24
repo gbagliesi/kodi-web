@@ -8,6 +8,8 @@ import { focused } from './focus.js';
 import * as whisper from './whisper.js';
 
 const $ = (id) => document.getElementById(id);
+const UA = navigator.userAgent;
+const SAFARI_DRAWS = /iPad|iPhone|iPod/.test(UA) || (/Safari\//.test(UA) && !/Chrome|Chromium|CriOS|FxiOS|Edg|Android/.test(UA));
 let el = null;
 let opts = null;           // { reattach(), changed(), wake() }
 
@@ -117,7 +119,8 @@ function cueText(t) {
 function setActive(id) {
   if (id === active) return;
   active = id;
-  for (const t of tracks) if (t.kind === 'tt') t.ref.mode = t.id === id ? 'hidden' : 'disabled';
+  // Safari draws the tracks of its own HLS player itself (it may not load them while hidden)
+  for (const t of tracks) if (t.kind === 'tt') t.ref.mode = t.id === id ? (SAFARI_DRAWS ? 'showing' : 'hidden') : 'disabled';
   syncHls();
   if (id === 'gen') startGen(); else stopGen();
   show('');
@@ -146,13 +149,16 @@ export function mseFailed() { noMse = true; if (active === 'gen') setActive(null
 export function setCasting(on) { if (item) { item.casting = on; if (on && active === 'gen') setActive(null); render(); } }
 
 /** On Safari the sound can only be heard through hls.js: ask the player to use it. */
-export const wantsMse = () => whisper.elementBound() || (prefs.mode !== 'off' && support.ok && whisper.needsMse() && !noMse && !item?.audio);
+// Only once generated subtitles are really needed (not for subtitles off, or the channel's own):
+// the system player reaches many channels directly, hls.js may need the proxy for them.
+let mseFor = null;
+export const wantsMse = () => whisper.elementBound() || (!!item && mseFor === item && prefs.mode !== 'off' && support.ok && whisper.needsMse() && !noMse && !item.audio);
 export const audioBound = () => whisper.elementBound();
 
 const genPossible = () => support.ok && !noMse && item && !item.audio && !item.casting;
 function genWhy() {
   if (!support.ok) return support.why;
-  if (noMse) return 'Questo canale si può riprodurre solo con il lettore di sistema, che non permette di ascoltarne l\'audio.';
+  if (noMse) return 'Su questo canale serve il proxy (Impostazioni): senza, Safari lo riproduce solo con il suo lettore, che non lascia ascoltare l\'audio per la trascrizione.';
   if (item?.casting) return 'Durante la trasmissione alla TV i sottotitoli generati non sono disponibili.';
   if (item?.audio) return 'Solo per i video.';
   return '';
@@ -169,7 +175,7 @@ function onPlaying() {
 function decide() {
   if (!item || prefs.mode === 'off' || (active && active !== 'gen')) return;
   if (prefs.mode === 'on' && tracks.length) { setActive(bestTrack().id); return; }
-  if (genPossible()) setActive('gen');
+  if (genPossible()) needAudio();
   else render();
 }
 
@@ -193,7 +199,13 @@ function choose(id) {
 // generated subtitles: on Safari the player first switches to hls.js (then 'playing' decides)
 function needAudio() {
   if (!genPossible()) { render(); return; }
-  if (whisper.needsMse() && !hls) { genStatus = 'Preparo il lettore…'; render(); opts.reattach(); return; }
+  if (whisper.needsMse() && !hls) {
+    mseFor = item;
+    genStatus = 'Passo al lettore che permette di ascoltare l\'audio (per alcuni canali, come quelli Rai, passa dal proxy)…';
+    render();
+    opts.reattach();
+    return;
+  }
   setActive('gen');
 }
 
@@ -311,7 +323,7 @@ function tick() {
   }
   const t = tracks.find(x => x.id === active);
   if (!t) { show(''); return; }
-  if (t.kind === 'tt') { show([...(t.ref.activeCues || [])].map(c => cueText(c.text)).join('\n')); return; }
+  if (t.kind === 'tt') { if (SAFARI_DRAWS) { show(''); return; } show([...(t.ref.activeCues || [])].map(c => cueText(c.text)).join('\n')); return; }
   const now = el.video.currentTime, list = cues.get(active) || [];
   // old cues are not needed any more (live TV runs for hours)
   if (list.length > 400) cues.set(active, list.filter(c => c.end > now - 30));

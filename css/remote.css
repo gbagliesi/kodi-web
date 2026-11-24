@@ -118,3 +118,4 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 
 .r-toast { position: fixed; left: 50%; bottom: calc(var(--safe-bottom) + 86px); transform: translateX(-50%); background: #2b3646; color: var(--text);
   padding: 10px 16px; border-radius: 22px; font-size: 14px; max-width: 90vw; text-align: center; z-index: 20; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+.r-btn.on { background: var(--panel-hi); box-shadow: inset 0 0 0 2px var(--accent); }

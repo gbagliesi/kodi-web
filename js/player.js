@@ -370,7 +370,7 @@ export function close() {
   v.removeAttribute('src');
   for (const t of [...v.querySelectorAll('track')]) t.remove();
   v.load();
-  if (wantsAutoFs() && document.fullscreenElement === document.documentElement) {
+  if ((wantsAutoFs() || remoteFs) && document.fullscreenElement === document.documentElement) {
     // automatic mode: the whole app stays full screen, so Chrome's "full screen" notice
     // appears once instead of at every video; just give the lists their orientation back
     autoFs = true;
@@ -447,7 +447,8 @@ const isPhone = () => matchMedia('(pointer: coarse)').matches && Math.min(screen
 
 function onFullscreenChange() {
   const fs = document.fullscreenElement || document.webkitFullscreenElement;
-  if (!fs) autoFs = false;
+  if (!fs) { autoFs = false; remoteFs = false; }
+  changed();
   updateFsBtn();
   const o = screen.orientation;
   if (!o) return;
@@ -1181,7 +1182,7 @@ export function setRemoteActive(on) { remoteActive = !!on; }
 
 /** The player as the remote shows it. */
 export function remoteState() {
-  if (!isOpen() || !current) return { open: false, volume: Math.round(el.video.volume * 100), muted: el.video.muted, volFixed: VOLUME_FIXED };
+  if (!isOpen() || !current) return { open: false, volume: Math.round(el.video.volume * 100), muted: el.video.muted, volFixed: VOLUME_FIXED, fs: !!fsElement() };
   const v = el.video, it = current.item;
   const idx = pendingIndex >= 0 ? pendingIndex : channels ? channels.index : -1;
   const shown = idx >= 0 && channels ? channels.list[idx].item : it;
@@ -1193,7 +1194,7 @@ export function remoteState() {
     guide: shown.live ? { id: shown.guide?.id || '', name: shown.guide?.name || '', key: shown.key || '' } : null,
     paused: casting ? false : v.paused, casting, volume: Math.round(v.volume * 100), muted: v.muted, volFixed: VOLUME_FIXED || casting,
     pos: live ? (w ? Math.round(v.currentTime - w.end) : 0) : Math.round(v.currentTime || 0), dur: live ? 0 : Math.round(v.duration || 0),
-    canSeek: !live || !!w, av: avMs, avBlocked: current.audio ? 'Solo per i video.' : avBlocked(),
+    canSeek: !live || !!w, av: avMs, avBlocked: current.audio ? 'Solo per i video.' : avBlocked(), fs: !!fsElement(),
   };
 }
 
@@ -1224,3 +1225,37 @@ export function avStep(dir) { if (current && !avBlocked()) setAv(avMs + Math.sig
 export function avReset() { setAv(0); }
 export function toggleSync() { if (el.syncBox.hidden) openSync(); else closeSync(); }
 export function typeNumber(num) { return jumpTo(parseInt(num, 10)); }
+
+// Full screen from the phone. Browsers only allow entering full screen right after a tap or a
+// key on this screen (leaving is always allowed), so when the request is refused the next tap
+// or key here enters it. The whole page goes full screen, so it stays so between videos.
+let remoteFs = false, fsArmed = false;
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+function enterPageFs() {
+  const d = document.documentElement;
+  const req = d.requestFullscreen ? d.requestFullscreen({ navigationUI: 'hide' }) : d.webkitRequestFullscreen ? Promise.resolve(d.webkitRequestFullscreen()) : Promise.reject(new Error('no'));
+  return req.then(() => { remoteFs = true; });
+}
+function armFs(on) {
+  fsArmed = on;
+  const box = document.getElementById('fs-hint');
+  if (box) box.hidden = !on;
+}
+function fsOnTouch(e) {
+  if (!fsArmed || !e.isTrusted) return;
+  armFs(false);
+  if (!fsElement()) enterPageFs().catch(() => {});
+}
+document.addEventListener('pointerdown', fsOnTouch, true);
+document.addEventListener('keydown', fsOnTouch, true);
+/** Resolves to 'on', 'off' or 'blocked' (the browser wants a tap on this screen first). */
+export async function remoteFullscreen() {
+  if (fsElement()) {
+    armFs(false);
+    await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    return 'off';
+  }
+  if (fsArmed) { armFs(false); return 'off'; } // second press: cancel the pending request
+  try { await enterPageFs(); return 'on'; } catch { armFs(true); setTimeout(() => armFs(false), 20000); return 'blocked'; }
+}
+export const isFullscreen = () => !!fsElement();

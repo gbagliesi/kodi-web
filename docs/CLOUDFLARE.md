@@ -99,6 +99,27 @@ sono sulla stessa rete Wi-Fi.
 Se Salotto dice che il Worker "non ha ancora il telecomando", nel repository
 apri **Actions** → **Aggiorna il Worker Cloudflare** → **Run workflow**.
 
+### Schermo intero dal telefono
+
+Il tasto ⛶ del telefono esce sempre dallo schermo intero, ma per entrarci i
+browser vogliono un tocco (o un tasto) sullo schermo: se serve, sullo schermo
+compare «Tocca lo schermo…» e al primo tocco va a schermo intero.
+
+Per non doverlo fare mai:
+
+- **Mac, app di Safari nel Dock**: metti la finestra a schermo intero di macOS
+  (pulsante verde o Ctrl+Cmd+F) e lasciala così: resta a schermo intero tra
+  un canale e l'altro.
+- **Chrome / Chromium** (Mac e Linux): una regola di Chrome permette a Salotto
+  di andare a schermo intero da solo. Poi riavvia Chrome (in
+  `chrome://policy` deve comparire `AutomaticFullscreenAllowedForUrls`).
+  - Mac, nel Terminale:
+    `defaults write com.google.Chrome AutomaticFullscreenAllowedForUrls -array "https://gbagliesi.github.io"`
+  - Linux: crea `/etc/opt/chrome/policies/managed/salotto.json` (Chromium:
+    `/etc/chromium/policies/managed/salotto.json`) con
+    `{"AutomaticFullscreenAllowedForUrls": ["https://gbagliesi.github.io"]}`
+- **Fire TV**: l'app è già sempre a schermo intero.
+
 Il codice QR contiene la chiave dello schermo e il token del proxy: mostralo
 solo a chi deve usare il telecomando. **Scollega tutti i cellulari** crea una
 chiave nuova.

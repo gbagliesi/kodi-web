@@ -139,6 +139,11 @@ async function onCommand(m) {
     case 'info': if (st.open) player.toggleInfo(); break;
     case 'sync': if (st.open) player.toggleSync(); break;
     case 'stop': player.close(); break;
+    case 'fs': {
+      const r = await player.remoteFullscreen();
+      if (r === 'blocked') send({ t: 'toast', text: 'Il browser chiede un tocco sullo schermo: tocca lo schermo (o premi un tasto) e va a schermo intero', ms: 6000 });
+      break;
+    }
     case 'key': pressKey(String(m.k || '')); break;
     case 'go': handlers?.navigate(String(m.r || '')); break;
     case 'open': {

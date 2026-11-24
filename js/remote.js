@@ -136,7 +136,7 @@ function onMessage(data) {
       renderChannels(); renderGuide();
       break;
     case 'toast':
-      toast(String(m.text || ''));
+      toast(String(m.text || ''), Math.min(10000, m.ms || 2500));
       break;
     default: break;
   }
@@ -192,6 +192,8 @@ function renderState() {
   play.querySelector('small').textContent = s.open && !s.paused ? 'Pausa' : 'Play';
   $('r-mute').classList.toggle('active', !!s.muted);
   $('r-mute').querySelector('small').textContent = s.muted ? 'Audio' : 'Muto';
+  $('r-fs').classList.toggle('on', !!s.fs);
+  $('r-fs').querySelector('small').textContent = s.fs ? 'Esci' : 'Intero';
   $('r-volrock').hidden = !!s.volFixed;
   $('r-volnote').hidden = !s.volFixed;
   $('r-vollbl').textContent = s.muted ? 'MUTO' : (s.volume ?? 100) + '%';

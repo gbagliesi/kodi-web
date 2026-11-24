@@ -241,18 +241,21 @@ export function toggle() {
 }
 
 // ---------------------------------------------------------------- generated subtitles
-const GEN_LISTENING = 'In ascolto: le frasi compaiono qualche secondo dopo il parlato.';
+const GEN_LISTENING_TEXT = 'In ascolto: le frasi compaiono qualche secondo dopo il parlato.';
+let usingCpu = false; // the graphics card didn't work in this browser: light model on the processor
+const genListening = () => GEN_LISTENING_TEXT + (usingCpu ? ' (Questo browser non lascia usare la scheda grafica: uso la qualità Veloce sul processore, più lenta.)' : '');
 let quiet = 0;
 const GEN_HANDLERS = {
   progress: ({ loaded, total }) => {
     genStatus = 'Scarico il modello di trascrizione (solo la prima volta): ' + (total ? Math.round(loaded / total * 100) + '% di ' + mb(total) : mb(loaded)) + '…';
     render();
   },
-  ready: () => { genStatus = GEN_LISTENING; render(); },
+  ready: () => { genStatus = genListening(); render(); },
+  fallback: ({ message }) => { console.warn('whisper fallback:', message); usingCpu = true; },
   text: ({ text, dur, took }) => {
     if (active !== 'gen') return;
     quiet = 0;
-    if (genStatus.startsWith('Non sento')) { genStatus = GEN_LISTENING; render(); }
+    if (genStatus.startsWith('Non sento')) { genStatus = genListening(); render(); }
     showGen(text, dur);
     if (took > dur * 1.2 && !lagShown) {
       lagShown = true;

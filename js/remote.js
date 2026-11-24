@@ -19,6 +19,8 @@ function fromHash(hash = location.hash) {
 }
 
 let screens = loadScreens();
+/** The name shown: the one given on this phone, else the one set on the screen. */
+const nameOf = (s) => s.label || s.name;
 let screen = null;
 {
   const h = fromHash();
@@ -148,9 +150,9 @@ function setDot() {
   const st = !screen ? '' : tvOnline ? 'on' : wsOpen ? 'wait' : 'off';
   dot.className = 'r-dot ' + st;
   dot.title = st === 'on' ? 'Collegato' : st === 'wait' ? 'Lo schermo non risponde' : 'Non collegato';
-  $('r-name').textContent = screen ? screen.name : 'Salotto';
+  $('r-name').textContent = screen ? nameOf(screen) : 'Salotto';
   const msg = $('r-msg');
-  if (screen && wsOpen && !tvOnline) { msg.textContent = 'Lo schermo «' + screen.name + '» non è collegato: apri Salotto sullo schermo e tienilo acceso.'; msg.hidden = false; }
+  if (screen && wsOpen && !tvOnline) { msg.textContent = 'Lo schermo «' + nameOf(screen) + '» non è collegato: apri Salotto sullo schermo e tienilo acceso.'; msg.hidden = false; }
   else if (screen && !wsOpen && retry > 1) { msg.textContent = 'Non riesco a raggiungere il server del telecomando, riprovo…'; msg.hidden = false; }
   else msg.hidden = true;
   if (tab === 'screens') renderScreens(false);
@@ -488,19 +490,50 @@ function renderScreens(ask = true) {
     const pick = el('button', 'r-ch-main');
     pick.append(el('span', 'r-dot ' + (on ? 'on' : on === false ? 'off' : '')));
     const txt = el('span', 'r-ch-text');
-    txt.append(el('span', 'r-ch-name', s.name), el('span', 'r-ch-next', (cur ? 'In uso · ' : '') + (on ? 'acceso' : on === false ? 'spento o Salotto chiuso' : 'controllo…')));
+    txt.append(el('span', 'r-ch-name', nameOf(s)), el('span', 'r-ch-next', (cur ? 'In uso · ' : '') + (on ? 'acceso' : on === false ? 'spento o Salotto chiuso' : 'controllo…')));
     pick.append(txt);
     pick.addEventListener('click', () => { if (!cur) useScreen(s); showTab('remote'); });
-    const del = el('button', 'r-scr-del', 'Rimuovi');
-    del.addEventListener('click', () => {
-      if (!confirm('Rimuovere «' + s.name + '» da questo telefono?')) return;
-      screens = screens.filter(x => x !== s); saveScreens(screens);
-      if (cur) { if (screens[0]) useScreen(screens[0]); else { screen = null; reconnect(); setView(); } }
-      renderScreens(false);
-    });
-    row.append(pick, del);
+    const i = screens.indexOf(s);
+    const tools = el('span', 'r-scr-tools');
+    const up = el('button', 'r-scr-btn', '▲'); up.setAttribute('aria-label', 'Sposta su'); up.disabled = i === 0;
+    const down = el('button', 'r-scr-btn', '▼'); down.setAttribute('aria-label', 'Sposta giù'); down.disabled = i === screens.length - 1;
+    up.addEventListener('click', () => moveScreen(i, -1));
+    down.addEventListener('click', () => moveScreen(i, 1));
+    const edit = el('button', 'r-scr-btn', '✎'); edit.setAttribute('aria-label', 'Rinomina o rimuovi');
+    edit.addEventListener('click', () => editScreen(s));
+    tools.append(up, down, edit);
+    row.append(pick, tools);
     return row;
   }));
+}
+function moveScreen(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= screens.length) return;
+  [screens[i], screens[j]] = [screens[j], screens[i]];
+  saveScreens(screens);
+  renderScreens(false);
+}
+function editScreen(s) {
+  const input = el('input', 'r-name-input');
+  input.type = 'text'; input.maxLength = 40; input.value = nameOf(s); input.autocomplete = 'off';
+  const save = el('button', 'r-wide primary', 'Salva il nome');
+  save.addEventListener('click', () => {
+    const v = input.value.trim();
+    s.label = v && v !== s.name ? v : ''; // empty = the name set on the screen
+    saveScreens(screens); closeSheet(); setDot(); renderScreens(false);
+  });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save.click(); });
+  const del = el('button', 'r-wide danger', 'Rimuovi da questo telefono');
+  del.addEventListener('click', () => {
+    if (!confirm('Rimuovere «' + nameOf(s) + '» da questo telefono?')) return;
+    const cur = s === screen;
+    screens = screens.filter(x => x !== s); saveScreens(screens);
+    closeSheet();
+    if (cur) { if (screens[0]) useScreen(screens[0]); else { screen = null; reconnect(); setView(); } }
+    renderScreens(false);
+  });
+  openSheet(el('h2', '', 'Schermo'), el('p', 'r-hint', 'Nome sullo schermo: ' + s.name + '. Qui puoi dargli un nome tuo, solo per questo telefono (vuoto = quello dello schermo).'), input, save, del);
+  setTimeout(() => input.focus(), 50);
 }
 function addFromLink(input) {
   const h = fromHash(input.value.trim());

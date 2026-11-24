@@ -326,11 +326,21 @@ async function uiTests() {
     await ph.click('.r-tabbtn[data-tab=screens]');
     await ph.waitForSelector('#r-scrlist .r-scr.current :text("spento")');
     await ph.waitForSelector('#r-scrlist .r-scr:not(.current) :text("acceso")');
+    // rename (only on this phone) and reorder
+    await ph.click('#r-scrlist .r-scr.current [aria-label="Rinomina o rimuovi"]');
+    await ph.fill('.r-name-input', 'Camera da letto');
+    await ph.click('text=Salva il nome');
+    await waitFor(() => ph.textContent('#r-name').then(t => t === 'Camera da letto'), 5000, 'renamed');
+    await ph.click('#r-scrlist .r-scr.current [aria-label="Sposta su"]');
+    const order = await ph.$$eval('#r-scrlist .r-ch-name', a => a.map(x => x.textContent));
+    assert.equal(order[0], 'Camera da letto');
+    const saved = await ph.evaluate(() => JSON.parse(localStorage.getItem('salotto-remote:screens')).map(s => s.label || s.name));
+    assert.equal(saved[0], 'Camera da letto');
     if (SHOTS) await ph.screenshot({ path: path.join(SHOTS, 'remote-screens.png') });
     await ph.click('#r-scrlist .r-scr:not(.current) .r-ch-main');
     await waitFor(() => ph.getAttribute('#r-dot', 'class').then(c => /\bon\b/.test(c)), 8000, 'back on first screen');
     assert.equal(await ph.isVisible('#tab-remote'), true);
-    console.log('✓ screens tab: on/off status, add by link, switch');
+    console.log('✓ screens tab: on/off status, add by link, rename, reorder, switch');
 
     // the phone remembers the screen without the address
     const ph2 = await phoneCtx.newPage();

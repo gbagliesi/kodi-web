@@ -1266,4 +1266,9 @@ export const isFullscreen = () => !!fsElement();
 
 // the phone's OK opened the controls ("menu"); cleared when they hide again
 let remoteMenu = false;
-new MutationObserver(() => { if (el.ui.classList.contains('idle')) remoteMenu = false; }).observe(el.ui, { attributes: true, attributeFilter: ['class'] });
+new MutationObserver(() => {
+  const idle = el.ui.classList.contains('idle');
+  if (idle) remoteMenu = false;
+  // hide the mouse pointer together with the controls, over the whole player (picture included)
+  el.root.classList.toggle('idle', idle);
+}).observe(el.ui, { attributes: true, attributeFilter: ['class'] });

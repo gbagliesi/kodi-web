@@ -212,7 +212,7 @@ button { cursor: pointer; }
 }
 .player-ui.idle { opacity: 0; }
 .player-ui.idle .player-top, .player-ui.idle .player-bottom { pointer-events: none; }
-.player-ui.idle * { cursor: none; }
+.player.idle, .player.idle * { cursor: none !important; }
 .player-top { display: flex; align-items: center; gap: 12px; }
 .player-titles { flex: 1; min-width: 0; }
 .player-prog { font-size: 14px; color: #d0d7e0; text-shadow: 0 1px 4px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }

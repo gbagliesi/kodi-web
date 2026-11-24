@@ -643,6 +643,7 @@ async function uiTests() {
       // Back hides the controls; then ▲ changes channel
       assert.equal(await tv.evaluate(() => window.salottoBack()), true);
       assert.equal(await tv.evaluate(() => document.getElementById('player-ui').classList.contains('idle')), true);
+      assert.equal(await tv.evaluate(() => getComputedStyle(document.querySelector('#player video')).cursor), 'none', 'hidden controls hide the mouse pointer too');
       await tv.keyboard.press('ArrowUp');
       await waitFor(async () => (await tvTitle()) !== t0);
       const t1 = await tvTitle();

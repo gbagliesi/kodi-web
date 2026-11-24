@@ -171,7 +171,12 @@ async function uiTests() {
     await waitFor(() => tv.textContent('#remote-status').then(t => /1 cellulare/.test(t)), 8000, 'tv sees phone');
     assert.match(await ph.textContent('#r-name'), /Linux|Mac|PC|Salotto/);
     assert.match(await ph.textContent('#r-title'), /Nessun video/);
-    console.log('✓ phone connects; the screen shows it is paired');
+    // installable on Android: manifest for remote.html, in its own scope
+    const man = await ph.evaluate(async () => { const l = document.querySelector('link[rel=manifest]'); return l && (await fetch(l.href)).json(); });
+    assert.equal(man.start_url, 'remote.html');
+    assert.equal(man.scope, 'remote.html');
+    assert.equal(man.display, 'standalone');
+        console.log('✓ phone connects; the screen shows it is paired');
 
     // channels with now/next, tap opens the channel on the screen
     await ph.click('.r-tabbtn[data-tab=channels]');
@@ -336,11 +341,20 @@ async function uiTests() {
 
     // unpaired phone
     const fresh = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
+    await mock(fresh);
     const ph3 = await fresh.newPage();
     await ph3.goto(BASE + 'remote.html');
     assert.equal(await ph3.isVisible('#r-unpaired'), true);
+    // iPhone: no manifest (the Home-screen app keeps the address); add a screen by pasting its link
+    assert.equal(await ph3.evaluate(() => !!document.querySelector('link[rel=manifest]')), false);
+    assert.match(await ph3.textContent('#r-installhint'), /Aggiungi alla schermata Home/);
+    const cur = await tv.inputValue('.remote-link');
+    await ph3.fill('#r-addlink0', cur);
+    await ph3.click('#r-addbtn0');
+    await waitFor(() => ph3.getAttribute('#r-dot', 'class').then(c => /\bon\b/.test(c)), 8000, 'iphone paired by link');
     await fresh.close();
     assert.deepEqual(errors, []);
+    console.log('✓ installable: manifest on Android, «Add to Home Screen» + paste link on iPhone');
     console.log('✓ no page errors');
   } finally {
     await browser.close();

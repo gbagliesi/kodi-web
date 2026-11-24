@@ -89,6 +89,8 @@ Worker: lo schermo e il cellulare si collegano a una "stanza" del Worker
 (un Durable Object, incluso nel piano gratuito), così funzionano anche se non
 sono sulla stessa rete Wi-Fi.
 
+Come si usa il telecomando: [TELECOMANDO.md](TELECOMANDO.md).
+
 - Con l'aggiornamento **automatico** non devi fare nulla: la GitHub Action
   pubblica il Worker già pronto per il telecomando.
 - Con l'aggiornamento **a mano** incollare il codice non basta, perché serve

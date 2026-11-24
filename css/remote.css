@@ -124,3 +124,8 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .r-add input { flex: 1; min-width: 0; background: var(--panel); color: var(--text); border: 0; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; -webkit-user-select: text; user-select: text; }
 #tab-screens .r-hint { margin: 14px 2px 8px; }
 .r-empty .r-add { text-align: left; margin-top: 8px; }
+.r-scr-tools { display: flex; align-items: stretch; border-left: 1px solid rgba(255,255,255,.06); }
+.r-scr-btn { width: 44px; font-size: 16px; color: var(--muted); }
+.r-scr-btn:disabled { opacity: .25; }
+.r-name-input { width: 100%; background: var(--panel); color: var(--text); border: 0; border-radius: 12px; padding: 12px; font: inherit; font-size: 17px; margin-top: 6px; }
+.r-wide.danger { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1.5px var(--danger); }

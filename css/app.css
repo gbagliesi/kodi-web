@@ -434,6 +434,7 @@ body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); ga
 .player.audio .player-subs { display: none; }
 .cc-btn { font-weight: 700; font-size: 14px; min-width: 48px; }
 .cc-btn.active { color: var(--accent); }
+.cc-btn.armed { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .35); }
 .player-cc {
   position: absolute; left: 50%; bottom: calc(150px + var(--safe-bottom)); transform: translateX(-50%); z-index: 3;
   width: min(480px, 94vw); max-height: calc(100% - 190px); overflow-y: auto; padding: 12px 14px 14px; border-radius: 16px;

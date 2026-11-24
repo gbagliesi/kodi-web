@@ -176,7 +176,14 @@ export function newItem(it) {
   render();
 }
 /** The player had to leave hls.js (stream refused it): no generated subtitles on this channel. */
-export function mseFailed() { noMse = true; if (active === 'gen') setActive(null); render(); }
+export function mseFailed() {
+  noMse = true;
+  genUsed = false; // the next channels start with Safari's own player again
+  genStatus = '';
+  if (active === 'gen') setActive(null);
+  render();
+  opts.changed();
+}
 /** The cast/receiver or audio-only state changed. */
 export function setCasting(on) { if (item) { item.casting = on; if (on && active === 'gen') setActive(null); render(); } }
 
@@ -191,7 +198,9 @@ export const audioBound = () => whisper.elementBound();
 const genPossible = () => support.ok && !noMse && item && !item.audio && !item.casting;
 function genWhy() {
   if (!support.ok) return support.why;
-  if (noMse) return 'Su questo canale serve il proxy (Impostazioni): senza, Safari lo riproduce solo con il suo lettore, che non lascia ascoltare l\'audio per la trascrizione.';
+  if (noMse) return opts.hasProxy?.()
+    ? 'Questo canale non si lascia leggere dal lettore che serve alla trascrizione, nemmeno tramite il proxy: su Safari si vede solo con il suo lettore.'
+    : 'Su Safari questo canale ha bisogno del proxy, che in questa app non è impostato (Impostazioni → Proxy): senza, si vede solo con il lettore di Safari, che non lascia ascoltare l\'audio.';
   if (item?.casting) return 'Durante la trasmissione alla TV i sottotitoli generati non sono disponibili.';
   if (item?.audio) return 'Solo per i video.';
   return '';
@@ -215,7 +224,13 @@ function decide() {
 /** Choice in the box: 'off', 'on', 'gen' or a track id. */
 function choose(id) {
   whisper.prime();
-  if (id === 'off') { prefs.mode = 'off'; savePrefs(); setActive(null); return; }
+  pick(id);
+  // whatever happened above, the box, the CC button and the phone show the new state
+  render();
+  opts.changed();
+}
+function pick(id) {
+  if (id === 'off') { prefs.mode = 'off'; savePrefs(); genUsed = false; genStatus = ''; clearTimeout(decideTimer); clearTimeout(emptyTimer); setActive(null); return; }
   if (id === 'on') {
     prefs.mode = 'on'; savePrefs();
     if (usable().length) autoPick();
@@ -263,6 +278,7 @@ const GEN_HANDLERS = {
   fallback: ({ message }) => { console.warn('whisper fallback:', message); usingCpu = true; },
   text: ({ text, dur, took }) => {
     if (active !== 'gen') return;
+    if (whisper.needsMse() && hls) genUsed = true; // it works here: the next channels start ready for it
     quiet = 0;
     if (genStatus.startsWith('Non sento')) { genStatus = genListening(); render(); }
     showGen(text, dur);
@@ -294,7 +310,7 @@ const mb = (b) => (b / 1e6 >= 1000 ? (b / 1e9).toFixed(1).replace('.', ',') + ' 
 let stopTimer = 0;
 function startGen() {
   clearTimeout(stopTimer);
-  if (whisper.needsMse()) genUsed = true;
+
   if (!whisper.isRunning()) genStatus = 'Avvio la trascrizione…';
   whisper.start(prefs.model, GEN_HANDLERS).catch(e => GEN_HANDLERS.error({ fatal: true, message: e.message }));
   listen();
@@ -418,7 +434,10 @@ function render() {
   if (!el) return;
   el.btn.hidden = !item || !!item.audio;
   const on = !!active;
-  el.btn.classList.toggle('active', on || prefs.mode !== 'off');
+  // lit = something is shown (or being prepared); outlined = on, but nothing for this channel
+  const preparing = prefs.mode !== 'off' && genPossible() && (active === 'gen' || !!genStatus);
+  el.btn.classList.toggle('active', on || preparing);
+  el.btn.classList.toggle('armed', prefs.mode !== 'off' && !on && !preparing);
   el.btn.title = 'Sottotitoli' + (active === 'gen' ? ': generati dal computer' : on ? ': ' + (tracks.find(t => t.id === active)?.label || '') : prefs.mode !== 'off' ? ': attivi quando disponibili' : '');
   if (el.box.hidden) return;
   const keep = focused() && el.box.contains(focused()) ? [...el.box.querySelectorAll('button')].indexOf(focused()) : -1;
@@ -454,7 +473,7 @@ function render() {
   }
   let note = '';
   if (active === 'gen' || (prefs.mode !== 'off' && genStatus)) note = genStatus;
-  else if (prefs.mode === 'on' && !tracks.length && !genOk) note = 'Questo canale non trasmette sottotitoli. ' + genWhy();
+  else if (prefs.mode !== 'off' && !active && !genOk) note = 'Nessun sottotitolo per questo canale. ' + genWhy();
   el.note.textContent = note;
   el.note.hidden = !note;
   if (keep >= 0) el.box.querySelectorAll('button')[keep]?.focus({ preventScroll: true });

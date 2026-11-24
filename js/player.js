@@ -987,6 +987,7 @@ el.syncReset.addEventListener('click', () => { setAv(0); (el.syncLater.disabled 
 // ---------------------------------------------------------------- subtitles (CC button, see subtitles.js)
 subs.init({
   changed: () => changed(),
+  hasProxy: () => !!getProxy(),
   wake: () => wake(),
   beforeOpen: () => { closePanel(); el.epg.hidden = true; el.syncBox.hidden = true; },
   // generated subtitles on Safari: move from the system player to hls.js, where the sound can be heard

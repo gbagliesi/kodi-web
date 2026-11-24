@@ -169,7 +169,7 @@ try {
   await waitFor(() => sp.evaluate(() => /Buongiorno/.test(document.getElementById('pl-subs').textContent)), 20000, 'Safari path');
   assert.equal(await sp.evaluate(() => document.getElementById('video').muted), false);
   await saf.close();
-  console.log('✓ Safari-like browser: the sound reaches Whisper through Web Audio, "Generati" remembered');
+  console.log('✓ Safari-like browser: the sound reaches Whisper from hls.js audio pieces (ADTS + decodeAudioData), "Generati" remembered');
 
   // ---- iPad: no generated subtitles (too heavy), the reason is shown
   const ipad = await browser.newContext({ ...devices['iPad Pro 11 landscape'], serviceWorkers: 'block' });

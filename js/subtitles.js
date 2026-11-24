@@ -51,6 +51,9 @@ export const hlsConfig = () => ({
   renderTextTracksNatively: false, enableCEA708Captions: true,
   captionsTextTrack1Label: 'Sottotitoli TV', captionsTextTrack1LanguageCode: 'it',
   captionsTextTrack2Label: 'Sottotitoli TV (2)', captionsTextTrack2LanguageCode: 'it',
+  // Safari: with its "Managed" Media Source the sound bypasses Web Audio (we heard only silence);
+  // the classic Media Source lets the transcription hear it
+  ...(wantsMse() && window.MediaSource ? { preferManagedMediaSource: false } : {}),
 });
 export function hookHls(h) {
   hls = h;
@@ -245,6 +248,8 @@ const GEN_LISTENING_TEXT = 'In ascolto: le frasi compaiono qualche secondo dopo 
 let usingCpu = false; // the graphics card didn't work in this browser: light model on the processor
 const genListening = () => GEN_LISTENING_TEXT + (usingCpu ? ' (Questo browser non lascia usare la scheda grafica: uso la qualità Veloce sul processore, più lenta.)' : '');
 let quiet = 0;
+// for a photo of the box: which player feeds the transcription
+const engineNote = () => ' [' + (hls ? 'hls.js' + (window.ManagedMediaSource && hls.config?.preferManagedMediaSource !== false ? ' MMS' : ' MSE') : 'lettore di sistema') + (whisper.needsMse() ? ', Web Audio' : ', captureStream') + ']';
 const GEN_HANDLERS = {
   progress: ({ loaded, total }) => {
     genStatus = 'Scarico il modello di trascrizione (solo la prima volta): ' + (total ? Math.round(loaded / total * 100) + '% di ' + mb(total) : mb(loaded)) + '…';
@@ -266,7 +271,7 @@ const GEN_HANDLERS = {
   // pieces with no sound at all for half a minute: the browser doesn't let us hear this channel
   quiet: () => {
     if (++quiet === 6 && active === 'gen' && !el.video.muted) {
-      genStatus = 'Non sento l\'audio di questo canale: se lo senti anche tu, il sito del canale non permette di ascoltarlo (prova con il proxy attivo).';
+      genStatus = 'Non sento l\'audio di questo canale: se lo senti anche tu, il sito del canale non permette di ascoltarlo (prova con il proxy attivo).' + engineNote();
       render();
     }
   },

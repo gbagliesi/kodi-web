@@ -3,7 +3,8 @@
 const CACHE = 'salotto-__BUILD__';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
-  'js/app.js', 'js/version.js', 'js/addons.js', 'js/addon-runtime.js', 'js/player.js', 'js/cast.js', 'js/nav.js', 'js/storage.js', 'js/epg.js', 'js/avsync.js',
+  'js/app.js', 'js/version.js', 'js/addons.js', 'js/addon-runtime.js', 'js/player.js', 'js/cast.js', 'js/nav.js', 'js/storage.js', 'js/epg.js', 'js/avsync.js', 'js/remote-host.js', 'js/vendor/qrcode.js',
+  'remote.html', 'js/remote.js', 'css/remote.css',
   'icons/icon.svg', 'icons/icon-180.png', 'icons/icon-192.png',
 ];
 

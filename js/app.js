@@ -4,6 +4,7 @@ import * as player from './player.js';
 import * as epg from './epg.js';
 import { handleNavKey, focusables } from './nav.js';
 import { versionLabel } from './version.js';
+import * as remote from './remote-host.js';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -185,7 +186,7 @@ async function route() {
   // pages that can be the start page (📌): sections and add-on folders
   pinBtn.hidden = !['video', 'music', 'live', 'guide', 'files', 'favourites', 'browse'].includes(section);
   updatePinBtn();
-  if (section !== 'settings') store.save('lastPage', location.hash);
+  if (section !== 'settings' && section !== 'remote') store.save('lastPage', location.hash);
   try {
     switch (section) {
       case '': renderHome(); break;
@@ -197,6 +198,7 @@ async function route() {
       case 'favourites': await renderFavourites(); break;
       case 'addons': rest[0] === 'repo' ? await renderRepo() : rest[0] ? renderAddonInfo(rest[0]) : renderAddons(); break;
       case 'settings': renderSettings(); break;
+      case 'remote': await renderRemote(); break;
       case 'browse': await renderBrowse(rest[0], params.get('p') || '', params); break;
       default: renderHome();
     }
@@ -1110,6 +1112,9 @@ function renderSettings() {
       h('div', { class: 'hint' }, 'Proxy attivo: ', active ? active.replace(/token=[^&]+/, 'token=•••') : 'nessuno')),
     h('div', { class: 'field' }, h('label', { for: 'proxy-token' }, 'Token del proxy'), token,
       h('div', { class: 'hint' }, 'Lo stesso valore impostato come TOKEN nel proxy. Impedisce ad altri di usarlo.')),
+    h('div', { class: 'field' }, h('label', {}, 'Telecomando dal cellulare'),
+      h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => go('remote') }, '📱 Collega il cellulare')),
+      h('div', { class: 'hint' }, 'Usa il cellulare come telecomando di questo schermo: canali, volume, pausa, sincronia audio e guida TV. Serve il proxy Cloudflare.')),
     h('div', { class: 'field check' }, resume, h('label', { for: 'resume' }, 'Riprendi i video dal punto in cui li hai lasciati')),
     /Android/i.test(navigator.userAgent) && !isTvApp ? h('div', { class: 'field check' }, autoPip, h('label', { for: 'autopip' }, 'Finestra mobile automatica: i video si aprono a schermo intero, così uscendo dall\'app continuano in una finestra mobile')) : null,
     h('div', { class: 'field' }, h('label', { for: 'startpage' }, 'Pagina iniziale'), startSel,
@@ -1121,6 +1126,7 @@ function renderSettings() {
           startLabel: startSel.value === s.startPage ? s.startLabel : '' });
         listingCache.clear();
         const p = await addons.detectProxy();
+        remote.restart();
         if (!p) toast('Salvato');
         else toast((await addons.checkProxy(p)) ? 'Salvato · proxy raggiungibile ✓' : 'Salvato, ma il proxy non risponde: controlla l\'indirizzo', 5000);
         if (location.hash === '#/settings') renderSettings(); // not if the user already moved on
@@ -1137,6 +1143,86 @@ function renderSettings() {
       h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: forceUpdate }, 'Forza aggiornamento')),
       h('div', { class: 'hint' }, 'Scarica di nuovo l\'app ignorando la cache, se una correzione non compare. Add-on, preferiti e impostazioni restano.')),
     h('p', { class: 'hint' }, 'Salotto è un media center leggero ispirato ai media center da salotto, che gira interamente nel browser. Gli add-on sono script JavaScript eseguiti in isolamento (Web Worker). Usa solo fonti di cui hai i diritti.'),
+  ));
+  focusFirst();
+}
+
+// ---------------------------------------------------------------- phone remote
+// The pairing page: a QR code for the phone's camera (remote.html), the screen's name and who
+// is connected. The relay is the Cloudflare Worker (see remote-host.js).
+let remoteSources = [];
+remote.init({
+  sources: async () => { remoteSources = await guideSources(); return remoteSources.map(s => ({ id: s.id, label: s.label })); },
+  channels: async (id) => {
+    if (!remoteSources.length) remoteSources = await guideSources();
+    const src = remoteSources.find(s => s.id === id);
+    if (!src) throw new Error('elenco non trovato');
+    return guideChannels(src);
+  },
+  openChannel: async (list, i) => {
+    const entry = list[i];
+    if (!entry) throw new Error('canale non trovato');
+    toast('Apertura di «' + entry.item.label + '»…', 1500);
+    const r = await entry.open();
+    await player.play(r.item, r.stream, { favEntry: r.favEntry, channels: list.length > 1 ? { list, index: i } : undefined });
+  },
+  navigate: (r) => { if (['', 'live', 'guide', 'favourites', 'video', 'music', 'settings'].includes(r)) { if (player.isOpen()) player.close(); go(r); } },
+  back: () => { if (!window.salottoBack()) { /* already on Home */ } },
+});
+let remoteCount = 0;
+remote.onStatus((st) => {
+  if (st.remotes > remoteCount) toast('📱 Telecomando collegato');
+  remoteCount = st.remotes;
+  const line = $('remote-status');
+  if (line) line.textContent = remoteLine(st);
+});
+const remoteLine = (st) => !st.enabled ? 'Telecomando spento.' : !st.connected ? 'Collegamento al server…'
+  : st.remotes ? `Collegato: ${st.remotes === 1 ? '1 cellulare' : st.remotes + ' cellulari'} ✓` : 'Pronto: in attesa del cellulare.';
+
+async function renderRemote() {
+  setCrumbs(['Impostazioni', 'Telecomando']);
+  backBtn.hidden = false;
+  loading('Controllo il server del telecomando…');
+  const at = location.hash;
+  const ok = await remote.check();
+  if (location.hash !== at) return;
+  if (ok !== 'ok') {
+    const why = {
+      noproxy: 'Il telecomando passa dal tuo proxy Cloudflare, che qui non è impostato. Configuralo in Impostazioni (guida docs/CLOUDFLARE.md), poi torna qui.',
+      old: 'Il tuo Worker Cloudflare non ha ancora il telecomando: va aggiornato. Nel repository apri Actions → «Aggiorna il Worker Cloudflare» → Run workflow (vedi docs/CLOUDFLARE.md, sezione Telecomando).',
+      down: 'Il proxy Cloudflare non risponde. Controlla l\'indirizzo in Impostazioni e la connessione.',
+    }[ok];
+    fill(view, h('div', { class: 'form' }, h('div', { class: 'empty' }, why),
+      h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => route() }, 'Riprova'), h('button', { class: 'btn focusable', onclick: () => go('settings') }, 'Impostazioni'))));
+    focusFirst();
+    return;
+  }
+  remote.start();
+  const cfg = remote.config();
+  const url = remote.pairUrl();
+  const qrBox = h('div', { class: 'qr-box' });
+  import('./vendor/qrcode.js').then(({ default: qrcode }) => {
+    const q = qrcode(0, 'M');
+    q.addData(url);
+    q.make();
+    qrBox.innerHTML = q.createSvgTag({ cellSize: 6, margin: 3, scalable: true });
+  }).catch(() => { qrBox.textContent = 'Codice QR non disponibile: usa il link qui sotto.'; });
+  const name = h('input', { type: 'text', id: 'remote-name', value: cfg.name, maxlength: 40, autocomplete: 'off', spellcheck: 'false' });
+  const link = h('input', { type: 'text', readonly: true, value: url, class: 'remote-link', onfocus: (e) => e.target.select() });
+  fill(view, h('div', { class: 'form remote-page' },
+    h('p', {}, 'Inquadra il codice con la fotocamera del cellulare e apri il link: il cellulare diventa il telecomando di questo schermo. Poi sul cellulare aggiungi la pagina alla schermata Home per riaprirla al volo.'),
+    qrBox,
+    h('div', { class: 'hint', id: 'remote-status' }, remoteLine(remote.status())),
+    h('div', { class: 'field' }, h('label', { for: 'remote-name' }, 'Nome di questo schermo (lo vedi sul cellulare)'), name,
+      h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => { remote.setName(name.value); toast('Nome salvato'); route(); } }, 'Salva il nome'))),
+    h('div', { class: 'field' }, h('label', {}, 'Oppure manda questo link al cellulare'), link,
+      navigator.clipboard ? h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => navigator.clipboard.writeText(url).then(() => toast('Link copiato')) }, 'Copia il link')) : null,
+      h('div', { class: 'hint' }, 'Il link contiene la chiave di questo schermo: dallo solo a chi può usare il telecomando.')),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn focusable', onclick: () => { remote.stop(false); toast('Telecomando spento'); go('settings'); } }, 'Spegni il telecomando'),
+      h('button', { class: 'btn danger focusable', onclick: async () => {
+        if (await confirmBox('Scollega i cellulari', 'I cellulari collegati smetteranno di funzionare e serve un nuovo codice QR.', 'Scollega', true)) { remote.stop(true); remote.start(); route(); }
+      } }, 'Scollega tutti i cellulari')),
   ));
   focusFirst();
 }

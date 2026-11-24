@@ -82,6 +82,27 @@ già impostate su Cloudflare restano come sono.
 Apri il Worker → **Edit code**, sostituisci tutto il codice con quello di
 `cloudflare/worker.js` e clicca **Deploy**. Le variabili e il token restano.
 
+## Telecomando dal cellulare
+
+Il telecomando (Impostazioni → **Collega il cellulare**) passa dallo stesso
+Worker: lo schermo e il cellulare si collegano a una "stanza" del Worker
+(un Durable Object, incluso nel piano gratuito), così funzionano anche se non
+sono sulla stessa rete Wi-Fi.
+
+- Con l'aggiornamento **automatico** non devi fare nulla: la GitHub Action
+  pubblica il Worker già pronto per il telecomando.
+- Con l'aggiornamento **a mano** incollare il codice non basta, perché serve
+  anche il collegamento al Durable Object descritto in
+  `cloudflare/wrangler.toml`: conviene passare all'aggiornamento automatico
+  (sezione sopra) e lanciare una volta **Run workflow**.
+
+Se Salotto dice che il Worker "non ha ancora il telecomando", nel repository
+apri **Actions** → **Aggiorna il Worker Cloudflare** → **Run workflow**.
+
+Il codice QR contiene la chiave dello schermo e il token del proxy: mostralo
+solo a chi deve usare il telecomando. **Scollega tutti i cellulari** crea una
+chiave nuova.
+
 ## Da sapere
 
 - Chromecast: la TV scarica lo stream passando dal tuo Worker. Se sulla TV

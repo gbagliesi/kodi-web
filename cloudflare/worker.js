@@ -8,6 +8,12 @@
  *                                             HLS playlists are rewritten so
  *                                             every segment also goes through here.
  *
+ * Phone remote (only here, not in server.js):
+ *   GET /remote/health                     -> "ok" when the remote relay is set up
+ *   GET /remote/ws?room=<id>&role=tv|remote -> WebSocket; the Durable Object of the room passes
+ *                                             every message of the TV to its remotes and back.
+ *   Needs the REMOTE Durable Object binding of wrangler.toml (the GitHub Action deploys it).
+ *
  * Settings (Worker → Settings → Variables and Secrets):
  *   TOKEN            secret, recommended: every call must carry ?token=<TOKEN>
  *   ALLOWED_ORIGINS  optional, comma separated, e.g. https://gbagliesi.github.io
@@ -51,10 +57,69 @@ export function rewritePlaylist(body, baseUrl, headersParam, token) {
   }).join('\n');
 }
 
+// ---------------------------------------------------------------- phone remote
+// A room is one Salotto screen (computer, iPad, Fire TV) and the phones paired with it. Its
+// name is a long random id shown only in the pairing QR code, so it works as the room's key.
+const ROOM_RE = /^[A-Za-z0-9_-]{16,64}$/;
+const MAX_MSG = 512 * 1024;
+
+export class RemoteRoom {
+  constructor(ctx) {
+    this.ctx = ctx;
+    // keep-alive pings are answered without waking the object up
+    try { ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong')); } catch { /* older runtime */ }
+  }
+
+  peers() {
+    return { tv: this.ctx.getWebSockets('tv').length, remotes: this.ctx.getWebSockets('remote').length };
+  }
+
+  announce(except) {
+    const msg = JSON.stringify({ t: 'peers', ...this.peers() });
+    for (const ws of this.ctx.getWebSockets()) if (ws !== except) { try { ws.send(msg); } catch { /* closing */ } }
+  }
+
+  async fetch(request) {
+    if (request.headers.get('Upgrade') !== 'websocket') return text('serve una WebSocket', 426);
+    const role = new URL(request.url).searchParams.get('role') === 'tv' ? 'tv' : 'remote';
+    // one screen per room: a newer TV connection (page reloaded) replaces the old one
+    if (role === 'tv') for (const old of this.ctx.getWebSockets('tv')) { try { old.close(4000, 'sostituita'); } catch { /* gone */ } }
+    const [client, server] = Object.values(new WebSocketPair());
+    this.ctx.acceptWebSocket(server, [role]);
+    server.send(JSON.stringify({ t: 'peers', ...this.peers() }));
+    this.announce(server);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  webSocketMessage(ws, msg) {
+    if (typeof msg !== 'string' || msg.length > MAX_MSG) return;
+    const to = this.ctx.getTags(ws).includes('tv') ? 'remote' : 'tv';
+    for (const peer of this.ctx.getWebSockets(to)) { try { peer.send(msg); } catch { /* closing */ } }
+  }
+
+  webSocketClose(ws, code) {
+    try { ws.close(code === 1005 || code === 1006 ? 1000 : code, 'chiusa'); } catch { /* already closed */ }
+    this.announce(ws);
+  }
+
+  webSocketError(ws) { this.webSocketClose(ws, 1011); }
+}
+
+function handleRemote(request, env, u) {
+  if (!env.REMOTE) return text('telecomando non configurato: pubblica il Worker con wrangler (docs/CLOUDFLARE.md)', 501);
+  if (u.pathname.endsWith('/remote/health')) return text('ok');
+  const token = env.TOKEN || '';
+  if (token && u.searchParams.get('token') !== token) return text('token mancante o errato', 401);
+  const room = u.searchParams.get('room') || '';
+  if (!ROOM_RE.test(room)) return text('stanza non valida', 400);
+  return env.REMOTE.get(env.REMOTE.idFromName(room)).fetch(request);
+}
+
 async function handle(request, env) {
   const u = new URL(request.url);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (u.pathname.endsWith('/proxy/health')) return text('ok');
+  if (/\/remote\/(health|ws)$/.test(u.pathname)) return handleRemote(request, env, u);
   // /proxy/<name> (e.g. /proxy/live.m3u8) works too: some native players pick the format from the extension
   if (!/\/proxy(\/[\w.-]+)?$/.test(u.pathname)) return text('Salotto proxy: usa /proxy?url=…', 404);
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('metodo non consentito', 405);

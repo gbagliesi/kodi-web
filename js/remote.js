@@ -10,9 +10,9 @@ const LAST = 'salotto-remote:last';
 function loadScreens() { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } }
 function saveScreens(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch { /* private mode */ } }
 
-/** The screen in the address (#r=…&w=…&t=…&n=…), remembered for next time. */
-function fromHash() {
-  const p = new URLSearchParams(location.hash.replace(/^#/, ''));
+/** The screen in a pairing address (#r=…&w=…&t=…&n=…), or null. */
+function fromHash(hash = location.hash) {
+  const p = new URLSearchParams(String(hash).replace(/^[^#]*#?/, ''));
   const room = p.get('r'), base = p.get('w');
   if (!room || !/^[A-Za-z0-9_-]{16,64}$/.test(room) || !/^https:\/\//.test(base || '') && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(base || '')) return null;
   return { room, base: base.replace(/\/+$/, ''), token: p.get('t') || '', name: p.get('n') || 'Salotto' };
@@ -153,6 +153,7 @@ function setDot() {
   if (screen && wsOpen && !tvOnline) { msg.textContent = 'Lo schermo «' + screen.name + '» non è collegato: apri Salotto sullo schermo e tienilo acceso.'; msg.hidden = false; }
   else if (screen && !wsOpen && retry > 1) { msg.textContent = 'Non riesco a raggiungere il server del telecomando, riprovo…'; msg.hidden = false; }
   else msg.hidden = true;
+  if (tab === 'screens') renderScreens(false);
 }
 
 const fmtAv = (ms) => (ms > 0 ? '+' : ms < 0 ? '−' : '') + Math.abs(ms) + ' ms';
@@ -257,7 +258,8 @@ document.querySelectorAll('.r-tabbtn').forEach(b => b.addEventListener('click', 
 function showTab(name) {
   tab = name;
   document.querySelectorAll('.r-tabbtn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-  for (const t of ['remote', 'channels', 'guide']) $('tab-' + t).hidden = t !== name;
+  for (const t of ['remote', 'channels', 'guide', 'screens']) $('tab-' + t).hidden = t !== name;
+  if (name === 'screens') renderScreens();
   if (name !== 'remote') { epg.load().then(() => { renderChannels(); renderGuide(); }); needChannels(); }
   if (name === 'channels') { renderSources(); renderChannels(); }
   if (name === 'guide') { renderSources(); renderGuide(); }
@@ -455,29 +457,64 @@ function openKeypad() {
   openSheet(el('h2', '', 'Numero del canale'), disp, pad);
 }
 
-// screen picker
-$('r-screen').addEventListener('click', () => {
-  const nodes = [el('h2', '', 'Schermi collegati')];
-  for (const s of screens) {
-    const row = el('div', 'r-scr' + (s === screen ? ' current' : ''));
-    const pick = el('button', 'r-scr-name', (s === screen ? '● ' : '') + s.name);
-    pick.addEventListener('click', () => {
-      screen = s; localStorage.setItem(LAST, s.room);
-      state = null; list = { version: 0, items: [] }; sources = []; chans.clear(); curSrc = '';
-      closeSheet(); setView(); reconnect();
-    });
+// ---------------------------------------------------------------- paired screens (tab)
+// Every Salotto screen has its own pairing link (its own room): the phone keeps them all here.
+function useScreen(s) {
+  screen = s; localStorage.setItem(LAST, s.room);
+  state = null; list = { version: 0, items: [] }; sources = []; chans.clear(); curSrc = '';
+  setView(); reconnect();
+}
+const online = new Map(); // room -> true / false (null while asking)
+async function probe(s) {
+  if (s === screen) { online.set(s.room, tvOnline); return; }
+  online.set(s.room, null);
+  try {
+    const u = new URL(s.base + '/remote/status');
+    u.searchParams.set('room', s.room);
+    if (s.token) u.searchParams.set('token', s.token);
+    const r = await fetch(u, { cache: 'no-store' });
+    online.set(s.room, r.ok ? (await r.json()).tv > 0 : false);
+  } catch { online.set(s.room, false); }
+  if (tab === 'screens') renderScreens(false);
+}
+function renderScreens(ask = true) {
+  const box = $('r-scrlist');
+  if (!screens.length) { emptyList(box, 'Nessuno schermo collegato.'); return; }
+  box.replaceChildren(...screens.map((s) => {
+    if (ask) probe(s);
+    const cur = s === screen;
+    const on = cur ? tvOnline : online.get(s.room);
+    const row = el('div', 'r-ch r-scr' + (cur ? ' current' : ''));
+    const pick = el('button', 'r-ch-main');
+    pick.append(el('span', 'r-dot ' + (on ? 'on' : on === false ? 'off' : '')));
+    const txt = el('span', 'r-ch-text');
+    txt.append(el('span', 'r-ch-name', s.name), el('span', 'r-ch-next', (cur ? 'In uso · ' : '') + (on ? 'acceso' : on === false ? 'spento o Salotto chiuso' : 'controllo…')));
+    pick.append(txt);
+    pick.addEventListener('click', () => { if (!cur) useScreen(s); showTab('remote'); });
     const del = el('button', 'r-scr-del', 'Rimuovi');
     del.addEventListener('click', () => {
+      if (!confirm('Rimuovere «' + s.name + '» da questo telefono?')) return;
       screens = screens.filter(x => x !== s); saveScreens(screens);
-      if (screen === s) { screen = screens[0] || null; state = null; reconnect(); setView(); }
-      $('r-screen').click();
+      if (cur) { if (screens[0]) useScreen(screens[0]); else { screen = null; reconnect(); setView(); } }
+      renderScreens(false);
     });
     row.append(pick, del);
-    nodes.push(row);
-  }
-  nodes.push(el('p', 'r-hint', 'Per aggiungere uno schermo apri su di esso Salotto → Impostazioni → Collega il cellulare e inquadra il codice QR.'));
-  openSheet(...nodes);
+    return row;
+  }));
+}
+$('r-addbtn').addEventListener('click', () => {
+  const h = fromHash($('r-addlink').value.trim());
+  if (!h) { toast('Link non valido: copialo dalla pagina «Collega il cellulare» dello schermo'); return; }
+  const old = screens.find(s => s.room === h.room);
+  if (old) Object.assign(old, h); else screens.push(h);
+  saveScreens(screens);
+  $('r-addlink').value = '';
+  useScreen(old || h);
+  toast('Schermo aggiunto');
+  renderScreens();
 });
+// the name at the top opens the list as well
+$('r-screen').addEventListener('click', () => showTab('screens'));
 
 // ---------------------------------------------------------------- misc
 let toastTimer = 0;

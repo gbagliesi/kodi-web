@@ -118,6 +118,10 @@ async function mock(context) {
   await context.route(/^https:\/\/(example\.org|de1\.api\.radio-browser\.info|archive\.org|www\.gstatic\.com)\//, r => r.fulfill({ status: 404, body: '' }));
   await context.route('https://cdn.jsdelivr.net/**', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.Hls={isSupported:()=>true,Events:{ERROR:"e"},ErrorTypes:{},prototype:{}};window.Hls=Object.assign(function(){return{on(){},loadSource(u){window.__hlsSrc=u},attachMedia(){},destroy(){},stopLoad(){},startLoad(){}}},window.Hls);' }));
   await context.routeWebSocket(/\/remote\/ws/, bridge);
+  await context.route(RELAY + '/remote/status**', async (r) => {
+    const res = await worker.fetch(new Request(r.request().url()), env);
+    r.fulfill({ status: res.status, contentType: 'application/json', body: await res.text(), headers: { 'access-control-allow-origin': '*' } });
+  });
 }
 
 async function waitFor(fn, ms = 8000, what = '') {
@@ -297,6 +301,22 @@ async function uiTests() {
     await waitFor(() => tv.evaluate(() => !window.salotto.player.isOpen()), 5000, 'stopped');
     await waitFor(() => ph.textContent('#r-title').then(t => /Nessun video/.test(t)));
     console.log('✓ stop');
+
+    // list of screens: the current one is on, a second (switched off) one added by link
+    await ph.click('.r-tabbtn[data-tab=screens]');
+    await ph.waitForSelector('#r-scrlist .r-scr.current :text("acceso")');
+    const other = link.replace(/r=[^&]+/, 'r=AAAAAAAAAAAAAAAAAAAAAAAA').replace(/n=[^&]+/, 'n=Camera');
+    await ph.fill('#r-addlink', other);
+    await ph.click('#r-addbtn');
+    await waitFor(() => ph.textContent('#r-name').then(t => t === 'Camera'), 5000, 'switched to new screen');
+    await ph.click('.r-tabbtn[data-tab=screens]');
+    await ph.waitForSelector('#r-scrlist .r-scr.current :text("spento")');
+    await ph.waitForSelector('#r-scrlist .r-scr:not(.current) :text("acceso")');
+    if (SHOTS) await ph.screenshot({ path: path.join(SHOTS, 'remote-screens.png') });
+    await ph.click('#r-scrlist .r-scr:not(.current) .r-ch-main');
+    await waitFor(() => ph.getAttribute('#r-dot', 'class').then(c => /\bon\b/.test(c)), 8000, 'back on first screen');
+    assert.equal(await ph.isVisible('#tab-remote'), true);
+    console.log('✓ screens tab: on/off status, add by link, switch');
 
     // the phone remembers the screen without the address
     const ph2 = await phoneCtx.newPage();

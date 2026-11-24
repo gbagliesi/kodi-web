@@ -205,6 +205,17 @@ async function uiTests() {
     await waitFor(() => tv.evaluate(() => !document.getElementById('video').muted));
     console.log('✓ volume and mute');
 
+    // full screen: entered at once or after a tap on the screen, left from the phone
+    await ph.click('#r-fs');
+    await waitFor(() => tv.evaluate(() => !!document.fullscreenElement || !document.getElementById('fs-hint').hidden), 5000, 'fs asked');
+    if (!await tv.evaluate(() => !!document.fullscreenElement)) await tv.mouse.click(5, 400);
+    await waitFor(() => tv.evaluate(() => document.fullscreenElement === document.documentElement), 5000, 'fullscreen');
+    await waitFor(() => ph.textContent('#r-fs small').then(t => t === 'Esci'));
+    await ph.click('#r-fs');
+    await waitFor(() => tv.evaluate(() => !document.fullscreenElement), 5000, 'fullscreen off');
+    await waitFor(() => ph.textContent('#r-fs small').then(t => t === 'Intero'));
+    console.log('✓ full screen on and off from the phone');
+
     // A/V sync box follows the player; channel list / info on the screen
     assert.equal(await ph.isVisible('#r-av'), true);
     await ph.click('[data-cmd=info]');

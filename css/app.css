@@ -423,3 +423,8 @@ body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); ga
 .remote-page .qr-box svg { width: 100%; height: 100%; display: block; }
 .remote-page .remote-link { font-size: 13px; }
 #remote-status { font-size: 15px; color: var(--text); }
+
+/* full screen asked from the phone: the browser wants a tap here first */
+.fs-hint { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 100; background: rgba(13, 17, 23, .92); color: var(--text);
+  border: 2px solid var(--accent); border-radius: var(--radius); padding: 22px 28px; font-size: 22px; text-align: center; max-width: 80vw; pointer-events: none;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .6); }

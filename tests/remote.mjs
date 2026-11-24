@@ -340,6 +340,8 @@ async function uiTests() {
     await ph.click('#r-scrlist .r-scr:not(.current) .r-ch-main');
     await waitFor(() => ph.getAttribute('#r-dot', 'class').then(c => /\bon\b/.test(c)), 8000, 'back on first screen');
     assert.equal(await ph.isVisible('#tab-remote'), true);
+    assert.match(await ph.textContent('#r-version'), /Versione v\d+\.\d+\.\d+/);
+    assert.equal(await ph.locator('#tab-screens #r-update').count(), 1);
     console.log('✓ screens tab: on/off status, add by link, rename, reorder, switch');
 
     // the phone remembers the screen without the address

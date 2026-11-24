@@ -168,6 +168,9 @@ try {
   await sp.evaluate(() => import('/js/player.js').then(p => p.play({ label: 'Safari', type: 'video' }, { url: 'https://media.test/av.m3u8' })));
   await waitFor(() => sp.evaluate(() => /Buongiorno/.test(document.getElementById('pl-subs').textContent)), 20000, 'Safari path');
   assert.equal(await sp.evaluate(() => document.getElementById('video').muted), false);
+  // another channel: generated again by themselves, through hls.js from the start
+  await sp.evaluate(() => import('/js/player.js').then(p => p.play({ label: 'Safari 2', type: 'video' }, { url: 'https://media.test/av.m3u8?2' })));
+  await waitFor(() => sp.evaluate(() => /Buongiorno/.test(document.getElementById('pl-subs').textContent)), 20000, 'Safari next channel');
   await saf.close();
   console.log('✓ Safari-like browser: the sound reaches Whisper from hls.js audio pieces (ADTS + decodeAudioData), "Generati" remembered');
 

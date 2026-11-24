@@ -109,7 +109,7 @@ function syncHls() {
 }
 // Safari announces a «Sottotitoli» track on many channels that never carries any text: a track
 // picked automatically that stays empty for a while is set aside and the generated ones take over.
-const EMPTY_AFTER = 20000;
+const EMPTY_AFTER = 8000;
 let emptyIds = new Set(), emptyTimer = 0;
 const usable = () => tracks.filter(t => !emptyIds.has(t.id));
 function hasCues(t) {
@@ -183,8 +183,9 @@ export function setCasting(on) { if (item) { item.casting = on; if (on && active
 /** On Safari the sound can only be heard through hls.js: ask the player to use it. */
 // Only once generated subtitles are really needed (not for subtitles off, or the channel's own):
 // the system player reaches many channels directly, hls.js may need the proxy for them.
-let mseFor = null;
-export const wantsMse = () => whisper.elementBound() || (!!item && mseFor === item && prefs.mode !== 'off' && support.ok && whisper.needsMse() && !noMse && !item.audio);
+// Once used in this visit, the next channels start straight with hls.js (no switch, no black screen).
+let mseFor = null, genUsed = false;
+export const wantsMse = () => whisper.elementBound() || (!!item && (mseFor === item || genUsed) && prefs.mode !== 'off' && support.ok && whisper.needsMse() && !noMse && !item.audio);
 export const audioBound = () => whisper.elementBound();
 
 const genPossible = () => support.ok && !noMse && item && !item.audio && !item.casting;
@@ -293,6 +294,7 @@ const mb = (b) => (b / 1e6 >= 1000 ? (b / 1e9).toFixed(1).replace('.', ',') + ' 
 let stopTimer = 0;
 function startGen() {
   clearTimeout(stopTimer);
+  if (whisper.needsMse()) genUsed = true;
   if (!whisper.isRunning()) genStatus = 'Avvio la trascrizione…';
   whisper.start(prefs.model, GEN_HANDLERS).catch(e => GEN_HANDLERS.error({ fatal: true, message: e.message }));
   listen();

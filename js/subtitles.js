@@ -168,6 +168,8 @@ export function newItem(it) {
   show('');
   genText = null; quiet = 0;
   if (!it) { stopGen(true); closeBox(); render(); return; }
+  // a new channel: the CC button doesn't keep the focus (its ring looked like «subtitles on»)
+  if (el && focused() === el.btn && !document.body.classList.contains('tv')) el.btn.blur();
   whisper.stopListening();
   stopTap();
   whisper.reset();
@@ -416,7 +418,10 @@ export function closeBox() {
   if (!el || el.box.hidden) return;
   el.box.hidden = true;
   if (focused() && el.box.contains(focused())) focused().blur();
-  if (!el.btn.hidden) el.btn.focus({ preventScroll: true });
+  // back to the CC button only when moving with keys (TV remote, arrows): after a click its
+  // focus ring would look like «subtitles on»
+  if (!el.btn.hidden && document.body.classList.contains('kbd-nav')) el.btn.focus({ preventScroll: true });
+  else if (focused() === el.btn) el.btn.blur();
   opts.wake?.();
 }
 /** Where the phone's highlight starts in the box. */

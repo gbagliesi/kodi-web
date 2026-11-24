@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0d1117">
+  <script>
+    // Installable app (Android, desktop Chrome), separate from Salotto (own folder, id and scope): the manifest opens remote/ and the paired
+    // screens come from storage. Not on iPhone/iPad, where the Home-screen app has its own storage:
+    // there "Add to Home Screen" must keep this page's address, pairing included.
+    if (!/iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+      const l = document.createElement('link'); l.rel = 'manifest'; l.href = 'manifest.webmanifest'; document.head.appendChild(l);
+    }
+  </script>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Telecomando">
+  <title>Salotto · telecomando</title>
+  <link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../icons/icon-180.png">
+  <link rel="stylesheet" href="../css/remote.css?v=__BUILD__">
+</head>
+<body>
+  <header id="r-top">
+    <button id="r-screen" class="r-screen" aria-label="Scegli lo schermo"><span id="r-name">Salotto</span><span class="caret">▾</span></button>
+    <span id="r-dot" class="r-dot" title="Collegamento"></span>
+  </header>
+
+  <section id="r-unpaired" class="r-empty" hidden>
+    <img src="../icons/icon.svg" alt="" width="64" height="64">
+    <h1>Telecomando di Salotto</h1>
+    <p>Sullo schermo (computer, iPad o TV) apri Salotto → <b>📱 Telecomando</b> (nel menu) e inquadra il codice QR con la fotocamera di questo telefono.</p>
+    <p>Oppure incolla qui il link dello schermo:</p>
+    <div class="r-add"><input id="r-addlink0" type="url" placeholder="Link del telecomando" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="r-chip on" id="r-addbtn0">Aggiungi</button></div>
+  </section>
+
+  <section id="r-now" class="r-now" hidden>
+    <div class="r-now-num" id="r-num"></div>
+    <div class="r-now-text">
+      <div class="r-now-title" id="r-title"></div>
+      <div class="r-now-prog" id="r-prog"></div>
+      <div class="r-bar" id="r-bar" hidden><span id="r-barfill"></span></div>
+      <div class="r-now-next" id="r-next"></div>
+    </div>
+  </section>
+  <div id="r-msg" class="r-msg" hidden></div>
+
+  <main id="r-main">
+    <!-- remote control -->
+    <section class="r-tab" id="tab-remote">
+      <div class="r-row r-top-row">
+        <button class="r-btn" data-cmd="stop" aria-label="Chiudi il video">■<small>Stop</small></button>
+        <button class="r-btn r-big" id="r-play" data-cmd="play" aria-label="Play o pausa">⏯<small>Pausa</small></button>
+        <button class="r-btn" id="r-mute" data-cmd="mute" aria-label="Muto">🔇<small>Muto</small></button>
+        <button class="r-btn" id="r-fs" data-cmd="fs" aria-label="Schermo intero">⛶<small>Intero</small></button>
+      </div>
+
+      <div class="r-pad-row">
+        <div class="r-rocker" aria-label="Canale">
+          <button class="r-btn" data-cmd="zap" data-d="1" data-repeat aria-label="Canale successivo">▲</button>
+          <span>CH</span>
+          <button class="r-btn" data-cmd="zap" data-d="-1" data-repeat aria-label="Canale precedente">▼</button>
+        </div>
+        <div class="r-dpad" aria-label="Frecce">
+          <button class="r-btn up" data-key="ArrowUp" data-repeat aria-label="Su">▲</button>
+          <button class="r-btn left" data-key="ArrowLeft" data-repeat aria-label="Sinistra">◀</button>
+          <button class="r-btn ok" data-key="Enter" aria-label="OK">OK</button>
+          <button class="r-btn right" data-key="ArrowRight" data-repeat aria-label="Destra">▶</button>
+          <button class="r-btn down" data-key="ArrowDown" data-repeat aria-label="Giù">▼</button>
+        </div>
+        <div class="r-rocker" id="r-volrock" aria-label="Volume">
+          <button class="r-btn" data-cmd="vol" data-d="5" data-repeat aria-label="Alza il volume">＋</button>
+          <span id="r-vollbl">VOL</span>
+          <button class="r-btn" data-cmd="vol" data-d="-5" data-repeat aria-label="Abbassa il volume">－</button>
+        </div>
+      </div>
+      <div class="r-note" id="r-volnote" hidden>Il volume di questo schermo si regola dai suoi tasti: da qui puoi solo togliere e rimettere l'audio.</div>
+
+      <div class="r-row">
+        <button class="r-btn" data-key="Back" aria-label="Indietro">↩<small>Indietro</small></button>
+        <button class="r-btn" data-go="" aria-label="Home">⌂<small>Home</small></button>
+        <button class="r-btn" data-cmd="panel" aria-label="Elenco canali sullo schermo">☰<small>Elenco</small></button>
+        <button class="r-btn" data-cmd="info" aria-label="Programma">ⓘ<small>Info</small></button>
+      </div>
+      <div class="r-row">
+        <button class="r-btn" data-cmd="skip" data-s="-10" aria-label="Indietro di 10 secondi">⏪<small>−10 s</small></button>
+        <button class="r-btn" id="r-fwd" data-cmd="skip" data-s="30" aria-label="Avanti di 30 secondi">⏩<small>+30 s</small></button>
+        <button class="r-btn" id="r-keypad-btn" aria-label="Numero del canale">123<small>Numero</small></button>
+        <button class="r-btn" data-go="guide" aria-label="Guida TV sullo schermo">🗓<small>Guida</small></button>
+      </div>
+
+      <div class="r-av" id="r-av" hidden>
+        <div class="r-av-head">Sincronia audio <b id="r-avval">0 ms</b></div>
+        <div class="r-row">
+          <button class="r-btn" data-cmd="av" data-d="-1" data-repeat>Voce prima</button>
+          <button class="r-btn" data-cmd="av" data-d="1" data-repeat>Voce dopo</button>
+          <button class="r-btn" id="r-avreset" data-cmd="av" data-reset="1">Azzera</button>
+        </div>
+        <div class="r-note" id="r-avnote" hidden></div>
+      </div>
+    </section>
+
+    <!-- channels with now / next -->
+    <section class="r-tab" id="tab-channels" hidden>
+      <div class="r-chips" id="r-sources"></div>
+      <div class="r-list" id="r-chlist"></div>
+    </section>
+
+    <!-- guide: what is on at a time -->
+    <section class="r-tab" id="tab-guide" hidden>
+      <div class="r-chips" id="r-times"></div>
+      <div class="r-chips small" id="r-gsources"></div>
+      <div class="r-list" id="r-glist"></div>
+    </section>
+
+    <!-- paired screens -->
+    <section class="r-tab" id="tab-screens" hidden>
+      <div class="r-list" id="r-scrlist"></div>
+      <p class="r-hint">Per aggiungere uno schermo apri su di esso Salotto → <b>📱 Telecomando</b> e inquadra il codice QR, oppure incolla qui il link:</p>
+      <div class="r-add"><input id="r-addlink" type="url" placeholder="Link del telecomando" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="r-chip on" id="r-addbtn">Aggiungi</button></div>
+      <div class="r-install" id="r-install">
+        <button class="r-wide primary" id="r-installbtn" hidden>📲 Installa il telecomando</button>
+        <p class="r-hint" id="r-installhint"></p>
+      </div>
+    </section>
+  </main>
+
+  <nav id="r-tabs">
+    <button class="r-tabbtn active" data-tab="remote">🎮<span>Telecomando</span></button>
+    <button class="r-tabbtn" data-tab="channels">📺<span>Canali</span></button>
+    <button class="r-tabbtn" data-tab="guide">🗓<span>Guida</span></button>
+    <button class="r-tabbtn" data-tab="screens">🖥<span>Schermi</span></button>
+  </nav>
+
+  <div id="r-sheet" class="r-sheet" hidden>
+    <div class="r-sheet-box">
+      <button class="r-sheet-close" id="r-sheet-close" aria-label="Chiudi">✕</button>
+      <div id="r-sheet-body"></div>
+    </div>
+  </div>
+  <div id="r-toast" class="r-toast" hidden></div>
+
+  <script type="module" src="../js/remote.js?v=__BUILD__"></script>
+</body>
+</html>

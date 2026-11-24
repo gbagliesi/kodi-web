@@ -3,6 +3,7 @@
   "short_name": "Salotto",
   "description": "Media center leggero nel browser con add-on",
   "lang": "it",
+  "id": "/kodi-web/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

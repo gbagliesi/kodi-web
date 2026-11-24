@@ -248,6 +248,12 @@ try {
   await ip.click('.cc-opt:has-text("Spenti")');
   assert.deepEqual(await ipOpts(), ['✓Spenti', 'Automatici', 'Generati dal computer'], 'Spenti ticked when nothing was shown');
   assert.equal(await ip.evaluate(() => document.getElementById('pl-cc').className.includes('armed') || document.getElementById('pl-cc').className.includes('active')), false);
+  // closing the box and changing channel: the CC button keeps no focus ring (looked like «on»)
+  await ip.keyboard.press('Escape');
+  assert.notEqual(await ip.evaluate(() => document.activeElement?.id), 'pl-cc', 'no focus on CC after closing with a tap/Escape');
+  await ip.evaluate(() => document.getElementById('pl-cc').focus());
+  await ip.evaluate(() => import('/js/player.js').then(p => p.play({ label: 'iPad 2', type: 'video' }, { url: 'https://media.test/av.m3u8?2' })));
+  assert.notEqual(await ip.evaluate(() => document.activeElement?.id), 'pl-cc', 'no focus on CC after a channel change');
   await ipad.close();
   console.log('✓ iPad: generated subtitles not offered, with the reason');
 

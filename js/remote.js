@@ -502,17 +502,41 @@ function renderScreens(ask = true) {
     return row;
   }));
 }
-$('r-addbtn').addEventListener('click', () => {
-  const h = fromHash($('r-addlink').value.trim());
+function addFromLink(input) {
+  const h = fromHash(input.value.trim());
   if (!h) { toast('Link non valido: copialo dalla pagina «Collega il cellulare» dello schermo'); return; }
   const old = screens.find(s => s.room === h.room);
   if (old) Object.assign(old, h); else screens.push(h);
   saveScreens(screens);
-  $('r-addlink').value = '';
+  input.value = '';
   useScreen(old || h);
   toast('Schermo aggiunto');
   renderScreens();
+}
+$('r-addbtn').addEventListener('click', () => addFromLink($('r-addlink')));
+$('r-addbtn0').addEventListener('click', () => addFromLink($('r-addlink0')));
+
+// ---------------------------------------------------------------- install as an app
+const APPLE = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+let installEvent = null;
+function renderInstall() {
+  const btn = $('r-installbtn'), hint = $('r-installhint');
+  btn.hidden = !installEvent || standalone();
+  hint.textContent = standalone() ? ''
+    : APPLE ? 'Per averlo come app: in Safari tocca Condividi (□↑) → «Aggiungi alla schermata Home». Fallo dopo aver scelto lo schermo: l\'app si apre su quello.'
+    : installEvent ? '' : 'Per averlo come app: nel menu ⋮ di Chrome tocca «Installa app» o «Aggiungi a schermata Home».';
+}
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; renderInstall(); });
+window.addEventListener('appinstalled', () => { installEvent = null; renderInstall(); toast('Telecomando installato'); });
+$('r-installbtn').addEventListener('click', async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  try { await installEvent.userChoice; } catch { /* ignore */ }
+  installEvent = null; renderInstall();
 });
+renderInstall();
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 // the name at the top opens the list as well
 $('r-screen').addEventListener('click', () => showTab('screens'));
 

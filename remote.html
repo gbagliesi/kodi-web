@@ -4,7 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#0d1117">
-  <!-- No web manifest on purpose: "Add to Home screen" keeps this page's address, pairing included -->
+  <script>
+    // Installable app (Android, desktop Chrome): the manifest opens remote.html and the paired
+    // screens come from storage. Not on iPhone/iPad, where the Home-screen app has its own storage:
+    // there "Add to Home Screen" must keep this page's address, pairing included.
+    if (!/iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+      const l = document.createElement('link'); l.rel = 'manifest'; l.href = 'remote.webmanifest'; document.head.appendChild(l);
+    }
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,6 +31,8 @@
     <img src="icons/icon.svg" alt="" width="64" height="64">
     <h1>Telecomando di Salotto</h1>
     <p>Sullo schermo (computer, iPad o TV) apri Salotto → <b>Impostazioni</b> → <b>Collega il cellulare</b> e inquadra il codice QR con la fotocamera di questo telefono.</p>
+    <p>Oppure incolla qui il link dello schermo:</p>
+    <div class="r-add"><input id="r-addlink0" type="url" placeholder="Link del telecomando" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="r-chip on" id="r-addbtn0">Aggiungi</button></div>
   </section>
 
   <section id="r-now" class="r-now" hidden>
@@ -110,6 +119,10 @@
       <div class="r-list" id="r-scrlist"></div>
       <p class="r-hint">Per aggiungere uno schermo apri su di esso Salotto → Impostazioni → <b>Collega il cellulare</b> e inquadra il codice QR, oppure incolla qui il link:</p>
       <div class="r-add"><input id="r-addlink" type="url" placeholder="Link del telecomando" autocapitalize="off" autocomplete="off" spellcheck="false"><button class="r-chip on" id="r-addbtn">Aggiungi</button></div>
+      <div class="r-install" id="r-install">
+        <button class="r-wide primary" id="r-installbtn" hidden>📲 Installa il telecomando</button>
+        <p class="r-hint" id="r-installhint"></p>
+      </div>
     </section>
   </main>
 

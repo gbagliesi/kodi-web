@@ -177,6 +177,13 @@ async function attach(stream) {
   const avShift = !!avMs && hasMse() && !avNative;
   const subsMse = subs.wantsMse() && hasMse() && !subsNative;
   const native = !!v.canPlayType('application/vnd.apple.mpegurl') && !avShift && !subsMse && (APPLE || !hasMse() || (TV_APP && nativeStage < 2));
+  // hls.js needs the channel's site to allow it (CORS): ask once instead of waiting ~30 s for its
+  // errors, and go through the proxy straight away when it doesn't
+  if (subsMse && !native && !stream.proxy && getProxy() && looksHls(stream.url, stream.mime) && !(await corsOk(stream.url))) {
+    stream = { ...stream, proxy: true };
+    if (current && current.stream.url === stream.url) current.stream = stream;
+    return attach(stream);
+  }
   if (looksHls(stream.url, stream.mime) && !native) {
     await loadScript(HLS_CDN);
     if (!window.Hls || !window.Hls.isSupported()) {
@@ -232,6 +239,18 @@ async function attach(stream) {
       v.appendChild(tr);
     }
   }
+}
+
+const corsCache = new Map();
+async function corsOk(url) {
+  if (!corsCache.has(url)) {
+    corsCache.set(url, (async () => {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 5000);
+      try { const r = await fetch(url, { signal: ctl.signal, cache: 'no-store' }); return r.ok; } catch { return false; } finally { clearTimeout(timer); }
+    })());
+  }
+  return corsCache.get(url);
 }
 
 function destroyHls() {

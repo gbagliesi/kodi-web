@@ -19,11 +19,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Build and deploy are two jobs (as in GitHub's own Pages workflow): deploying in the same job
+  # right after the upload often failed with "No artifacts named github-pages were found".
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - name: Prepara i file del sito
@@ -45,5 +44,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

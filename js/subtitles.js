@@ -91,7 +91,7 @@ function refreshTextTracks() {
 function tracksChanged() {
   if (active && active !== 'gen' && !tracks.some(t => t.id === active)) setActive(null);
   // the channel's own subtitles turned up: they win over the generated ones
-  if (prefs.mode === 'on' && tracks.length && (active === null || active === 'gen')) setActive(bestTrack().id);
+  if (prefs.mode === 'on' && usable().length && (active === null || active === 'gen')) autoPick();
   syncHls();
   render();
 }
@@ -102,7 +102,32 @@ function syncHls() {
   const want = t?.kind === 'hls' ? t.ref : -1;
   if (hls.subtitleTrack !== want) { cues.delete('hls:' + hls.subtitleTrack); hls.subtitleTrack = want; }
 }
+// Safari announces a «Sottotitoli» track on many channels that never carries any text: a track
+// picked automatically that stays empty for a while is set aside and the generated ones take over.
+const EMPTY_AFTER = 20000;
+let emptyIds = new Set(), emptyTimer = 0;
+const usable = () => tracks.filter(t => !emptyIds.has(t.id));
+function hasCues(t) {
+  if (t.kind === 'tt') return !!t.ref.cues?.length;
+  return !!cues.get(t.id)?.length;
+}
+function autoPick() {
+  const t = bestTrack();
+  if (!t) return;
+  setActive(t.id);
+  clearTimeout(emptyTimer);
+  const check = () => {
+    if (active !== t.id || !item) return;
+    if (el.video.paused) { emptyTimer = setTimeout(check, 5000); return; }
+    if (hasCues(t)) return;
+    emptyIds.add(t.id);
+    setActive(null);
+    decide();
+  };
+  emptyTimer = setTimeout(check, EMPTY_AFTER);
+}
 function bestTrack() {
+  const tracks = usable();
   const lang = prefs.lang || 'it';
   return tracks.find(t => t.lang?.toLowerCase().startsWith(lang) || new RegExp(langName(lang) || '^$', 'i').test(t.label))
     || tracks.find(t => t.def) || tracks[0];
@@ -131,7 +156,8 @@ function setActive(id) {
 
 /** A new video starts (or null when the player closes). */
 export function newItem(it) {
-  clearTimeout(decideTimer);
+  clearTimeout(decideTimer); clearTimeout(emptyTimer);
+  emptyIds = new Set();
   item = it;
   tracks = []; cues.clear(); active = null; noMse = false; lagShown = false;
   show('');
@@ -174,7 +200,7 @@ function onPlaying() {
 }
 function decide() {
   if (!item || prefs.mode === 'off' || (active && active !== 'gen')) return;
-  if (prefs.mode === 'on' && tracks.length) { setActive(bestTrack().id); return; }
+  if (prefs.mode === 'on' && usable().length) { autoPick(); return; }
   if (genPossible()) needAudio();
   else render();
 }
@@ -185,7 +211,7 @@ function choose(id) {
   if (id === 'off') { prefs.mode = 'off'; savePrefs(); setActive(null); return; }
   if (id === 'on') {
     prefs.mode = 'on'; savePrefs();
-    if (tracks.length) setActive(bestTrack().id);
+    if (usable().length) autoPick();
     else if (genPossible()) needAudio();
     else render();
     return;
@@ -375,7 +401,7 @@ function render() {
   const genOk = genPossible();
   el.list.append(option('off', 'Spenti', '', prefs.mode === 'off'));
   el.list.append(option('on', 'Automatici', genOk ? 'Quelli del canale se ci sono, altrimenti generati dal computer' : 'Quelli del canale, quando ci sono', prefs.mode === 'on'));
-  for (const t of tracks) el.list.append(option(t.id, t.label, t.kind === 'cc' ? 'Sottotitoli trasmessi dal canale (televideo)' : 'Sottotitoli del canale', active === t.id));
+  for (const t of tracks) el.list.append(option(t.id, t.label, emptyIds.has(t.id) ? 'Finora vuoti: il canale non ci ha mandato nessun testo' : t.kind === 'cc' ? 'Sottotitoli trasmessi dal canale (televideo)' : 'Sottotitoli del canale', active === t.id));
   el.list.append(option('gen', 'Generati dal computer', genOk ? 'Trascrizione automatica dell\'audio in italiano, con qualche secondo di ritardo' : genWhy(), active === 'gen' || prefs.mode === 'gen', !genOk));
   // quality of the generated subtitles
   el.models.hidden = !support.ok;

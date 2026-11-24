@@ -6,6 +6,7 @@
 import { load, save } from './storage.js';
 import { focused } from './focus.js';
 import * as whisper from './whisper.js';
+import { tapHls, watchInit } from './hls-audio.js';
 
 const $ = (id) => document.getElementById(id);
 const UA = navigator.userAgent;
@@ -57,6 +58,7 @@ export const hlsConfig = () => ({
 });
 export function hookHls(h) {
   hls = h;
+  watchInit(h);
   const E = window.Hls.Events;
   h.on(E.SUBTITLE_TRACKS_UPDATED, () => refreshHlsTracks());
   h.on(E.MANIFEST_PARSED, () => { h.subtitleTrack = -1; refreshHlsTracks(); });
@@ -73,7 +75,7 @@ export function hookHls(h) {
     for (const c of d.cues || []) list.push({ start: c.startTime, end: c.endTime, text: cueText(c.text) });
     cues.set(id, list);
   });
-  h.on(E.DESTROYING, () => { if (hls === h) { hls = null; tracks = tracks.filter(t => t.kind === 'tt'); cues.clear(); } });
+  h.on(E.DESTROYING, () => { if (tapped === h) stopTap(); if (hls === h) { hls = null; tracks = tracks.filter(t => t.kind === 'tt'); cues.clear(); } });
 }
 function refreshHlsTracks() {
   if (!hls) return;
@@ -167,6 +169,7 @@ export function newItem(it) {
   genText = null; quiet = 0;
   if (!it) { stopGen(true); closeBox(); render(); return; }
   whisper.stopListening();
+  stopTap();
   whisper.reset();
   if (genStatus && !whisper.isRunning()) genStatus = '';
   refreshTextTracks();
@@ -249,7 +252,7 @@ let usingCpu = false; // the graphics card didn't work in this browser: light mo
 const genListening = () => GEN_LISTENING_TEXT + (usingCpu ? ' (Questo browser non lascia usare la scheda grafica: uso la qualità Veloce sul processore, più lenta.)' : '');
 let quiet = 0;
 // for a photo of the box: which player feeds the transcription
-const engineNote = () => ' [' + (hls ? 'hls.js' + (window.ManagedMediaSource && hls.config?.preferManagedMediaSource !== false ? ' MMS' : ' MSE') : 'lettore di sistema') + (whisper.needsMse() ? ', Web Audio' : ', captureStream') + ']';
+const engineNote = () => ' [' + (hls ? 'hls.js' + (window.ManagedMediaSource && hls.config?.preferManagedMediaSource !== false ? ' MMS' : ' MSE') : 'lettore di sistema') + (whisper.needsMse() ? ', pezzi audio ' + (tapped === hls ? 'sì' : 'no') : ', captureStream') + ']';
 const GEN_HANDLERS = {
   progress: ({ loaded, total }) => {
     genStatus = 'Scarico il modello di trascrizione (solo la prima volta): ' + (total ? Math.round(loaded / total * 100) + '% di ' + mb(total) : mb(loaded)) + '…';
@@ -297,13 +300,25 @@ function startGen() {
 /** Stop listening; the model stays loaded a couple of minutes (zapping, reopening a channel). */
 function stopGen(soon = false) {
   whisper.stopListening();
+  stopTap();
   genText = null;
   clearTimeout(stopTimer);
   stopTimer = setTimeout(() => { if (active !== 'gen') whisper.stop(); }, soon ? 120000 : 600000);
 }
 let gestureWait = false;
+// Safari: the sound comes from hls.js's own pieces (hls-audio.js), not from the <video>
+let untap = null, tapped = null;
+function stopTap() { if (untap) untap(); untap = null; tapped = null; }
 async function listen() {
   if (active !== 'gen' || el.video.paused) return;
+  if (whisper.needsMse()) {
+    if (!hls) { needAudio(); return; }
+    if (tapped === hls) return;
+    stopTap();
+    tapped = hls;
+    untap = tapHls(hls, el.video, (data, rate) => { if (active === 'gen') whisper.feed(data, rate); });
+    return;
+  }
   const why = await whisper.listen(el.video, (data, rate) => { if (active === 'gen' && !el.video.paused) whisper.feed(data, rate); });
   if (why === 'gesture') {
     genStatus = 'Tocca lo schermo (o premi un tasto) per far partire i sottotitoli generati.';

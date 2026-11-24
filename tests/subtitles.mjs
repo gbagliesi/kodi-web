@@ -89,6 +89,7 @@ try {
   const play = (url, label) => page.evaluate(([u, l]) => import('/js/player.js').then(p => p.play({ label: l, type: 'video' }, { url: u })), [url, label]);
   const overlay = () => page.evaluate(() => { const o = document.getElementById('pl-subs'); return o.hidden ? '' : o.textContent; });
   const clickCc = async (pg = page) => { await pg.mouse.move(600, 400); await pg.mouse.move(620, 420); await pg.click('#pl-cc'); };
+  const openCc = async () => { if (!(await page.isVisible('#pl-ccbox'))) await clickCc(); await page.waitForSelector('#pl-ccbox:not([hidden])'); };
   const options = () => page.$$eval('#pl-cclist .cc-opt', bs => bs.map(b => (b.classList.contains('on') ? '✓' : '') + b.querySelector('b').textContent + (b.disabled ? ' (x)' : '')));
 
   // ---- the channel's own subtitles
@@ -140,6 +141,37 @@ try {
   await page.keyboard.press('s');
   assert.equal(await page.evaluate(() => import('/js/player.js').then(p => p.remoteState().subs.on)), true, 's key turns them on');
   console.log('✓ phone remote and the S key turn subtitles on and off');
+  // the box, the CC button and the phone always tell the same story
+  const ccState = () => page.evaluate(() => import('/js/player.js').then(p => {
+    const b = document.getElementById('pl-cc');
+    return { on: p.remoteState().subs.on, active: p.remoteState().subs.active, lit: b.classList.contains('active'), armed: b.classList.contains('armed') };
+  }));
+  await waitFor(async () => (await ccState()).active === 'gen', 9000, 'gen again');
+  await openCc();
+  await page.click('.cc-opt:has-text("Spenti")');
+  assert.deepEqual(await options(), ['✓Spenti', 'Automatici', 'Sottotitoli', 'Generati dal computer'], 'Spenti ticked at once, box still open');
+  assert.deepEqual(await ccState(), { on: false, active: '', lit: false, armed: false });
+  await page.click('.cc-opt:has-text("Spenti")'); // again: nothing breaks
+  assert.deepEqual(await options(), ['✓Spenti', 'Automatici', 'Sottotitoli', 'Generati dal computer']);
+  await page.keyboard.press('Escape');
+  // another channel and back: still off everywhere
+  await play('https://media.test/master.m3u8', 'Con sottotitoli');
+  await page.waitForTimeout(1500);
+  assert.deepEqual(await ccState(), { on: false, active: '', lit: false, armed: false }, 'off after zapping');
+  assert.equal(await overlay(), '');
+  // on again (Automatici) on the channel with subtitles, then zap to one without: generated take over
+  await openCc();
+  await waitFor(async () => (await options()).includes('Italiano'), 8000, 'track listed');
+  await page.click('.cc-opt:has-text("Automatici")');
+  await waitFor(async () => (await ccState()).active === 'track', 8000, 'track active');
+  assert.deepEqual(await options(), ['Spenti', '✓Automatici', '✓Italiano', 'Generati dal computer']);
+  assert.equal((await ccState()).lit, true);
+  await page.keyboard.press('Escape');
+  await play('https://media.test/av.m3u8?z', 'Senza sottotitoli');
+  await waitFor(async () => (await ccState()).active === 'gen', 9000, 'gen after zapping');
+  await waitFor(async () => /Buongiorno/.test(await overlay()), 15000, 'text after zapping');
+  assert.equal((await ccState()).lit, true);
+  console.log('✓ box, CC button and phone stay in step: Spenti at once, after zapping, Automatici across channels');
   await page.evaluate(() => import('/js/player.js').then(p => p.close()));
 
   if (process.env.SHOTS) {
@@ -188,6 +220,15 @@ try {
   assert.equal(await gen.isDisabled(), true, 'generated subtitles disabled on iPad');
   assert.match(await gen.textContent(), /Mac o un PC/);
   assert.equal(await ip.locator('#pl-ccmodels').isVisible(), false);
+  // nothing to show here: Automatici then Spenti still tick at once, the CC button follows
+  const ipOpts = () => ip.$$eval('#pl-cclist .cc-opt', bs => bs.map(b => (b.classList.contains('on') ? '✓' : '') + b.querySelector('b').textContent));
+  await ip.click('.cc-opt:has-text("Automatici")');
+  assert.deepEqual(await ipOpts(), ['Spenti', '✓Automatici', 'Generati dal computer']);
+  assert.match(await ip.textContent('#pl-ccnote'), /Nessun sottotitolo per questo canale/);
+  assert.equal(await ip.evaluate(() => document.getElementById('pl-cc').classList.contains('armed')), true);
+  await ip.click('.cc-opt:has-text("Spenti")');
+  assert.deepEqual(await ipOpts(), ['✓Spenti', 'Automatici', 'Generati dal computer'], 'Spenti ticked when nothing was shown');
+  assert.equal(await ip.evaluate(() => document.getElementById('pl-cc').className.includes('armed') || document.getElementById('pl-cc').className.includes('active')), false);
   await ipad.close();
   console.log('✓ iPad: generated subtitles not offered, with the reason');
 

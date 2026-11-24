@@ -156,7 +156,7 @@ async function uiTests() {
     assert.equal(pair.get('w'), RELAY);
     assert.equal(pair.get('t'), 'tok');
     assert.match(pair.get('r'), /^[A-Za-z0-9_-]{24}$/);
-    assert.ok(link.startsWith(BASE + 'remote.html#'), link);
+    assert.ok(link.startsWith(BASE + 'remote/#'), link);
     await waitFor(() => tv.textContent('#remote-status').then(t => /in attesa/.test(t)), 8000, 'tv connected');
     if (SHOTS) await tv.screenshot({ path: path.join(SHOTS, 'remote-pair.png') });
     console.log('✓ pairing page: QR code and link with room, Worker and token');
@@ -171,10 +171,19 @@ async function uiTests() {
     await waitFor(() => tv.textContent('#remote-status').then(t => /1 cellulare/.test(t)), 8000, 'tv sees phone');
     assert.match(await ph.textContent('#r-name'), /Linux|Mac|PC|Salotto/);
     assert.match(await ph.textContent('#r-title'), /Nessun video/);
-    // installable on Android: manifest for remote.html, in its own scope
+    // installable on Android as its own app, separate from Salotto: own folder, id and scope
     const man = await ph.evaluate(async () => { const l = document.querySelector('link[rel=manifest]'); return l && (await fetch(l.href)).json(); });
-    assert.equal(man.start_url, 'remote.html');
-    assert.equal(man.scope, 'remote.html');
+    assert.equal(man.start_url, './');
+    assert.equal(man.scope, './');
+    assert.equal(man.id, '/kodi-web/remote/');
+    const main = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.webmanifest'), 'utf8'));
+    assert.equal(main.id, '/kodi-web/');
+    assert.notEqual(main.id, man.id);
+    // old links (remote.html#…) still open the remote
+    const old = await phoneCtx.newPage();
+    await old.goto(link.replace('remote/#', 'remote.html#'));
+    await old.waitForURL(/\/remote\/#r=/);
+    await old.close();
     assert.equal(man.display, 'standalone');
         console.log('✓ phone connects; the screen shows it is paired');
 
@@ -325,7 +334,7 @@ async function uiTests() {
 
     // the phone remembers the screen without the address
     const ph2 = await phoneCtx.newPage();
-    await ph2.goto(BASE + 'remote.html');
+    await ph2.goto(BASE + 'remote/');
     await waitFor(() => ph2.getAttribute('#r-dot', 'class').then(c => /\bon\b/.test(c)), 8000, 'remembered');
     assert.match(ph2.url(), /#r=/);
     await ph2.close();
@@ -356,7 +365,7 @@ async function uiTests() {
     const fresh = await browser.newContext({ ...devices['iPhone 13'], serviceWorkers: 'block' });
     await mock(fresh);
     const ph3 = await fresh.newPage();
-    await ph3.goto(BASE + 'remote.html');
+    await ph3.goto(BASE + 'remote/');
     assert.equal(await ph3.isVisible('#r-unpaired'), true);
     // iPhone: no manifest (the Home-screen app keeps the address); add a screen by pasting its link
     assert.equal(await ph3.evaluate(() => !!document.querySelector('link[rel=manifest]')), false);

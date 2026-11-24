@@ -2,7 +2,7 @@
 // (built by tools/build-epg.mjs from a public XMLTV listing of Italian channels); here we
 // load it and find the programmes of a channel by its playlist code (tvg-id) or name.
 
-const URL_ = 'epg/it.json';
+const URL_ = new URL('../epg/it.json', import.meta.url).href; // also from remote/
 const MAX_AGE = 30 * 60 * 1000;
 let data = null, loadedAt = 0, pending = null;
 const listeners = new Set();

@@ -1,6 +1,6 @@
 // Phone remote, screen side. The screen (computer, iPad, Fire TV) keeps a WebSocket open to the
 // relay of the Cloudflare Worker (cloudflare/worker.js, RemoteRoom); the phones paired with it
-// (remote.html) connect to the same room. The room id is random and travels only in the QR code.
+// (remote/) connect to the same room. The room id is random and travels only in the QR code.
 // Messages are small JSON objects: the phone sends {t:'cmd'|'hello'|'get'}, the screen answers
 // with {t:'state'|'list'|'sources'|'channels'|'toast'}.
 import { load, save, getSettings } from './storage.js';
@@ -65,7 +65,7 @@ export async function check() {
 /** Address the phone opens (in the QR code). */
 export function pairUrl() {
   const r = relay(), c = config();
-  const u = new URL('remote.html', location.href);
+  const u = new URL('remote/', location.href);
   u.search = '';
   const p = new URLSearchParams({ r: c.room, w: r ? r.base : '', n: c.name });
   if (r?.token) p.set('t', r.token);

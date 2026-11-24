@@ -1,4 +1,4 @@
-// Phone remote (remote.html). Talks to one Salotto screen through the relay of the Cloudflare
+// Phone remote (remote/index.html). Talks to one Salotto screen through the relay of the Cloudflare
 // Worker: see remote-host.js for the screen side and the messages.
 import * as epg from './epg.js';
 
@@ -536,7 +536,7 @@ $('r-installbtn').addEventListener('click', async () => {
   installEvent = null; renderInstall();
 });
 renderInstall();
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('../sw.js').catch(() => {});
 // the name at the top opens the list as well
 $('r-screen').addEventListener('click', () => showTab('screens'));
 

@@ -417,3 +417,9 @@ body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); ga
 .sync-val { flex: 1; text-align: center; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sync-note { margin: 10px 2px 0; font-size: 14px; line-height: 1.45; color: #d0d7e0; }
 .sync-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+/* ---------------------------------------------------------------- phone remote pairing */
+.remote-page .qr-box { background: #fff; border-radius: var(--radius); padding: 10px; width: min(300px, 80vw); aspect-ratio: 1; color: #222; display: grid; place-items: center; text-align: center; }
+.remote-page .qr-box svg { width: 100%; height: 100%; display: block; }
+.remote-page .remote-link { font-size: 13px; }
+#remote-status { font-size: 15px; color: var(--text); }

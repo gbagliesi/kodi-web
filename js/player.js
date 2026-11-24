@@ -64,7 +64,7 @@ function liveWindow() {
   return isFinite(start) && isFinite(end) && end - start >= MIN_WINDOW ? { start, end } : null;
 }
 
-function goLive() {
+export function goLive() {
   const w = liveWindow();
   if (!w) return;
   const edge = hls && isFinite(hls.liveSyncPosition) && hls.liveSyncPosition > 0 ? hls.liveSyncPosition : w.end - 3;
@@ -240,7 +240,7 @@ function setupMediaSession(item) {
   try { navigator.mediaSession.setActionHandler('enterpictureinpicture', () => enterPip()); } catch { /* older Chrome */ }
 }
 
-function skip(s) {
+export function skip(s) {
   const v = el.video;
   if (casting) { if (!current?.item.live) cast.seek(cast.remoteTime() + s); wake(); return; }
   if (isLive()) {
@@ -255,7 +255,7 @@ function skip(s) {
   wake();
 }
 
-function togglePlay() {
+export function togglePlay() {
   const v = el.video;
   if (casting) { cast.playOrPause(); wake(); return; }
   if (!localAttached && current) {
@@ -332,6 +332,7 @@ export async function play(item, stream, opts = {}) {
     const resume = getSettings().autoResume && !item.live ? getResume(current.key) : 0;
     await sendToCast(resume);
     if (!opts.keepFocus || !el.root.contains(document.activeElement)) el.play.focus({ preventScroll: true });
+    changed(true);
     return;
   }
   try {
@@ -341,10 +342,11 @@ export async function play(item, stream, opts = {}) {
     if (resume) {
       el.video.addEventListener('loadedmetadata', () => { el.video.currentTime = resume; showMsg('Ripresa da ' + fmt(resume), 2000); }, { once: true });
     }
-    await el.video.play().catch(() => { if (!casting) showMsg('Tocca ▶ per avviare'); });
+    await el.video.play().catch((err) => { if (!casting && !mutedFallback(err)) showMsg('Tocca ▶ per avviare'); });
   } catch (e) {
     showMsg(e.message);
   }
+  changed(true);
   if (!opts.keepFocus || !el.root.contains(document.activeElement)) el.play.focus({ preventScroll: true });
 }
 
@@ -383,6 +385,7 @@ export function close() {
   el.osd.hidden = true; el.panel.hidden = true; el.epg.hidden = true; el.syncBox.hidden = true;
   clearTimeout(avTimer);
   toggleStats(false);
+  changed(true);
   const cb = onCloseCb; onCloseCb = null;
   if (cb) cb();
 }
@@ -770,7 +773,7 @@ function closeInfo() {
   wake();
 }
 
-function toggleInfo() { if (el.epg.hidden) openInfo(); else closeInfo(); }
+export function toggleInfo() { if (el.epg.hidden) openInfo(); else closeInfo(); }
 const inSidePanel = (a) => (!el.panel.hidden && el.panel.contains(a)) || (!el.epg.hidden && el.epg.contains(a)) || (!el.syncBox.hidden && el.syncBox.contains(a));
 el.info.addEventListener('click', toggleInfo);
 el.prog.addEventListener('click', openInfo);
@@ -819,6 +822,7 @@ function setAv(ms) {
   avMs = ms;
   setAvSync(avKey(), ms);
   renderSync();
+  changed();
   clearTimeout(avTimer);
   avTimer = setTimeout(applyAv, 700); // wait for the last of a series of taps
 }
@@ -887,6 +891,7 @@ export function zap(delta) {
   const from = pendingIndex >= 0 ? pendingIndex : channels.index;
   pendingIndex = ((from + delta) % n + n) % n;
   showOsd(pendingIndex);
+  changed();
   clearTimeout(zapTimer);
   zapTimer = setTimeout(() => tune(pendingIndex), 450);
   return true;
@@ -977,7 +982,7 @@ function closePanel() {
   wake();
 }
 
-function togglePanel() { if (el.panel.hidden) openPanel(); else closePanel(); }
+export function togglePanel() { if (el.panel.hidden) openPanel(); else closePanel(); }
 
 el.chUp.addEventListener('click', () => zap(1));
 el.chDown.addEventListener('click', () => zap(-1));
@@ -1000,6 +1005,8 @@ const tvIdle = () => document.body.classList.contains('tv') && el.ui.classList.c
 v.addEventListener('playing', () => { showMsg(''); el.play.innerHTML = '&#10074;&#10074;'; if (!tvIdle()) wake(); });
 v.addEventListener('pause', () => { el.play.innerHTML = '&#9654;'; if (!tvIdle()) wake(); saveResume(true); });
 v.addEventListener('waiting', () => showMsg('Buffering…'));
+for (const ev of ['play', 'pause', 'playing', 'volumechange']) v.addEventListener(ev, () => changed());
+v.addEventListener('volumechange', () => { el.vol.value = Math.round(v.volume * 100); });
 v.addEventListener('ended', () => { if (current) setResume(current.key, 0, 0); el.play.innerHTML = '&#9654;'; });
 v.addEventListener('error', () => {
   if (hls || !current) return; // hls.js reports its own errors
@@ -1136,3 +1143,84 @@ function onBackgroundTap() {
 el.root.querySelector('.player-stage').addEventListener('click', onBackgroundTap);
 el.ui.addEventListener('click', (e) => { if (e.target === el.ui) onBackgroundTap(); });
 window.addEventListener('pagehide', () => saveResume(true));
+
+// ---------------------------------------------------------------- phone remote (remote-host.js)
+// What the phone shows and the commands it sends. The remote only calls these functions, so it
+// behaves exactly like the buttons on screen.
+const changeListeners = new Set();
+let changeTimer = 0, listVersion = 0, lastList = null;
+/** Calls fn when what the remote shows changes (list = the channel list changed too). */
+export const onChange = (fn) => { changeListeners.add(fn); return () => changeListeners.delete(fn); };
+function changed(soon = false) {
+  if (!changeListeners.size) return;
+  clearTimeout(changeTimer);
+  changeTimer = setTimeout(() => {
+    const list = channels?.list || null;
+    if (list !== lastList) { lastList = list; listVersion++; }
+    for (const fn of changeListeners) { try { fn(); } catch (e) { console.warn(e); } }
+  }, soon ? 0 : 120);
+}
+
+// iPhone/iPad: a web page can't change the volume (only the device buttons can)
+const VOLUME_FIXED = (() => { try { const a = document.createElement('audio'); a.volume = 0.5; return a.volume !== 0.5; } catch { return true; } })();
+
+let remoteActive = false;
+let unmuteOnTouch = false;
+/** The remote opened a channel while nobody touched this screen: the browser may refuse sound. */
+function mutedFallback(err) {
+  if (!remoteActive || !err || err.name !== 'NotAllowedError' || el.video.muted) return false;
+  el.video.muted = true;
+  unmuteOnTouch = true;
+  el.video.play().then(() => showMsg('Il browser ha tolto l\'audio: tocca lo schermo una volta per riattivarlo', 6000)).catch(() => showMsg('Tocca ▶ per avviare'));
+  changed();
+  return true;
+}
+document.addEventListener('pointerdown', () => { if (unmuteOnTouch) { unmuteOnTouch = false; el.video.muted = false; } }, true);
+document.addEventListener('keydown', (e) => { if (unmuteOnTouch && e.isTrusted) { unmuteOnTouch = false; el.video.muted = false; } }, true);
+export function setRemoteActive(on) { remoteActive = !!on; }
+
+/** The player as the remote shows it. */
+export function remoteState() {
+  if (!isOpen() || !current) return { open: false, volume: Math.round(el.video.volume * 100), muted: el.video.muted, volFixed: VOLUME_FIXED };
+  const v = el.video, it = current.item;
+  const idx = pendingIndex >= 0 ? pendingIndex : channels ? channels.index : -1;
+  const shown = idx >= 0 && channels ? channels.list[idx].item : it;
+  const live = isLive();
+  const w = live ? liveWindow() : null;
+  return {
+    open: true, label: shown.label, number: idx >= 0 && channels ? chNumber(shown, idx) : '', index: idx, listVersion: channels ? listVersion : 0,
+    thumb: /^https:\/\//.test(shown.thumb || '') ? shown.thumb : '', live: !!live, audio: !!current.audio,
+    guide: shown.live ? { id: shown.guide?.id || '', name: shown.guide?.name || '', key: shown.key || '' } : null,
+    paused: casting ? false : v.paused, casting, volume: Math.round(v.volume * 100), muted: v.muted, volFixed: VOLUME_FIXED || casting,
+    pos: live ? (w ? Math.round(v.currentTime - w.end) : 0) : Math.round(v.currentTime || 0), dur: live ? 0 : Math.round(v.duration || 0),
+    canSeek: !live || !!w, av: avMs, avBlocked: current.audio ? 'Solo per i video.' : avBlocked(),
+  };
+}
+
+/** The channels the player can zap through (for the phone's list), or null. */
+export function remoteChannels() {
+  if (!channels || !isOpen()) return null;
+  return { version: listVersion, items: channels.list.map((c, i) => remoteItem(c.item, chNumber(c.item, i))) };
+}
+export const remoteItem = (it, number) => ({ label: it.label, number: String(number ?? ''), key: it.key || '', live: !!it.live, guide: it.guide ? { id: it.guide.id || '', name: it.guide.name || '' } : undefined });
+
+/** The remote picked channel i of the player's list. */
+export function tuneTo(i) {
+  if (!channels || !(i >= 0 && i < channels.list.length)) return false;
+  closePanel();
+  if (i === channels.index && pendingIndex < 0) return true;
+  pendingIndex = i; showOsd(i); clearTimeout(zapTimer); tune(i); changed();
+  return true;
+}
+export function setVolume(pct) {
+  if (casting) return;
+  const v = el.video;
+  v.volume = Math.max(0, Math.min(100, Math.round(pct))) / 100;
+  if (v.volume > 0 && v.muted) { v.muted = false; unmuteOnTouch = false; }
+  if (isOpen()) wake();
+}
+export function toggleMute() { el.video.muted = !el.video.muted; unmuteOnTouch = false; }
+export function avStep(dir) { if (current && !avBlocked()) setAv(avMs + Math.sign(dir) * AV_STEP); }
+export function avReset() { setAv(0); }
+export function toggleSync() { if (el.syncBox.hidden) openSync(); else closeSync(); }
+export function typeNumber(num) { return jumpTo(parseInt(num, 10)); }

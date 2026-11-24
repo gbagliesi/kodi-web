@@ -15,6 +15,9 @@ con browser. Supporta gli **add-on**, scritti in JavaScript.
 - Trasmissione a TV e altoparlanti: Google Cast (Chromecast, Google TV, Nest)
   da Chrome su Android, Mac e PC; AirPlay da iPad, iPhone e Safari sul Mac.
   Per i canali che richiedono il proxy, la TV riceve l'indirizzo del proxy
+- Telecomando dal cellulare: inquadri un codice QR e il telefono cambia
+  canale, regola volume e sincronia audio, mette in pausa, mostra canali e
+  guida TV e muove le frecce dello schermo (passa dal Worker Cloudflare)
 - File locali (dall'app File di iPad, iCloud, chiavette USB), senza caricarli
   da nessuna parte
 - Apri URL diretti di stream
@@ -104,7 +107,8 @@ npm test     # richiede il pacchetto playwright
 ```
 
 Il test avvia `server.js`, apre l'app in Chromium con dimensioni da iPad e
-simula le API esterne.
+simula le API esterne. `node tests/remote.mjs` prova il telecomando: uno
+schermo e un cellulare simulati collegati al relay del Worker.
 
 ## Contenuti
 

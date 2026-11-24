@@ -111,7 +111,6 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .r-kp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .r-kp .r-btn { min-height: 62px; font-size: 26px; }
 .r-kp .ok { background: var(--accent); color: #062420; font-size: 20px; font-weight: 800; }
-.r-scr { display: flex; gap: 8px; align-items: center; border-bottom: 1px solid rgba(255,255,255,.06); }
 .r-scr-name { flex: 1; text-align: left; padding: 14px 4px; font-size: 17px; }
 .r-scr.current .r-scr-name { color: var(--accent); font-weight: 700; }
 .r-scr-del { color: var(--danger); font-size: 14px; padding: 10px; }
@@ -119,3 +118,8 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .r-toast { position: fixed; left: 50%; bottom: calc(var(--safe-bottom) + 86px); transform: translateX(-50%); background: #2b3646; color: var(--text);
   padding: 10px 16px; border-radius: 22px; font-size: 14px; max-width: 90vw; text-align: center; z-index: 20; box-shadow: 0 6px 20px rgba(0,0,0,.4); }
 .r-btn.on { background: var(--panel-hi); box-shadow: inset 0 0 0 2px var(--accent); }
+.r-scr .r-dot { margin: 6px 2px 0 0; }
+.r-scr .r-scr-del { border-left: 1px solid rgba(255,255,255,.06); padding: 0 14px; }
+.r-add { display: flex; gap: 8px; }
+.r-add input { flex: 1; min-width: 0; background: var(--panel); color: var(--text); border: 0; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 15px; -webkit-user-select: text; user-select: text; }
+#tab-screens .r-hint { margin: 14px 2px 8px; }

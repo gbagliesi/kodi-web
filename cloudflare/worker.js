@@ -10,6 +10,7 @@
  *
  * Phone remote (only here, not in server.js):
  *   GET /remote/health                     -> "ok" when the remote relay is set up
+ *   GET /remote/status?room=<id>            -> {"tv":1,"remotes":0}: is the screen on?
  *   GET /remote/ws?room=<id>&role=tv|remote -> WebSocket; the Durable Object of the room passes
  *                                             every message of the TV to its remotes and back.
  *   Needs the REMOTE Durable Object binding of wrangler.toml (the GitHub Action deploys it).
@@ -80,6 +81,10 @@ export class RemoteRoom {
   }
 
   async fetch(request) {
+    // is the screen on? (the phone's list of screens) – no WebSocket, nobody is told
+    if (new URL(request.url).pathname.endsWith('/remote/status')) {
+      return new Response(JSON.stringify(this.peers()), { headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    }
     if (request.headers.get('Upgrade') !== 'websocket') return text('serve una WebSocket', 426);
     const role = new URL(request.url).searchParams.get('role') === 'tv' ? 'tv' : 'remote';
     // one screen per room: a newer TV connection (page reloaded) replaces the old one
@@ -119,7 +124,7 @@ async function handle(request, env) {
   const u = new URL(request.url);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (u.pathname.endsWith('/proxy/health')) return text('ok');
-  if (/\/remote\/(health|ws)$/.test(u.pathname)) return handleRemote(request, env, u);
+  if (/\/remote\/(health|ws|status)$/.test(u.pathname)) return handleRemote(request, env, u);
   // /proxy/<name> (e.g. /proxy/live.m3u8) works too: some native players pick the format from the extension
   if (!/\/proxy(\/[\w.-]+)?$/.test(u.pathname)) return text('Salotto proxy: usa /proxy?url=…', 404);
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('metodo non consentito', 405);

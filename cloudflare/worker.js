@@ -7,6 +7,9 @@
  *   GET /proxy/live.m3u8?url=…             -> same, with a file name for players that need one;
  *                                             HLS playlists are rewritten so
  *                                             every segment also goes through here.
+ *   GET /proxy?url=<enc>&resolve=1          -> {"url": where the redirects end, "status", "type"}:
+ *                                             for redirectors without CORS (Rai relinker), so the
+ *                                             browser can then fetch the real stream itself.
  *
  * Phone remote (only here, not in server.js):
  *   GET /remote/health                     -> "ok" when the remote relay is set up
@@ -160,6 +163,10 @@ async function handle(request, env) {
   }
 
   const type = upstream.headers.get('content-type') || '';
+  if (u.searchParams.get('resolve') === '1') {
+    try { await upstream.body?.cancel(); } catch { /* ignore */ }
+    return new Response(JSON.stringify({ url: upstream.url, status: upstream.status, type }), { headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  }
   const isPlaylist = /mpegurl/i.test(type) || /\.m3u8(\?|$)/i.test(upstream.url);
   if (isPlaylist && upstream.ok && request.method === 'GET') {
     const body = rewritePlaylist(await upstream.text(), upstream.url, headersParam, token);

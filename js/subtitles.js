@@ -212,7 +212,7 @@ function onPlaying() {
   if (prefs.mode === 'gen') { decide(); return; }
   // wait a little for the channel's own subtitles (TV captions turn up with the first pieces)
   clearTimeout(decideTimer);
-  decideTimer = setTimeout(decide, 4000);
+  decideTimer = setTimeout(decide, 1500);
 }
 function decide() {
   if (!item || prefs.mode === 'off' || (active && active !== 'gen')) return;
@@ -230,7 +230,11 @@ function choose(id) {
   opts.changed();
 }
 function pick(id) {
-  if (id === 'off') { prefs.mode = 'off'; savePrefs(); genUsed = false; genStatus = ''; clearTimeout(decideTimer); clearTimeout(emptyTimer); setActive(null); return; }
+  if (id === 'off') {
+    prefs.mode = 'off'; savePrefs(); genUsed = false; mseFor = null; genStatus = ''; clearTimeout(decideTimer); clearTimeout(emptyTimer); setActive(null);
+    opts.reattach(); // Safari: back to its own player (direct when the channel allows it)
+    return;
+  }
   if (id === 'on') {
     prefs.mode = 'on'; savePrefs();
     if (usable().length) autoPick();

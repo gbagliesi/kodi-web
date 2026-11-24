@@ -102,6 +102,12 @@ async function handleProxy(req, res, q) {
   await checkTarget(new URL(upstream.url));
 
   const type = upstream.headers.get('content-type') || '';
+  if (q.get('resolve') === '1') { // where a redirector (Rai relinker) ends up, see cloudflare/worker.js
+    try { await upstream.body?.cancel(); } catch { /* ignore */ }
+    res.writeHead(200, { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ url: upstream.url, status: upstream.status, type }));
+    return;
+  }
   const isPlaylist = /mpegurl/i.test(type) || /\.m3u8(\?|$)/i.test(upstream.url);
   if (isPlaylist && upstream.ok) {
     const body = rewritePlaylist(await upstream.text(), upstream.url, headersParam);

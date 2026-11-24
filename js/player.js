@@ -6,6 +6,7 @@ import { getProxy, proxify } from './addons.js';
 import * as cast from './cast.js';
 import * as epg from './epg.js';
 import * as avsync from './avsync.js';
+import * as subs from './subtitles.js';
 
 const UA = navigator.userAgent;
 const APPLE = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
@@ -43,6 +44,7 @@ let airplayAvailable = false;
 let channels = null;      // { list: [{ item, open() }], index } when zapping between live channels
 let avMs = 0;             // audio/video sync of the current channel, ms (> 0 = sound later)
 let avNative = false;     // hls.js failed with the sync on: back to the native player, no sync
+let subsNative = false;   // hls.js (needed on Safari to hear the sound for generated subtitles) failed
 
 export const isOpen = () => !el.root.hidden;
 
@@ -171,16 +173,19 @@ async function attach(stream) {
   // The Fire TV app tries the WebView's own HLS player first (Giuseppe's choice: lighter on the
   // Stick, about the same lip sync as hls.js), falling back to hls.js on error.
   // A channel with an audio/video sync needs hls.js (only Media Source can move the sound).
+  // Generated subtitles on Safari: only hls.js lets the page hear the sound (see whisper.js).
   const avShift = !!avMs && hasMse() && !avNative;
-  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && !avShift && (APPLE || !hasMse() || (TV_APP && nativeStage < 2));
+  const subsMse = subs.wantsMse() && hasMse() && !subsNative;
+  const native = !!v.canPlayType('application/vnd.apple.mpegurl') && !avShift && !subsMse && (APPLE || !hasMse() || (TV_APP && nativeStage < 2));
   if (looksHls(stream.url, stream.mime) && !native) {
     await loadScript(HLS_CDN);
     if (!window.Hls || !window.Hls.isSupported()) {
       if (v.canPlayType('application/vnd.apple.mpegurl')) { v.src = url; return; }
       throw new Error('HLS non supportato da questo browser');
     }
-    hls = new window.Hls({ enableWorker: true, lowLatencyMode: !!current?.item.live });
+    hls = new window.Hls({ enableWorker: true, lowLatencyMode: !!current?.item.live, ...subs.hlsConfig() });
     avsync.hookHls(hls, () => avMs / 1000);
+    subs.hookHls(hls);
     hls.on(window.Hls.Events.ERROR, (_, data) => {
       if (!data.fatal) return;
       if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR && getProxy() && !triedProxy && !stream.proxy) {
@@ -198,6 +203,13 @@ async function attach(stream) {
         attach(stream).then(() => v.play().catch(() => {}));
         return;
       }
+      // same for the generated subtitles: play it anyway, without them
+      if (subsMse && v.canPlayType('application/vnd.apple.mpegurl')) {
+        subsNative = true;
+        subs.mseFailed();
+        attach(stream).then(() => v.play().catch(() => {}));
+        return;
+      }
       const cors = data.type === window.Hls.ErrorTypes.NETWORK_ERROR && !getProxy();
       showMsg(cors
         ? 'Questo stream non permette la riproduzione da un sito web in questo browser (CORS). Su iPad e Safari di solito funziona; altrove serve il proxy (Impostazioni).'
@@ -207,9 +219,13 @@ async function attach(stream) {
     hls.attachMedia(v);
   } else {
     v.src = url;
+    // Safari after generated subtitles: the sound of a stream from another site may be lost
+    if (subs.audioBound() && new URL(url, location.href).origin !== location.origin) {
+      v.addEventListener('playing', () => setTimeout(() => showMsg('Se non senti l\'audio, ricarica la pagina: i sottotitoli generati hanno «preso» l\'audio del lettore e questo canale non lo permette.', 8000), 300), { once: true });
+    }
   }
+  for (const t of [...v.querySelectorAll('track')]) t.remove();
   if (stream.subtitles) {
-    for (const t of [...v.querySelectorAll('track')]) t.remove();
     for (const s of stream.subtitles) {
       const tr = document.createElement('track');
       Object.assign(tr, { kind: 'subtitles', src: s.url, srclang: s.lang || 'it', label: s.label || s.lang || 'Sottotitoli' });
@@ -306,9 +322,10 @@ export async function play(item, stream, opts = {}) {
   const audio = item.type === 'audio' || /^audio\//.test(stream.mime || '');
   current = { item, stream, key: stream.url, audio, favEntry: opts.favEntry };
   avMs = audio ? 0 : getAvSync(avKey());
-  avNative = false;
+  avNative = false; subsNative = false;
   clearTimeout(avTimer);
   updateSyncBtn();
+  subs.newItem({ audio, casting });
   el.route.hidden = true;
   onCloseCb = opts.onClose || null;
   el.root.hidden = false;
@@ -355,6 +372,7 @@ export async function play(item, stream, opts = {}) {
 
 /** Remote "Back": channel list → controls (TV) → close the player. */
 export function back(remote = false) {
+  if (subs.boxOpen()) { subs.closeBox(); return; }
   if (!el.syncBox.hidden) { closeSync(); return; }
   if (!el.panel.hidden) { closePanel(); return; }
   if (!el.epg.hidden) { closeInfo(); return; }
@@ -386,6 +404,7 @@ export function close() {
   channels = null;
   clearTimeout(zapTimer); clearTimeout(digitTimer); digits = ''; zapToken++;
   el.osd.hidden = true; el.panel.hidden = true; el.epg.hidden = true; el.syncBox.hidden = true;
+  subs.newItem(null);
   clearTimeout(avTimer);
   toggleStats(false);
   changed(true);
@@ -513,6 +532,7 @@ export function handleKey(e) {
       case 'PageUp': case 'ChannelUp': case 'MediaTrackNext': zap(1); return true;
       case 'PageDown': case 'ChannelDown': case 'MediaTrackPrevious': zap(-1); return true;
       case 'Escape': case 'Backspace': case 'BrowserBack':
+        if (subs.boxOpen()) { subs.closeBox(); return true; }
         if (!el.syncBox.hidden) { closeSync(); return true; }
         if (!el.panel.hidden) { closePanel(); return true; }
         if (!el.epg.hidden) { closeInfo(); return true; }
@@ -524,10 +544,12 @@ export function handleKey(e) {
   switch (e.key) {
     case ' ': case 'MediaPlayPause': case 'k': togglePlay(); return true;
     case 'Escape': case 'Backspace': case 'BrowserBack':
+      if (subs.boxOpen()) { subs.closeBox(); return true; }
       if (!el.syncBox.hidden) { closeSync(); return true; }
       if (!el.epg.hidden) { closeInfo(); return true; }
       close(); return true;
     case 'i': toggleInfo(); return true;
+    case 's': subs.toggle(); showMsg('Sottotitoli ' + (subs.state().on ? 'attivi' : 'spenti'), 1500); return true;
     case 'f': toggleFullscreen(); return true;
     case 'ArrowLeft': case 'ArrowRight': {
       const a = focused();
@@ -550,6 +572,7 @@ function statsRows() {
   rows.push(['Percorso', routeLabel || '—']);
   if (casting) { rows.push(['Riproduzione', 'sulla TV (' + cast.deviceName() + ')']); return rows; }
   rows.push(['Motore', hls ? 'hls.js' + (nativeErr ? ' (HLS nativo non riuscito, errore ' + nativeErr + ')' : '') : (looksHls(current?.stream.url || '', current?.stream.mime) ? 'HLS nativo del browser' : 'lettore del browser')]);
+  { const st = subs.state(); if (st.active) rows.push(['Sottotitoli', st.active === 'gen' ? 'generati dal computer (Whisper)' : st.label]); }
   if (avMs) rows.push(['Sincronia audio', fmtAv(avMs) + (avsync.separateAudio(hls) ? '' : ' (non applicata)')]);
   rows.push(['Risoluzione', v.videoWidth ? v.videoWidth + '×' + v.videoHeight : (current?.audio ? 'solo audio' : '—')]);
   if (hls && hls.levels?.length) {
@@ -678,6 +701,7 @@ cast.initCast({
     casting = active;
     updateCastBtn();
     updateSyncBtn();
+    subs.setCasting(active);
     if (!isOpen() || !current) return;
     if (active) sendToCast(localAttached ? el.video.currentTime : 0);
     else {
@@ -771,6 +795,7 @@ function openInfo() {
   if (!epg.available()) epg.load();
   closePanel();
   el.syncBox.hidden = true;
+  subs.closeBox();
   renderInfo();
   el.epg.hidden = false;
   el.epgBody.scrollTop = 0;
@@ -793,6 +818,7 @@ export function toggleInfo() { if (el.epg.hidden) openInfo(); else closeInfo(); 
 // to fall through to the video and change channel.
 let remoteSel = null;
 function openBox() {
+  if (subs.boxOpen()) return subs.box();
   if (!el.syncBox.hidden) return el.syncBox;
   if (!el.panel.hidden) return el.panel;
   if (!el.epg.hidden) return el.epg;
@@ -818,6 +844,7 @@ function selIn(items) {
 function startItem(box, items) {
   if (box === el.panel) return box.querySelector('.ch-row.current') || items.find(b => b.classList.contains('ch-row')) || items[0];
   if (box === el.epg) return box.querySelector('.epg-prog') || items[0];
+  if (box === subs.box()) return items.find(b => b === subs.startItem()) || items[0];
   return [el.syncLater, el.syncEarlier, el.syncReset].find(b => items.includes(b)) || items[0];
 }
 /** After the phone opened a box: highlight where its arrows start. */
@@ -844,13 +871,14 @@ function remoteBoxKey(key) {
   }
   if (key === 'Enter') { markRemote(cur); cur.click(); return true; }
   const horiz = key === 'ArrowLeft' || key === 'ArrowRight';
-  if (horiz && box !== el.syncBox) { markRemote(cur); return true; } // lists: ◀▶ do nothing
+  // lists: ◀▶ do nothing (in the subtitles box they move along the quality buttons)
+  if (horiz && box !== el.syncBox && !(box === subs.box() && cur.classList.contains('cc-model'))) { markRemote(cur); return true; }
   const d = key === 'ArrowUp' || key === 'ArrowLeft' ? -1 : 1;
   markRemote(items[Math.max(0, Math.min(items.length - 1, items.indexOf(cur) + d))]);
   return true;
 }
 
-const inSidePanel = (a) => (!el.panel.hidden && el.panel.contains(a)) || (!el.epg.hidden && el.epg.contains(a)) || (!el.syncBox.hidden && el.syncBox.contains(a));
+const inSidePanel = (a) => (!el.panel.hidden && el.panel.contains(a)) || (!el.epg.hidden && el.epg.contains(a)) || (!el.syncBox.hidden && el.syncBox.contains(a)) || (subs.boxOpen() && subs.box().contains(a));
 el.info.addEventListener('click', toggleInfo);
 el.prog.addEventListener('click', openInfo);
 el.epgClose.addEventListener('click', closeInfo);
@@ -918,6 +946,7 @@ function openSync() {
   if (!current) return;
   closePanel();
   if (!el.epg.hidden) el.epg.hidden = true;
+  subs.closeBox();
   el.syncBox.hidden = false;
   renderSync();
   const first = [el.syncLater, el.syncEarlier, el.syncReset].find(b => !b.disabled) || el.syncClose;
@@ -935,6 +964,22 @@ el.syncClose.addEventListener('click', closeSync);
 el.syncEarlier.addEventListener('click', () => setAv(avMs - AV_STEP));
 el.syncLater.addEventListener('click', () => setAv(avMs + AV_STEP));
 el.syncReset.addEventListener('click', () => { setAv(0); (el.syncLater.disabled ? el.syncClose : el.syncLater).focus({ preventScroll: true }); });
+
+// ---------------------------------------------------------------- subtitles (CC button, see subtitles.js)
+subs.init({
+  changed: () => changed(),
+  wake: () => wake(),
+  beforeOpen: () => { closePanel(); el.epg.hidden = true; el.syncBox.hidden = true; },
+  // generated subtitles on Safari: move from the system player to hls.js, where the sound can be heard
+  reattach: () => {
+    if (!current || casting || !localAttached || hls) return;
+    const v = el.video, t = v.currentTime, live = isLive();
+    attach(current.stream).then(() => {
+      if (!live && t > 1) v.addEventListener('loadedmetadata', () => { v.currentTime = t; }, { once: true });
+      return v.play().catch(() => {});
+    }).catch(e => showMsg(e.message));
+  },
+});
 
 setInterval(() => { if (isOpen()) showProgramme(); }, 30000);
 epg.onUpdate(() => {
@@ -1047,6 +1092,7 @@ function openPanel() {
   if (!channels) return;
   if (!el.epg.hidden) { el.epg.hidden = true; }
   el.syncBox.hidden = true;
+  subs.closeBox();
   renderPanel();
   el.panel.hidden = false;
   el.chNum.value = '';
@@ -1183,7 +1229,7 @@ let swipe = null;          // touch start, for vertical swipes = channel up/down
 let swallowClick = false;
 el.root.addEventListener('pointerdown', (e) => {
   lastPointer = e.pointerType || 'mouse';
-  const onBackground = !e.target.closest('.player-top, .player-bottom, .player-channels, .player-epg, .player-sync');
+  const onBackground = !e.target.closest('.player-top, .player-bottom, .player-channels, .player-epg, .player-sync, .player-cc');
   // Swipes that start near the screen edges are the system's (home bar, notifications, back): ignore them.
   const H = innerHeight, W = innerWidth, edgeY = Math.max(64, H * 0.15), edgeX = 32;
   const inEdge = e.clientY < edgeY || e.clientY > H - edgeY || e.clientX < edgeX || e.clientX > W - edgeX;
@@ -1213,6 +1259,7 @@ function onBackgroundTap() {
   if (swallowClick) { swallowClick = false; return; }
   // automatic full screen got lost (back from the floating window, back gesture…): a tap restores it
   if (lastPointer === 'touch' && autoFullscreen()) { wake(); return; }
+  if (subs.boxOpen()) { subs.closeBox(); return; }
   if (!el.syncBox.hidden) { closeSync(); return; }
   if (!el.panel.hidden) { closePanel(); return; }
   if (!el.epg.hidden) { closeInfo(); return; }
@@ -1274,6 +1321,7 @@ export function remoteState() {
     paused: casting ? false : v.paused, casting, volume: Math.round(v.volume * 100), muted: v.muted, volFixed: VOLUME_FIXED || casting,
     pos: live ? (w ? Math.round(v.currentTime - w.end) : 0) : Math.round(v.currentTime || 0), dur: live ? 0 : Math.round(v.duration || 0),
     canSeek: !live || !!w, av: avMs, avBlocked: current.audio ? 'Solo per i video.' : avBlocked(), fs: !!fsElement(),
+    subs: current.audio ? null : subs.state(),
   };
 }
 
@@ -1303,6 +1351,8 @@ export function toggleMute() { el.video.muted = !el.video.muted; unmuteOnTouch =
 export function avStep(dir) { if (current && !avBlocked()) setAv(avMs + Math.sign(dir) * AV_STEP); }
 export function avReset() { setAv(0); }
 export function toggleSync() { if (el.syncBox.hidden) openSync(); else closeSync(); }
+export function toggleSubs() { subs.toggle(); }
+export function toggleSubsBox() { subs.toggleBox(); }
 export function typeNumber(num) { return jumpTo(parseInt(num, 10)); }
 
 // Full screen from the phone. Browsers only allow entering full screen right after a tap or a

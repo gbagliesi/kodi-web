@@ -145,6 +145,8 @@ async function onCommand(m) {
     case 'panel': if (st.open) { player.togglePanel(); player.remoteMarkBox(); } break;
     case 'info': if (st.open) { player.toggleInfo(); player.remoteMarkBox(); } break;
     case 'sync': if (st.open) { player.toggleSync(); player.remoteMarkBox(); } break;
+    case 'subs': if (st.open) player.toggleSubs(); break;
+    case 'ccbox': if (st.open) { player.toggleSubsBox(); player.remoteMarkBox(); } break;
     case 'stop': player.close(); break;
     case 'fs': {
       const r = await player.remoteFullscreen();

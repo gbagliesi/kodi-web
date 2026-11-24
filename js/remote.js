@@ -203,6 +203,12 @@ function renderState() {
   $('r-vollbl').textContent = s.muted ? 'MUTO' : (s.volume ?? 100) + '%';
   $('r-fwd').querySelector('small').textContent = s.live ? 'LIVE' : '+30 s';
   $('r-fwd').dataset.cmd = s.live ? 'live' : 'skip';
+  const cc = $('r-cc');
+  cc.hidden = !s.open || !s.subs || s.casting;
+  if (!cc.hidden) {
+    $('r-ccval').textContent = s.subs.active === 'gen' ? 'Generati dal computer' : s.subs.active ? s.subs.label : s.subs.on ? 'Attivi quando disponibili' : 'Spenti';
+    $('r-cctoggle').textContent = s.subs.on ? 'Spegni' : 'Accendi';
+  }
   const av = $('r-av');
   av.hidden = !s.open || s.audio || s.casting;
   if (!av.hidden) {

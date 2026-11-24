@@ -82,6 +82,9 @@ vecchi link e QR funzionano ancora.
 - **⏪ −10 s** e **⏩ +30 s**. Nei canali in diretta il secondo tasto diventa
   **LIVE** e torna alla diretta.
 - **123**: un tastierino per scrivere il numero del canale.
+- **Sottotitoli**: «Accendi»/«Spegni» (automatici: quelli del canale, altrimenti
+  generati dal computer se lo schermo è un Mac o un PC) e «Scegli sullo
+  schermo», che apre il riquadro CC del lettore.
 - **Sincronia audio**: «Voce prima», «Voce dopo» e «Azzera», come il tasto A/V
   del lettore. Il valore resta salvato per quel canale.
 

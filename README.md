@@ -12,6 +12,12 @@ con browser. Supporta gli **add-on**, scritti in JavaScript.
 - Lettore video e audio con HLS (`.m3u8`): nativo su Safari e su tutti i
   browser iPad, tramite hls.js altrove. Riprende i video dal punto lasciato,
   controlli dalla schermata di blocco (Media Session)
+- Sottotitoli (tasto CC o tasto S): quelli del canale quando lo stream li
+  trasmette (tracce HLS, sottotitoli TV CEA-608, file degli add-on); altrimenti,
+  su Mac e PC con WebGPU, sottotitoli generati in italiano dal computer stesso
+  con Whisper (transformers.js), con qualche secondo di ritardo. Il modello si
+  scarica una volta da Hugging Face e l'audio non lascia mai il computer. Non
+  disponibili su iPad, iPhone, Android e Fire TV (troppo pesanti)
 - Trasmissione a TV e altoparlanti: Google Cast (Chromecast, Google TV, Nest)
   da Chrome su Android, Mac e PC; AirPlay da iPad, iPhone e Safari sul Mac.
   Per i canali che richiedono il proxy, la TV riceve l'indirizzo del proxy

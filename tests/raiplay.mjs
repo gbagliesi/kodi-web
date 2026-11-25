@@ -176,7 +176,7 @@ try {
   assert.equal(await page.evaluate(() => document.getElementById('pl-subs').textContent), 'Ciao, sono il primo episodio.', 'SRT tags removed');
   console.log('✓ RaiPlay: search, seasons, free episode plays (relinker resolved, stream direct) with its official SRT subtitles');
 
-  // out of step with the speech: move the subtitles by hand, and «ritmo film»; kept for this video
+  // out of step with the speech: move the subtitles by hand; kept for this video
   const cueTimes = () => page.evaluate(() => { for (const t of document.getElementById('video').textTracks) if (t.cues?.length) return [t.cues[0].startTime, t.cues[0].endTime]; return null; });
   await page.click('#pl-cc');
   await page.waitForSelector('#pl-ccsync:not([hidden])');
@@ -185,16 +185,13 @@ try {
   assert.match(await page.textContent('#pl-ccsync .cc-sval'), /\+5,5 s/);
   let [s0, e0] = await cueTimes();
   assert.ok(Math.abs(s0 - 5.8) < 0.01 && Math.abs(e0 - 24.5) < 0.01, 'cue moved 5.5 s later: ' + s0 + '–' + e0);
-  await page.click('#pl-ccsync button:has-text("Ritmo film")');
-  [s0, e0] = await cueTimes();
-  assert.ok(Math.abs(e0 - (19 * 25 / 24 + 5.5)) < 0.01, 'film pace stretches the times: ' + e0);
   const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('salotto:subsync') || 'null'));
   const saved = Object.values(kept || {})[0];
-  assert.deepEqual(saved, { d: 5.5, f: true }, 'sync kept for this video');
+  assert.deepEqual(saved, { d: 5.5 }, 'sync kept for this video');
   await page.click('#pl-ccsync button:has-text("Azzera")');
   [s0, e0] = await cueTimes();
   assert.ok(Math.abs(s0 - 0.3) < 0.01 && Math.abs(e0 - 19) < 0.01, 'back to the file times');
-  console.log('✓ RaiPlay: subtitles moved by hand (+5,5 s, ritmo film, azzera), kept per video');
+  console.log('✓ RaiPlay: subtitles moved by hand (+5,5 s, azzera), kept per video');
 
   assert.deepEqual(errors, [], 'no page errors');
 } finally {

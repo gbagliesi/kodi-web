@@ -26,24 +26,38 @@ Non serve un dominio né una carta di credito.
 In alto vedrai l'indirizzo del Worker, simile a
 `https://salotto-proxy.tuonome.workers.dev`. Copialo.
 
-## 3. Proteggilo con un token
+## 3. Proteggilo con un token (obbligatorio)
 
-Senza token chiunque conosca l'indirizzo potrebbe usare il tuo proxy.
+Senza token chiunque conosca l'indirizzo potrebbe usare il tuo proxy, per
+questo il Worker **rifiuta tutte le richieste finché non imposti `TOKEN`**.
 
-1. Torna alla pagina del Worker → **Settings** → **Variables and Secrets** → **Add**.
-2. Tipo **Secret**, nome `TOKEN`, valore: una parola segreta inventata da te
-   (es. `girasole-blu-42`). Clicca **Deploy**.
-3. Facoltativo, solo se **non** usi il token: una variabile di tipo **Text**
-   chiamata `ALLOWED_ORIGINS` con valore `https://gbagliesi.github.io`.
-   Con il token impostato viene ignorata, perché il Chromecast scarica lo
-   stream da un indirizzo Google diverso dal sito di Salotto.
+1. Crea un token casuale tutto tuo. **Non usare parole di esempio prese da
+   guide o siti**: il repository è pubblico e chiunque può leggerle. Un modo
+   facile:
+   - **Mac / Linux**: apri il Terminale e scrivi `openssl rand -hex 24`;
+   - **qualsiasi browser**: apri la console (Mac: ⌥⌘J in Chrome, ⌥⌘C in Safari)
+     e scrivi
+     `[...crypto.getRandomValues(new Uint8Array(24))].map(b => b.toString(16).padStart(2, '0')).join('')`.
+
+   Ottieni 48 caratteri come `9f3c…`. Conservalo (per esempio nel portachiavi
+   o nel gestore password) perché servirà su ogni dispositivo.
+2. Torna alla pagina del Worker → **Settings** → **Variables and Secrets** → **Add**.
+3. Tipo **Secret**, nome `TOKEN`, valore: il token del punto 1. Clicca **Deploy**.
+
+Il vecchio esempio che compariva qui in passato viene rifiutato dal Worker: se
+lo stavi usando, cambia `TOKEN` (punto 2–3: **Edit** sul secret esistente) e
+inserisci il nuovo valore in Salotto su tutti i dispositivi.
+
+Per cambiare token in futuro (per esempio se lo hai condiviso per sbaglio)
+ripeti gli stessi passi: il vecchio smette subito di funzionare.
 
 ## 4. Collegalo a Salotto
 
 1. Apri Salotto → **Impostazioni**.
 2. In **Proxy per add-on e stream** incolla l'indirizzo del Worker.
-3. In **Token del proxy** scrivi la parola segreta del punto 3.
-4. Clicca **Salva**: deve comparire "proxy raggiungibile ✓".
+3. In **Token del proxy** incolla il token del punto 3.
+4. Clicca **Salva**: deve comparire "proxy raggiungibile ✓" (se il token è
+   sbagliato Salotto lo dice).
 
 Le impostazioni sono salvate nel browser: ripeti il punto 4 su ogni
 dispositivo (Mac, iPad…).

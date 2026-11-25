@@ -27,14 +27,19 @@ export function buildProxyUrl(configured, token = '') {
   return base + '?' + (tok ? 'token=' + encodeURIComponent(tok) + '&' : '') + 'url=';
 }
 
-/** Ask the proxy's health endpoint whether it is reachable. */
-export async function checkProxy(url = proxyUrl) {
-  if (!url) return false;
+/** Ask the proxy's health endpoint: 'ok', 'token' (wrong/missing token), 'unprotected'
+ *  (the Worker has no TOKEN, or the guide's old example) or 'down'. */
+export async function proxyStatus(url = proxyUrl) {
+  if (!url) return 'down';
   try {
-    const res = await fetch(url.split('?')[0] + '/health', { cache: 'no-store' });
-    return res.ok && (await res.text()).trim() === 'ok';
-  } catch { return false; }
+    const tok = new URL(url, location.href).searchParams.get('token');
+    const res = await fetch(url.split('?')[0] + '/health' + (tok ? '?token=' + encodeURIComponent(tok) : ''), { cache: 'no-store' });
+    if (res.status === 401) return 'token';
+    if (res.status === 503) return 'unprotected';
+    return res.ok && (await res.text()).trim() === 'ok' ? 'ok' : 'down';
+  } catch { return 'down'; }
 }
+export async function checkProxy(url = proxyUrl) { return (await proxyStatus(url)) === 'ok'; }
 
 export async function detectProxy() {
   const s = getSettings();

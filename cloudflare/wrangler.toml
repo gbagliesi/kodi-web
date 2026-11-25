@@ -4,7 +4,7 @@ name = "salotto-proxy"
 main = "worker.js"
 compatibility_date = "2024-09-23"
 workers_dev = true
-# Keep the variables set in the dashboard (ALLOWED_ORIGINS…). Secrets such as TOKEN are never touched.
+# Keep the variables set in the dashboard. Secrets such as TOKEN (required) are never touched.
 keep_vars = true
 
 # Phone remote: one Durable Object per paired screen relays the remote's commands

@@ -1119,7 +1119,7 @@ function renderSettings() {
       location.protocol === 'https:' && /^http:/i.test(s.proxyUrl) ? h('div', { class: 'hint', style: { color: 'var(--danger)' } }, 'Questa pagina è in HTTPS: il browser bloccherà un proxy in HTTP. Usa un proxy HTTPS, come quello su Cloudflare.') : null,
       h('div', { class: 'hint' }, 'Proxy attivo: ', active ? active.replace(/token=[^&]+/, 'token=•••') : 'nessuno')),
     h('div', { class: 'field' }, h('label', { for: 'proxy-token' }, 'Token del proxy'), token,
-      h('div', { class: 'hint' }, 'Lo stesso valore impostato come TOKEN nel proxy. Impedisce ad altri di usarlo.')),
+      h('div', { class: 'hint' }, 'Lo stesso valore impostato come TOKEN nel proxy (obbligatorio sul Worker Cloudflare). Impedisce ad altri di usarlo.')),
     h('div', { class: 'field' }, h('label', {}, 'Telecomando dal cellulare'),
       h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => go('remote') }, '📱 Collega il cellulare')),
       h('div', { class: 'hint' }, 'Usa il cellulare come telecomando di questo schermo: canali, volume, pausa, sincronia audio e guida TV. Serve il proxy Cloudflare.')),
@@ -1136,7 +1136,8 @@ function renderSettings() {
         const p = await addons.detectProxy();
         remote.restart();
         if (!p) toast('Salvato');
-        else toast((await addons.checkProxy(p)) ? 'Salvato · proxy raggiungibile ✓' : 'Salvato, ma il proxy non risponde: controlla l\'indirizzo', 5000);
+        else toast({ ok: 'Salvato · proxy raggiungibile ✓', token: 'Salvato, ma il token del proxy è sbagliato', unprotected: 'Salvato, ma il proxy rifiuta tutto: imposta un TOKEN nuovo nel Worker (guida Cloudflare)' }[await addons.proxyStatus(p)]
+          || 'Salvato, ma il proxy non risponde: controlla l\'indirizzo', 6000);
         if (location.hash === '#/settings') renderSettings(); // not if the user already moved on
       } }, 'Salva'),
       h('button', { class: 'btn danger focusable', onclick: async () => {

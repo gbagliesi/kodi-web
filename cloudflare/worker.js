@@ -19,12 +19,11 @@
  *   Needs the REMOTE Durable Object binding of wrangler.toml (the GitHub Action deploys it).
  *
  * Settings (Worker → Settings → Variables and Secrets):
- *   TOKEN            secret, recommended: every call must carry ?token=<TOKEN>
- *   ALLOWED_ORIGINS  optional, comma separated, e.g. https://gbagliesi.github.io
- *                    (requests from other web sites are refused). Ignored when TOKEN
- *                    is set (the token already protects the proxy), and Chromecast
- *                    receivers (*.gstatic.com) are always allowed, since the TV
- *                    fetches the stream itself when casting.
+ *   TOKEN   secret, REQUIRED: every call must carry ?token=<TOKEN>. Without it the Worker
+ *           refuses everything (503), so a fresh deploy is never an open proxy.
+ *           Use a long random value of your own (docs/CLOUDFLARE.md shows how to make one);
+ *           the example once printed in the docs is refused.
+ *   GET /proxy/health?token=…  -> "ok", or 401 when the token is wrong, 503 when TOKEN is unset.
  *
  * Setup guide: docs/CLOUDFLARE.md
  */
@@ -39,6 +38,26 @@ const CORS = {
 const FORWARD_HEADERS = /^(referer|user-agent|origin|cookie|authorization|accept-language)$/i;
 const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified', 'etag', 'cache-control'];
 const DEFAULT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+
+// Values that were published as examples: whoever copied one must choose a new secret.
+const PUBLISHED_EXAMPLES = new Set(['girasole-blu-42']);
+
+/** Constant-time string comparison (no early exit on the first different character). */
+function sameSecret(a, b) {
+  a = String(a); b = String(b);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) | 0) ^ (b.charCodeAt(i) | 0);
+  return diff === 0;
+}
+
+/** null when the call carries the right token, otherwise the response refusing it. */
+function refuse(env, u) {
+  const token = String(env.TOKEN || '');
+  if (!token) return text('proxy non protetto: imposta il secret TOKEN nel Worker (docs/CLOUDFLARE.md)', 503);
+  if (PUBLISHED_EXAMPLES.has(token)) return text('il TOKEN del Worker è quello di esempio della guida: scegline uno nuovo (docs/CLOUDFLARE.md)', 503);
+  if (!sameSecret(u.searchParams.get('token') || '', token)) return text('token mancante o errato', 401);
+  return null;
+}
 
 function text(body, status = 200) {
   return new Response(body, { status, headers: { ...CORS, 'Content-Type': 'text/plain; charset=utf-8' } });
@@ -116,8 +135,8 @@ export class RemoteRoom {
 function handleRemote(request, env, u) {
   if (!env.REMOTE) return text('telecomando non configurato: pubblica il Worker con wrangler (docs/CLOUDFLARE.md)', 501);
   if (u.pathname.endsWith('/remote/health')) return text('ok');
-  const token = env.TOKEN || '';
-  if (token && u.searchParams.get('token') !== token) return text('token mancante o errato', 401);
+  const no = refuse(env, u);
+  if (no) return no;
   const room = u.searchParams.get('room') || '';
   if (!ROOM_RE.test(room)) return text('stanza non valida', 400);
   return env.REMOTE.get(env.REMOTE.idFromName(room)).fetch(request);
@@ -126,19 +145,21 @@ function handleRemote(request, env, u) {
 async function handle(request, env) {
   const u = new URL(request.url);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
-  if (u.pathname.endsWith('/proxy/health')) return text('ok');
+  if (u.pathname.endsWith('/proxy/health')) {
+    // without ?token= it only says the Worker is there; with one it also checks it
+    if (!env.TOKEN || PUBLISHED_EXAMPLES.has(String(env.TOKEN)) || u.searchParams.has('token')) return refuse(env, u) || text('ok');
+    return text('ok');
+  }
   if (/\/remote\/(health|ws|status)$/.test(u.pathname)) return handleRemote(request, env, u);
   // /proxy/<name> (e.g. /proxy/live.m3u8) works too: some native players pick the format from the extension
   if (!/\/proxy(\/[\w.-]+)?$/.test(u.pathname)) return text('Salotto proxy: usa /proxy?url=…', 404);
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('metodo non consentito', 405);
 
-  const token = env.TOKEN || '';
-  if (token && u.searchParams.get('token') !== token) return text('token mancante o errato', 401);
-
-  const allowed = String(env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
-  const origin = request.headers.get('Origin');
-  const castReceiver = /^https:\/\/([a-z0-9-]+\.)*gstatic\.com$/i.test(origin || '');
-  if (!token && allowed.length && origin && !allowed.includes(origin) && !castReceiver) return text('origine non consentita', 403);
+  // The token is the only protection: Origin headers are trivial to fake, and the Chromecast
+  // fetches streams from a Google address anyway.
+  const no = refuse(env, u);
+  if (no) return no;
+  const token = String(env.TOKEN);
 
   let target;
   try { target = new URL(u.searchParams.get('url') || ''); } catch { return text('url mancante o non valido', 400); }

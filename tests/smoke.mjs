@@ -160,20 +160,25 @@ async function workerTests() {
   await new Promise(r => up.once('listening', r));
   const port = up.address().port;
   const W = 'https://salotto-proxy.example.workers.dev';
-  const env = { TOKEN: 's3cret', ALLOWED_ORIGINS: 'https://gbagliesi.github.io' };
-  const call = (q, headers = {}) => worker.fetch(new Request(W + q, { headers }), env);
+  const env = { TOKEN: 's3cret' };
+  const call = (q, headers = {}, e = env) => worker.fetch(new Request(W + q, { headers }), e);
   try {
     assert.equal(await (await call('/proxy/health')).text(), 'ok');
+    assert.equal(await (await call('/proxy/health?token=s3cret')).text(), 'ok');
+    assert.equal((await call('/proxy/health?token=nope')).status, 401);
     const target = encodeURIComponent(`http://127.0.0.1:${port}/live/index.m3u8`);
     assert.equal((await call('/proxy?url=' + target)).status, 401);
-    // with a TOKEN the token is the protection; the Chromecast (another origin) must get through
+    assert.equal((await call('/proxy?token=s3cre&url=' + target)).status, 401);
+    assert.equal((await call('/proxy?token=s3cret!&url=' + target)).status, 401);
+    // the token is the only protection: the Chromecast (another origin) must get through
     assert.equal((await call('/proxy?token=s3cret&url=' + target, { Origin: 'https://www.gstatic.com' })).status, 200);
-    // without a TOKEN the origin allow-list applies, Cast receivers always allowed
-    const env2 = { ALLOWED_ORIGINS: 'https://gbagliesi.github.io' };
-    const call2 = (q, headers = {}) => worker.fetch(new Request(W + q, { headers }), env2);
-    assert.equal((await call2('/proxy?url=' + target, { Origin: 'https://evil.example' })).status, 403);
-    assert.equal((await call2('/proxy?url=' + target, { Origin: 'https://www.gstatic.com' })).status, 200);
-    assert.equal((await call2('/proxy?url=' + target, { Origin: 'https://gbagliesi.github.io' })).status, 200);
+    // no TOKEN set, or the example once printed in the guide: the Worker refuses everything
+    for (const e of [{}, { ALLOWED_ORIGINS: 'https://gbagliesi.github.io' }, { TOKEN: 'girasole-blu-42' }]) {
+      assert.equal((await call('/proxy?url=' + target, { Origin: 'https://gbagliesi.github.io' }, e)).status, 503);
+      assert.equal((await call('/proxy?token=girasole-blu-42&url=' + target, {}, e)).status, 503);
+      assert.equal((await call('/proxy/health', {}, e)).status, 503);
+      assert.equal((await call('/remote/status?room=abcdefghijklmnopqrstuvwx', {}, { ...e, REMOTE: {} })).status, 503);
+    }
     const pl = await call('/proxy?token=s3cret&url=' + target, { Origin: 'https://gbagliesi.github.io' });
     assert.equal(pl.headers.get('access-control-allow-origin'), '*');
     const body = await pl.text();
@@ -189,7 +194,7 @@ async function workerTests() {
     assert.equal(seg.status, 206);
     assert.equal(seg.headers.get('content-range'), 'bytes 0-3/10');
     assert.equal(await seg.text(), 'ref=https://www.raiplay.it/;range=bytes=0-3');
-    console.log('✓ Cloudflare worker: token, origin allow-list (Chromecast allowed), HLS rewrite, headers and ranges');
+    console.log('✓ Cloudflare worker: token required (none/example refused, Chromecast allowed), HLS rewrite, headers and ranges');
   } finally { up.close(); }
 }
 

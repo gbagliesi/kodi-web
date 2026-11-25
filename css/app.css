@@ -201,7 +201,9 @@ button { cursor: pointer; }
 
 /* ---------- Player ---------- */
 .player { position: fixed; inset: 0; z-index: 50; background: #000; }
-.player-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.player-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.player video { transform-origin: 50% 50%; }
+.player-zoom { position: absolute; left: 50%; top: calc(72px + var(--safe-top)); transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; background: rgba(0, 0, 0, .65); font-size: 15px; font-variant-numeric: tabular-nums; pointer-events: none; z-index: 3; }
 .player video { width: 100%; height: 100%; object-fit: contain; background: #000; }
 .player.audio video { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .player-audio-art { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 40%, #1f3b4d, #000 70%); }

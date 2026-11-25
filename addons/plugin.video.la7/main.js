@@ -50,7 +50,7 @@ async function gql(ctx, query, vars, search = false) {
     throw e;
   }
 }
-const entityOf = (d) => { const e = d && d.route && d.route.entity; return e && e.__typename ? e : null; };
+const entityOf = (d) => { const e = d && d.route && d.route.entity; return e && Object.keys(e).length ? e : null; };
 const img = (o) => o && (o.url || o.mediaUrl) || '';
 const vthumb = (u) => u ? img(u.thumbnailDefault) || u.cf_thumbnail_url || img(u.cf_thumbnail_scena) : '';
 const webPage = (p) => BASE + p;

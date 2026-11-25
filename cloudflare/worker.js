@@ -18,6 +18,13 @@
  *                                             every message of the TV to its remotes and back.
  *   Needs the REMOTE Durable Object binding of wrangler.toml (the GitHub Action deploys it).
  *
+ * Sync between devices (only here, not in server.js):
+ *   GET  /sync/health                       -> "ok" when the sync store is set up
+ *   POST /sync?token=…&group=<name>          -> body {since, changes:[{id, v, t}]}; answers
+ *                                             {rev, full, entries:{id:{v,t}}}: what changed
+ *                                             after revision `since` (v null = deleted).
+ *   One Durable Object (SyncStore, SQLite) per group; needs the SYNC binding of wrangler.toml.
+ *
  * Settings (Worker → Settings → Variables and Secrets):
  *   TOKEN   secret, REQUIRED: every call must carry ?token=<TOKEN>. Without it the Worker
  *           refuses everything (503), so a fresh deploy is never an open proxy.
@@ -31,7 +38,7 @@
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Range, Content-Type',
-  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
   'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, Content-Type',
 };
 
@@ -142,6 +149,98 @@ function handleRemote(request, env, u) {
   return env.REMOTE.get(env.REMOTE.idFromName(room)).fetch(request);
 }
 
+// ---------------------------------------------------------------- sync between devices
+// Favourites, resume points, settings and add-ons of every Salotto of a group. Each entry
+// (e.g. "fav/<key>") keeps its last value and when it was changed: the newest change wins.
+// Every write gets a new revision number, so a device asks only for what changed since its last
+// visit. Deleted entries stay as tombstones for TOMBSTONE_DAYS, then a device that was away
+// longer than that gets the whole state again (full: true).
+const GROUP_RE = /^[a-z0-9-]{1,40}$/;
+const MAX_BODY = 2 * 1024 * 1024;
+const MAX_CHANGES = 3000;
+const MAX_VALUE = 64 * 1024;
+const ID_MAX = 600;
+const TOMBSTONE_DAYS = 90;
+
+const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+
+export class SyncStore {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.sql = ctx.storage.sql;
+    this.sql.exec('CREATE TABLE IF NOT EXISTS entries (id TEXT PRIMARY KEY, v TEXT, t INTEGER NOT NULL, r INTEGER NOT NULL)');
+    this.sql.exec('CREATE INDEX IF NOT EXISTS entries_r ON entries (r)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, n INTEGER NOT NULL)');
+  }
+
+  meta(k) { return this.sql.exec('SELECT n FROM meta WHERE k = ?', k).toArray()[0]?.n || 0; }
+  setMeta(k, n) { this.sql.exec('INSERT INTO meta (k, n) VALUES (?, ?) ON CONFLICT (k) DO UPDATE SET n = excluded.n', k, n); }
+
+  async fetch(request) {
+    let body;
+    try {
+      const raw = await request.text();
+      if (raw.length > MAX_BODY) return text('troppi dati', 413);
+      body = JSON.parse(raw || '{}');
+    } catch { return text('JSON non valido', 400); }
+    const since = Math.max(0, Math.floor(+body.since || 0));
+    const changes = Array.isArray(body.changes) ? body.changes.slice(0, MAX_CHANGES) : [];
+    const now = Date.now();
+    let rev = this.meta('rev');
+    // nothing new on either side: the usual visit, one row read
+    if (!changes.length && since === rev) return json({ rev, full: false, entries: {} });
+
+    const touched = new Set();
+    const write = () => {
+      for (const c of changes) {
+        if (!c || typeof c.id !== 'string' || !c.id || c.id.length > ID_MAX) continue;
+        const v = c.v === null || c.v === undefined ? null : JSON.stringify(c.v);
+        if (v && v.length > MAX_VALUE) continue;
+        const t = Math.min(Math.floor(+c.t) || now, now); // a clock in the future must not win forever
+        touched.add(c.id);
+        const cur = this.sql.exec('SELECT t FROM entries WHERE id = ?', c.id).toArray()[0];
+        if (cur && cur.t > t) continue; // a newer change from another device is already here
+        rev++;
+        this.sql.exec('INSERT INTO entries (id, v, t, r) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET v = excluded.v, t = excluded.t, r = excluded.r', c.id, v, t, rev);
+      }
+      this.setMeta('rev', rev);
+      // forget old tombstones now and then
+      if (rev - this.meta('pruneAt') > 500) {
+        const old = now - TOMBSTONE_DAYS * 86400000;
+        const max = this.sql.exec('SELECT MAX(r) AS m FROM entries WHERE v IS NULL AND t < ?', old).toArray()[0]?.m;
+        if (max) { this.sql.exec('DELETE FROM entries WHERE v IS NULL AND t < ?', old); this.setMeta('pruned', Math.max(max, this.meta('pruned'))); }
+        this.setMeta('pruneAt', rev);
+      }
+    };
+    if (this.ctx.storage.transactionSync) this.ctx.storage.transactionSync(write); else write();
+
+    // a device away for longer than the tombstones last (or from before a reset) gets everything
+    const full = since < this.meta('pruned') || since > rev;
+    const rows = full ? this.sql.exec('SELECT id, v, t FROM entries').toArray()
+      : this.sql.exec('SELECT id, v, t FROM entries WHERE r > ?', since).toArray();
+    const entries = {};
+    for (const row of rows) entries[row.id] = { v: row.v == null ? null : JSON.parse(row.v), t: row.t };
+    // the device's own changes that lost against a newer one: tell it what won
+    for (const id of touched) {
+      if (entries[id]) continue;
+      const row = this.sql.exec('SELECT v, t FROM entries WHERE id = ?', id).toArray()[0];
+      if (row) entries[id] = { v: row.v == null ? null : JSON.parse(row.v), t: row.t };
+    }
+    return json({ rev, full, entries });
+  }
+}
+
+function handleSync(request, env, u) {
+  if (!env.SYNC) return text('sincronizzazione non configurata: pubblica il Worker con wrangler (docs/CLOUDFLARE.md)', 501);
+  if (u.pathname.endsWith('/sync/health')) return text('ok');
+  const no = refuse(env, u);
+  if (no) return no;
+  if (request.method !== 'POST') return text('metodo non consentito', 405);
+  const group = (u.searchParams.get('group') || 'casa').toLowerCase();
+  if (!GROUP_RE.test(group)) return text('gruppo non valido', 400);
+  return env.SYNC.get(env.SYNC.idFromName('sync:' + group)).fetch(request);
+}
+
 async function handle(request, env) {
   const u = new URL(request.url);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -151,6 +250,7 @@ async function handle(request, env) {
     return text('ok');
   }
   if (/\/remote\/(health|ws|status)$/.test(u.pathname)) return handleRemote(request, env, u);
+  if (/\/sync(\/health)?$/.test(u.pathname)) return handleSync(request, env, u);
   // /proxy/<name> (e.g. /proxy/live.m3u8) works too: some native players pick the format from the extension
   if (!/\/proxy(\/[\w.-]+)?$/.test(u.pathname)) return text('Salotto proxy: usa /proxy?url=…', 404);
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('metodo non consentito', 405);

@@ -182,6 +182,32 @@ Il codice QR contiene la chiave dello schermo e il token del proxy: mostralo
 solo a chi deve usare il telecomando. **Scollega tutti i cellulari** crea una
 chiave nuova.
 
+## Sincronizzazione tra dispositivi
+
+Preferiti, punti di ripresa dei video, ordine degli elenchi, sincronia audio
+e dei sottotitoli, add-on installati con le loro impostazioni (per esempio la
+chiave API di YouTube) e alcune opzioni passano da un Salotto all'altro
+attraverso lo stesso Worker. I dati stanno in un Durable Object del tuo
+account Cloudflare (piano gratuito), protetto dal TOKEN come il proxy.
+
+- Con l'aggiornamento **automatico** non devi fare nulla: la GitHub Action
+  pubblica il Worker con il collegamento `SYNC` di `cloudflare/wrangler.toml`.
+  Se Salotto dice che il Worker "non ha ancora la sincronizzazione", apri
+  **Actions** → **Aggiorna il Worker Cloudflare** → **Run workflow**.
+- In ogni Salotto: **Impostazioni** → **Sincronizzazione tra dispositivi**.
+  È attiva di serie; togli la spunta per scollegare quel dispositivo (tiene i
+  suoi dati e non manda più nulla). Quando la riattivi, prende i dati degli
+  altri e aggiunge i preferiti che aveva solo lui.
+- **Gruppo**: i dispositivi con lo stesso gruppo (di serie `casa`) condividono
+  tutto; con un gruppo diverso (per esempio `bambini`) hanno preferiti e
+  impostazioni separati, sullo stesso Worker.
+- Restano su ogni dispositivo: indirizzo e token del proxy, pagina iniziale,
+  finestra mobile su Android, telecomando abbinato, add-on caricati da file.
+- Se lo stesso elemento cambia su due dispositivi, vale la modifica più
+  recente. Le modifiche partono dopo pochi secondi; gli altri le vedono
+  quando tornano in primo piano o entro un paio di minuti
+  (**⟳ Sincronizza adesso** per non aspettare).
+
 ## Da sapere
 
 - Chromecast: la TV scarica lo stream passando dal tuo Worker. Se sulla TV

@@ -1,6 +1,11 @@
 // Small persistence layer on top of localStorage (works in Safari/WebKit, Chrome, Firefox).
 const PREFIX = 'salotto:';
 
+// sync.js is told about every change, to send it to the other devices
+let changeHook = null;
+export function onChange(fn) { changeHook = fn; }
+const changed = (key) => { try { changeHook?.(key); } catch (e) { console.warn(e); } };
+
 export function load(key, fallback) {
   try {
     const raw = localStorage.getItem(PREFIX + key);
@@ -13,6 +18,7 @@ export function load(key, fallback) {
 export function save(key, value) {
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify(value));
+    changed(key);
     return true;
   } catch (e) {
     console.warn('storage full or unavailable', e);
@@ -21,7 +27,7 @@ export function save(key, value) {
 }
 
 export function remove(key) {
-  try { localStorage.removeItem(PREFIX + key); } catch { /* ignore */ }
+  try { localStorage.removeItem(PREFIX + key); changed(key); } catch { /* ignore */ }
 }
 
 // ---- App settings ----

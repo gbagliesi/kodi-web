@@ -7,6 +7,7 @@ import * as epg from './epg.js';
 import { handleNavKey, focusables } from './nav.js';
 import { versionLabel } from './version.js';
 import * as remote from './remote-host.js';
+import * as sync from './sync.js';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -1109,6 +1110,40 @@ function renderAddonInfo(id) {
 }
 
 // ---------------------------------------------------------------- settings
+const SYNC_TEXT = {
+  off: () => 'Questo dispositivo non si sincronizza: preferiti e impostazioni restano solo qui.',
+  ok: (st) => 'Sincronizzato' + (st.at ? ' alle ' + new Date(st.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '') + ' ✓',
+  busy: () => 'Sincronizzazione in corso…',
+  idle: () => 'In attesa…',
+};
+function syncText(st) { return (SYNC_TEXT[st.state] || (() => st.message || ''))(st) + (st.state === 'partial' ? ' · ' + st.message : ''); }
+
+/** Settings: sync favourites, settings and add-ons with the user's other devices. */
+function syncField() {
+  const c = sync.config();
+  const on = h('input', { type: 'checkbox', id: 'sync-on', checked: c.on });
+  const group = h('input', { type: 'text', id: 'sync-group', value: c.group, maxlength: 40, autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false' });
+  const state = h('div', { class: 'hint', id: 'sync-status' }, syncText(sync.getStatus()));
+  const groupRow = h('div', { class: 'sync-group', hidden: !c.on }, h('label', { for: 'sync-group' }, 'Gruppo'), group,
+    h('button', { class: 'btn focusable', id: 'sync-group-save', onclick: () => {
+      const g = group.value.trim().toLowerCase();
+      if (!sync.GROUP_RE.test(g)) { toast('Il gruppo può avere solo lettere minuscole, numeri e trattini'); return; }
+      if (g !== sync.config().group) { sync.configure({ group: g }); toast('Gruppo «' + g + '»: prendo i dati degli altri dispositivi del gruppo'); }
+    } }, 'Cambia'));
+  on.addEventListener('change', () => {
+    sync.configure({ on: on.checked });
+    groupRow.hidden = !on.checked;
+    toast(on.checked ? 'Sincronizzazione attiva: prendo i dati degli altri dispositivi' : 'Questo dispositivo ora è scollegato dalla sincronizzazione');
+  });
+  const off = sync.onStatus((st) => { if (!state.isConnected) { off(); return; } state.textContent = syncText(st); });
+  return h('div', { class: 'field' }, h('label', {}, 'Sincronizzazione tra dispositivi'),
+    h('div', { class: 'check-row' }, on, h('label', { for: 'sync-on' }, 'Sincronizza questo dispositivo con gli altri')),
+    groupRow,
+    h('div', { class: 'actions' }, h('button', { class: 'btn focusable', id: 'sync-now', onclick: () => sync.syncNow() }, '⟳ Sincronizza adesso')),
+    state,
+    h('div', { class: 'hint' }, 'Preferiti, punti di ripresa, ordine degli elenchi, sincronia audio e sottotitoli, add-on con le loro impostazioni e alcune opzioni passano dal tuo Worker Cloudflare a tutti i dispositivi dello stesso gruppo. Restano su ogni dispositivo: proxy e token, pagina iniziale, finestra mobile e telecomando. Usa un gruppo diverso (per esempio «bambini») per tenere separati preferiti e impostazioni di qualcuno.'));
+}
+
 function renderSettings() {
   setCrumbs(['Impostazioni']);
   const s = store.getSettings();
@@ -1131,6 +1166,7 @@ function renderSettings() {
     h('div', { class: 'field' }, h('label', {}, 'Telecomando dal cellulare'),
       h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => go('remote') }, '📱 Collega il cellulare')),
       h('div', { class: 'hint' }, 'Usa il cellulare come telecomando di questo schermo: canali, volume, pausa, sincronia audio e guida TV. Serve il proxy Cloudflare.')),
+    syncField(),
     h('div', { class: 'field check' }, resume, h('label', { for: 'resume' }, 'Riprendi i video dal punto in cui li hai lasciati')),
     /Android/i.test(navigator.userAgent) && !isTvApp ? h('div', { class: 'field check' }, autoPip, h('label', { for: 'autopip' }, 'Finestra mobile automatica: i video si aprono a schermo intero, così uscendo dall\'app continuano in una finestra mobile')) : null,
     h('div', { class: 'field' }, h('label', { for: 'startpage' }, 'Pagina iniziale'), startSel,
@@ -1143,13 +1179,14 @@ function renderSettings() {
         listingCache.clear();
         const p = await addons.detectProxy();
         remote.restart();
+        sync.syncNow();
         if (!p) toast('Salvato');
         else toast({ ok: 'Salvato · proxy raggiungibile ✓', token: 'Salvato, ma il token del proxy è sbagliato', unprotected: 'Salvato, ma il proxy rifiuta tutto: imposta un TOKEN nuovo nel Worker (guida Cloudflare)' }[await addons.proxyStatus(p)]
           || 'Salvato, ma il proxy non risponde: controlla l\'indirizzo', 6000);
         if (location.hash === '#/settings') renderSettings(); // not if the user already moved on
       } }, 'Salva'),
       h('button', { class: 'btn danger focusable', onclick: async () => {
-        if (await confirmBox('Ripristina', 'Cancellare add-on, preferiti e impostazioni?', 'Cancella tutto', true)) {
+        if (await confirmBox('Ripristina', sync.config().on ? 'Cancellare add-on, preferiti e impostazioni di questo dispositivo? Con la sincronizzazione attiva, quelli degli altri dispositivi torneranno qui.' : 'Cancellare add-on, preferiti e impostazioni?', 'Cancella tutto', true)) {
           Object.keys(localStorage).filter(k => k.startsWith('salotto:')).forEach(k => localStorage.removeItem(k));
           location.hash = '#/'; location.reload();
         }
@@ -1270,6 +1307,14 @@ document.addEventListener('keydown', (e) => {
 backBtn.addEventListener('click', () => history.back());
 window.addEventListener('hashchange', route);
 
+// what came from the other devices shows up on Home and Favourites right away
+window.addEventListener('salotto:synced', (e) => {
+  const ids = e.detail?.ids || [];
+  const section = parseRoute().parts[0] || '';
+  if (!['', 'favourites'].includes(section) || player.isOpen() || yt.isOpen() || !$('modal').hidden) return;
+  if (ids.some(id => /^(fav|addon|settings)\//.test(id))) route();
+});
+
 addons.setNotifyHandler((msg, m) => toast(`${m.name}: ${msg}`, 4000));
 addons.onAddonsChanged(() => { /* listings may depend on installed set */ });
 
@@ -1301,13 +1346,14 @@ console.info('Salotto', versionLabel());
   const start = (!location.hash || location.hash === '#/') ? startPage() : '';
   if (start) { history.replaceState(null, '', '#/'); history.pushState(null, '', start); }
   route();
+  sync.start();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
   }
 })();
 
 // exposed for debugging / tests
-window.salotto = { addons, store, player, yt, focusHooks };
+window.salotto = { addons, store, player, yt, focusHooks, sync };
 
 // ---------------------------------------------------------------- Fire TV / Android TV app
 // The TV app (android/) is a window on this site: its user agent ends with "SalottoTV".

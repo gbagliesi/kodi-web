@@ -25,6 +25,9 @@ con browser. Supporta gli **add-on**, scritti in JavaScript.
   canale, regola volume e sincronia audio, mette in pausa, mostra canali e
   guida TV e muove le frecce dello schermo (passa dal Worker Cloudflare,
   guida in [docs/TELECOMANDO.md](docs/TELECOMANDO.md))
+- Preferiti, punti di ripresa, add-on e impostazioni sincronizzati fra tutti
+  i tuoi Salotto attraverso il Worker Cloudflare, con la possibilità di
+  scollegare un dispositivo (guida in [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md))
 - File locali (dall'app File di iPad, iCloud, chiavette USB), senza caricarli
   da nessuna parte
 - Apri URL diretti di stream
@@ -122,6 +125,8 @@ npm test     # richiede il pacchetto playwright
 Il test avvia `server.js`, apre l'app in Chromium con dimensioni da iPad e
 simula le API esterne. `node tests/remote.mjs` prova il telecomando: uno
 schermo e un cellulare simulati collegati al relay del Worker.
+`node tests/sync.mjs` prova la sincronizzazione: tre Salotto simulati e lo
+store del Worker.
 
 ## Contenuti
 

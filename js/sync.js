@@ -132,6 +132,7 @@ async function apply(got, snapT) {
   } finally { applying = false; }
   for (const [k, v, id] of by.astore || []) {
     const i = k.indexOf('/');
+    if (v == null) continue; // add-on data is never deleted from another device (old tombstones)
     try { await addons.writeAddonStore(k.slice(0, i), k.slice(i + 1), v); } catch (e) { console.warn('sync: add-on data', k, e); failed.add(id); }
   }
   for (const [k, v, id] of by.addon || []) {
@@ -173,9 +174,9 @@ async function round(keepalive) {
       if (st.pending[id] !== undefined) continue; // still waiting to be applied here
       const s = st.snap[id];
       if (JSON.stringify(v).length > MAX_VALUE) continue; // the Worker would refuse it
-      // add-on data seen here for the first time (e.g. just made syncable) never beats the copy
-      // the other devices already share: it only fills a gap
-      if (!s) changes.push({ id, v, t: id.startsWith('astore/') ? 1 : now });
+      // add-on data seen here for the first time (e.g. just made syncable) never beats a copy
+      // the other devices already share: it only fills a gap (nothing there, or a deletion)
+      if (!s) changes.push(id.startsWith('astore/') ? { id, v, t: now, weak: true } : { id, v, t: now });
       else if (s.split('.')[0] !== hash(v)) changes.push({ id, v, t: now });
     }
     for (const id of Object.keys(st.snap)) {

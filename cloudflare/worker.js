@@ -22,6 +22,8 @@
  *   GET  /sync/health                       -> "ok" when the sync store is set up
  *   POST /sync?token=…&group=<name>          -> body {since, changes:[{id, v, t}]}; answers
  *                                             {rev, full, entries:{id:{v,t}}}: what changed
+ *                                             (change.weak: only if the entry is missing or deleted;
+ *                                             want: [ids] also returned)
  *                                             after revision `since` (v null = deleted).
  *   One Durable Object (SyncStore, SQLite) per group; needs the SYNC binding of wrangler.toml.
  *
@@ -203,7 +205,13 @@ export class SyncStore {
         const t = Math.min(Math.floor(+c.t) || now, now); // a clock in the future must not win forever
         touched.add(c.id);
         const cur = this.sql.exec('SELECT v, t FROM entries WHERE id = ?', c.id).toArray()[0];
-        if (cur && cur.t > t) continue; // a newer change from another device is already here
+        // weak: data a device sends for the first time fills a gap, never replaces a shared value
+        const loses = c.weak ? cur && cur.v != null : cur && cur.t > t;
+        if (loses) {
+          // kept anyway, so a value that lost can still be found again
+          if (v != null && v !== cur.v) this.sql.exec('INSERT INTO history (id, v, t, replaced) VALUES (?, ?, ?, ?)', c.id, v, t, now);
+          continue; // a newer change from another device is already here
+        }
         if (cur && cur.v != null && cur.v !== v) this.sql.exec('INSERT INTO history (id, v, t, replaced) VALUES (?, ?, ?, ?)', c.id, cur.v, cur.t, now);
         rev++;
         this.sql.exec('INSERT INTO entries (id, v, t, r) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET v = excluded.v, t = excluded.t, r = excluded.r', c.id, v, t, rev);

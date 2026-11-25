@@ -246,6 +246,16 @@ export function setAddonSettings(id, values) {
   writeInstalled(map);
 }
 
+/** Sync: enabled state and settings exactly as another device has them. */
+export function setSyncedState(id, enabled, settings) {
+  const map = readInstalled();
+  if (!map[id]) return;
+  map[id].enabled = enabled;
+  map[id].settings = settings || {};
+  if (!enabled) stopHost(id);
+  writeInstalled(map);
+}
+
 // ---------------------------------------------------------------- repositories
 export async function fetchRepository(url) {
   const abs = new URL(url, location.href).href;

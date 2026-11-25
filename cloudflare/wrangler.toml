@@ -7,12 +7,21 @@ workers_dev = true
 # Keep the variables set in the dashboard. Secrets such as TOKEN (required) are never touched.
 keep_vars = true
 
-# Phone remote: one Durable Object per paired screen relays the remote's commands
+# Phone remote: one Durable Object per paired screen relays the remote's commands;
+# sync between devices: one Durable Object per group keeps favourites, settings and add-ons
 # (free plan: SQLite-backed Durable Objects).
 [[durable_objects.bindings]]
 name = "REMOTE"
 class_name = "RemoteRoom"
 
+[[durable_objects.bindings]]
+name = "SYNC"
+class_name = "SyncStore"
+
 [[migrations]]
 tag = "remote-v1"
 new_sqlite_classes = ["RemoteRoom"]
+
+[[migrations]]
+tag = "sync-v1"
+new_sqlite_classes = ["SyncStore"]

@@ -38,7 +38,8 @@ try {
   await page.goto(BASE);
   await page.waitForSelector('.hero');
   const ids = await page.evaluate(() => window.salotto.addons.listInstalled().map(a => a.manifest.id + (a.code ? '+code' : '')));
-  assert.equal(ids.length, 8, 'all bundled add-ons installed: ' + ids);
+  const bundled = JSON.parse(fs.readFileSync(path.join(ROOT, 'addons/repository.json'), 'utf8')).addons.length;
+  assert.equal(ids.length, bundled, 'all bundled add-ons installed: ' + ids);
   assert.ok(ids.every(i => !i.endsWith('+code')), 'no code in localStorage');
   await page.goto(BASE + '#/browse/plugin.video.demo');
   await page.waitForSelector('.row, .card');

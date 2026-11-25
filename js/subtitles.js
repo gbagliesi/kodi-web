@@ -17,6 +17,8 @@ let opts = null;           // { reattach(), changed(), wake() }
 // what the viewer chose, kept between videos: off | on (the channel's, else generated) | gen
 let prefs = { mode: 'off', model: 'small', lang: 'it', ...load('subs', {}) };
 const savePrefs = () => save('subs', prefs);
+// choices made on another device (sync.js) count from the next video
+window.addEventListener('salotto:synced', (e) => { if (!item && e.detail?.ids?.includes('subs')) prefs = { mode: 'off', model: 'small', lang: 'it', ...load('subs', {}) }; });
 
 let support = { ok: false, why: '' };  // can this device generate subtitles (filled at start)
 let hls = null;

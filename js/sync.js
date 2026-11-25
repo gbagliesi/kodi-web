@@ -14,7 +14,7 @@ import * as addons from './addons.js';
 const CONF = 'sync';            // { on, group } – this device only
 const STATE = 'sync-state';     // { rev, joined, snap: { id: "hash.t" }, pending: { id: v } }
 const MAPS = ['resume', 'avsync', 'subsync'];
-const SETTINGS_KEYS = ['autoResume', 'viewMode', 'repositories', 'startPage', 'startLabel'];
+const SETTINGS_KEYS = ['autoResume', 'viewMode', 'repositories', 'startPage', 'startLabel', 'addonOrder'];
 const WATCHED = new Set(['favourites', 'sort', 'settings', 'subs', 'addons', ...MAPS]);
 const PUSH_DELAY = 8000;        // changes are sent together, a few seconds after the first one
 const MAX_VALUE = 60000;        // per entry (the Worker takes up to 64 KB)

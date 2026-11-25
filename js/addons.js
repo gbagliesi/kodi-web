@@ -139,8 +139,11 @@ async function migrateCode() {
   if (changed) save('addons', map);
 }
 
+/** Installed add-ons in the user's order (setting addonOrder, synced), the others after by name. */
 export function listInstalled() {
-  return Object.values(readInstalled()).sort((a, b) => a.manifest.name.localeCompare(b.manifest.name));
+  const order = getSettings().addonOrder || [];
+  const pos = (a) => { const i = order.indexOf(a.manifest.id); return i < 0 ? Infinity : i; };
+  return Object.values(readInstalled()).sort((a, b) => pos(a) - pos(b) || a.manifest.name.localeCompare(b.manifest.name));
 }
 
 export function getInstalled(id) { return readInstalled()[id] || null; }

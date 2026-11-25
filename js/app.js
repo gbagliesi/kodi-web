@@ -359,7 +359,8 @@ async function renderBrowse(id, path, params) {
     try {
       const host = addons.getHost(id);
       listing = addons.normaliseListing(query != null ? await host.call('search', query) : await host.call('list', path));
-      listingCache.set(cacheKey, listing);
+      // noCache: a list still being filled in (asked again when the page is opened again)
+      if (!listing.noCache) listingCache.set(cacheKey, listing);
       if (listingCache.size > 40) listingCache.delete(listingCache.keys().next().value);
     } catch (e) {
       if (location.hash !== cacheKey) return;
@@ -651,6 +652,11 @@ async function pick(addonId, it, trail = [], channels) {
   toast('Apertura di «' + it.label + '»…', 1500);
   try {
     const r = await openEntry(addonId, it);
+    // the add-on found out only now that it plays on its own site: ask, so the tap opens it
+    if (r.stream.external) {
+      if (/^https:\/\//i.test(r.stream.external) && await confirmBox(it.label, r.stream.message || 'Questo contenuto si guarda sul suo sito.', 'Apri il sito')) window.open(r.stream.external, '_blank', 'noopener');
+      return;
+    }
     player.play(r.item, r.stream, { favEntry: r.favEntry, channels: channelsFor(it, channels) });
   } catch (e) {
     toast(e.message, 5000);

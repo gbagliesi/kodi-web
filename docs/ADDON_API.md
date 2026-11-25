@@ -108,6 +108,8 @@ addon.register({
 
 `subtitles`: file WebVTT o SRT (gli SRT li converte il lettore), mostrati con il pulsante CC.
 
+`resolve()` può anche rispondere `{ external: 'https://…', message }` quando scopre solo allora che il contenuto si guarda sul suo sito: Salotto mostra il messaggio con un pulsante che apre il sito. Una lista ancora in costruzione può avere `noCache: true`, così Salotto la richiede quando la pagina viene riaperta.
+
 Il browser non permette di impostare header come `Referer` sulle richieste
 video: se li indichi, lo stream passa dal proxy (`node server.js`), che li
 aggiunge e riscrive le playlist HLS.

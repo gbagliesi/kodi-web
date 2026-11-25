@@ -138,6 +138,7 @@ async function ui() {
       addons.setEnabled('plugin.audio.podcast', false);
       store.setSettings({ viewMode: 'list' });
       store.setResume('plugin.video.demo|film', 600, 5400);
+      return addons.writeAddonStore('plugin.video.youtube', 'channels', [{ id: 'UCprova', title: 'Canale di prova' }]);
     }, [fav('f1', 'Primo'), fav('f2', 'Secondo')]);
     await syncNow(a);
     assert.deepEqual(await favKeys(a), ['f2', 'f1']);
@@ -151,9 +152,10 @@ async function ui() {
       return { key: addons.getAddonSettings('plugin.video.youtube').apiKey, podcast: addons.getInstalled('plugin.audio.podcast').enabled, view: store.getSettings().viewMode, start: store.getSettings().startPage, proxy: store.getSettings().proxyUrl, resume: store.getResume('plugin.video.demo|film') };
     });
     assert.deepEqual(bState, { key: 'chiave-di-prova', podcast: false, view: 'list', start: '', proxy: RELAY, resume: 600 });
+    assert.deepEqual(await b.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels')), [{ id: 'UCprova', title: 'Canale di prova' }], 'YouTube saved channels');
     await b.goto(BASE + '#/favourites');
     await b.waitForSelector('#view :text("Secondo")');
-    console.log('✓ a new device gets favourites, resume points, settings and add-on settings (not the start page)');
+    console.log('✓ a new device gets favourites, resume points, settings, add-on settings and saved YouTube channels (not the start page)');
 
     // ---- changes go both ways; the Favourites page updates by itself
     await b.evaluate((f) => { window.salotto.store.toggleFavourite(f); window.salotto.addons.uninstall('plugin.video.archive'); }, fav('f1'));

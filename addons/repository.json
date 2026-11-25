@@ -44,7 +44,7 @@
     {
       "id": "plugin.video.youtube",
       "name": "YouTube",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Ricerca, tendenze, dirette, canali e playlist di YouTube, con il lettore ufficiale",
       "manifest": "plugin.video.youtube/addon.json",
       "icon": "plugin.video.youtube/icon.svg"

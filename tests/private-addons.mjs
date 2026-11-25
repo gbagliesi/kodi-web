@@ -62,6 +62,11 @@ const sync = async (token, body) => {
 async function unit() {
   assert.deepEqual(friendTokens(env).map(f => f.name), ['anna', 'luca-b'], 'short tokens and bad names are ignored; TOKEN_<NAME> secrets count');
   assert.equal((await call('/proxy/health?token=' + LUCA)).status, 200, 'a TOKEN_<NAME> secret works');
+  const fr = await (await call('/proxy/friends?token=' + OWNER)).json();
+  assert.deepEqual(fr.friends.map(f => f.name), ['anna', 'luca-b']);
+  assert.deepEqual(fr.secrets.map(x => x.name).sort(), ['TOKENS', 'TOKEN_LUCA_B', 'TOKEN_PIA']);
+  assert.ok(!JSON.stringify(fr).includes(LUCA), 'never the values');
+  assert.equal((await call('/proxy/friends?token=' + LUCA)).status, 403, 'only the owner');
   assert.notDeepEqual((await sync(LUCA, { since: 0, changes: [] })).entries, undefined);
   // tokens
   assert.equal((await call('/proxy/health?token=' + OWNER)).status, 200);

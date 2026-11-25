@@ -106,6 +106,8 @@ addon.register({
 { url, mime?, headers?: { Referer, 'User-Agent' }, proxy?: true, subtitles?: [{ url, label, lang }] }
 ```
 
+`subtitles`: file WebVTT o SRT (gli SRT li converte il lettore), mostrati con il pulsante CC.
+
 Il browser non permette di impostare header come `Referer` sulle richieste
 video: se li indichi, lo stream passa dal proxy (`node server.js`), che li
 aggiunge e riscrive le playlist HLS.

@@ -208,17 +208,27 @@ async function uiTests() {
     await page.goto(BASE);
     await page.waitForSelector('.hero');
     const installed = await page.evaluate(() => window.salotto.addons.listInstalled().map(a => a.manifest.id));
-    assert.equal(installed.length, 5, 'bundled add-ons installed: ' + installed);
+    assert.equal(installed.length, 6, 'bundled add-ons installed: ' + installed);
     console.log('✓ app boots and installs bundled add-ons:', installed.join(', '));
     // An outdated add-on from the official repository is updated on the next start
     await page.evaluate(() => {
       const k = 'salotto:addons'; const m = JSON.parse(localStorage.getItem(k));
-      m['plugin.video.iptv'].manifest.version = '1.0.0'; localStorage.setItem(k, JSON.stringify(m));
+      m['plugin.video.iptv'].manifest.version = '1.0.0';
+      // a visit from before RaiPlay was added: it is installed once, by itself
+      delete m['plugin.video.raiplay']; localStorage.setItem(k, JSON.stringify(m)); localStorage.removeItem('salotto:bundled-seen');
     });
     await page.reload();
     await page.waitForSelector('.hero');
     assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.5.0');
-    console.log('✓ outdated bundled add-ons are updated at start-up');
+    await waitFor(() => page.evaluate(() => !!window.salotto.addons.getInstalled('plugin.video.raiplay')), 8000);
+    // removed by the user: it stays removed
+    await page.evaluate(() => window.salotto.addons.uninstall('plugin.video.raiplay'));
+    await page.reload();
+    await page.waitForSelector('.hero');
+    await new Promise(r => setTimeout(r, 1500));
+    assert.equal(await page.evaluate(() => !!window.salotto.addons.getInstalled('plugin.video.raiplay')), false, 'an add-on the user removed is not reinstalled');
+    await page.evaluate(() => window.salotto.addons.installFromManifestUrl('addons/plugin.video.raiplay/addon.json', { source: 'repo' }));
+    console.log('✓ outdated bundled add-ons are updated at start-up, new ones installed once');
     assert.ok(await page.evaluate(() => window.salotto.addons.getProxy().includes('/proxy?url=')), 'proxy auto-detected');
     if (SHOTS) await page.screenshot({ path: SHOTS + '/home.png' });
 

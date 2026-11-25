@@ -18,6 +18,14 @@
       "icon": "plugin.video.archive/icon.svg"
     },
     {
+      "id": "plugin.video.raiplay",
+      "name": "RaiPlay",
+      "version": "1.0.0",
+      "description": "Programmi, film e serie on demand di RaiPlay, con i sottotitoli ufficiali",
+      "manifest": "plugin.video.raiplay/addon.json",
+      "icon": "plugin.video.raiplay/icon.svg"
+    },
+    {
       "id": "plugin.video.iptv",
       "name": "TV in diretta",
       "version": "1.5.0",

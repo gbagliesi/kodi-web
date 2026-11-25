@@ -195,17 +195,22 @@ export function compareVersions(a, b) {
  * Installs the add-ons shipped with the app on first run, and on later runs
  * updates any add-on from the official repository that has a newer version.
  */
+const BUNDLED_BEFORE_0_15 = ['plugin.video.demo', 'plugin.video.archive', 'plugin.video.iptv', 'plugin.audio.radiobrowser', 'plugin.audio.podcast'];
 export async function ensureBundledAddons() {
   const firstRun = !load('bundled-installed', false);
   try {
     const repo = await fetchRepository('addons/repository.json');
+    // add-ons added to the app later are installed once too (one removed by the user stays removed)
+    const seen = new Set(load('bundled-seen', null) || (firstRun ? [] : BUNDLED_BEFORE_0_15));
     for (const a of repo.addons) {
       const inst = getInstalled(a.id);
-      const install = firstRun ? !inst : inst && inst.source === 'repo' && compareVersions(a.version, inst.manifest.version) > 0;
+      const install = firstRun || !seen.has(a.id) ? !inst : inst && inst.source === 'repo' && compareVersions(a.version, inst.manifest.version) > 0;
+      seen.add(a.id);
       if (!install) continue;
       try { await installFromManifestUrl(a.manifest, { source: 'repo' }); } catch (e) { console.warn('bundled add-on failed', a.id, e); }
     }
     save('bundled-installed', true);
+    save('bundled-seen', [...seen]);
   } catch (e) {
     console.warn('bundled repository unavailable', e);
   }

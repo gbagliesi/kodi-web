@@ -4,6 +4,7 @@
 // Run: node tests/mediaset.mjs   (needs playwright)
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { ADDONS } from './addons-dir.mjs';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';

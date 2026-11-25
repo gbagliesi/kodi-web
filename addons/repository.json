@@ -1,5 +1,5 @@
 {
-  "name": "Repository ufficiale Salotto",
+  "name": "Add-on pubblici di Salotto",
   "addons": [
     {
       "id": "plugin.video.demo",
@@ -8,78 +8,6 @@
       "description": "Cortometraggi open source e stream HLS di test",
       "manifest": "plugin.video.demo/addon.json",
       "icon": "plugin.video.demo/icon.svg"
-    },
-    {
-      "id": "plugin.video.archive",
-      "name": "Internet Archive",
-      "version": "1.0.0",
-      "description": "Film di pubblico dominio e cartoni classici da archive.org",
-      "manifest": "plugin.video.archive/addon.json",
-      "icon": "plugin.video.archive/icon.svg"
-    },
-    {
-      "id": "plugin.video.raiplay",
-      "name": "RaiPlay",
-      "version": "1.1.4",
-      "description": "Programmi, film e serie on demand di RaiPlay, con i sottotitoli ufficiali",
-      "manifest": "plugin.video.raiplay/addon.json",
-      "icon": "plugin.video.raiplay/icon.svg"
-    },
-    {
-      "id": "plugin.video.la7",
-      "name": "La7",
-      "version": "1.0.1",
-      "description": "Programmi e puntate on demand di La7 (la7play.it)",
-      "manifest": "plugin.video.la7/addon.json",
-      "icon": "plugin.video.la7/icon.svg"
-    },
-    {
-      "id": "plugin.video.mediaset",
-      "name": "Mediaset Infinity",
-      "version": "1.0.1",
-      "description": "Il catalogo di Mediaset Infinity, da sfogliare in Salotto (i video si aprono sul sito)",
-      "manifest": "plugin.video.mediaset/addon.json",
-      "icon": "plugin.video.mediaset/icon.svg"
-    },
-    {
-      "id": "plugin.video.youtube",
-      "name": "YouTube",
-      "version": "1.0.3",
-      "description": "Ricerca, tendenze, dirette, canali e playlist di YouTube, con il lettore ufficiale",
-      "manifest": "plugin.video.youtube/addon.json",
-      "icon": "plugin.video.youtube/icon.svg"
-    },
-    {
-      "id": "plugin.video.iptv",
-      "name": "TV in diretta",
-      "version": "1.6.2",
-      "description": "Canali italiani del digitale terrestre e playlist M3U, con guida TV",
-      "manifest": "plugin.video.iptv/addon.json",
-      "icon": "plugin.video.iptv/icon.svg"
-    },
-    {
-      "id": "plugin.audio.radiobrowser",
-      "name": "Radio dal mondo",
-      "version": "1.1.0",
-      "description": "Migliaia di radio in diretta da radio-browser.info",
-      "manifest": "plugin.audio.radiobrowser/addon.json",
-      "icon": "plugin.audio.radiobrowser/icon.svg"
-    },
-    {
-      "id": "plugin.audio.radioitalia",
-      "name": "Radio italiane",
-      "version": "1.0.0",
-      "description": "Rai Radio 1, 2, 3 e canali Rai, le nazionali e le principali radio italiane con gli stream ufficiali",
-      "manifest": "plugin.audio.radioitalia/addon.json",
-      "icon": "plugin.audio.radioitalia/icon.svg"
-    },
-    {
-      "id": "plugin.audio.podcast",
-      "name": "Podcast",
-      "version": "1.0.0",
-      "description": "Podcast da feed RSS o dalla ricerca",
-      "manifest": "plugin.audio.podcast/addon.json",
-      "icon": "plugin.audio.podcast/icon.svg"
     }
   ]
 }

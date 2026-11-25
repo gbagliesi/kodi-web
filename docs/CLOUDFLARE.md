@@ -181,6 +181,55 @@ fork, GitHub sospende l'aggiornamento notturno e manda un'email: basta aprire
 L'aggiornamento automatico vuol dire fidarsi di chi modifica questo progetto:
 il Worker gira sul tuo account.
 
+## Add-on privati e token per gli amici
+
+Gli add-on possono stare in un repository GitHub **privato**: il Worker li
+legge con un token GitHub di sola lettura e li dà solo a chi ha un token del
+proxy. Il sito pubblico resta un guscio vuoto.
+
+1. **Repository.** Su GitHub crea un repository privato (per esempio
+   `salotto-addons`) con `repository.json` e una cartella per add-on, come
+   `addons/` di questo progetto.
+2. **Token GitHub.** https://github.com/settings/personal-access-tokens/new →
+   *Repository access*: **Only select repositories** → il repository degli
+   add-on; *Permissions* → *Repository* → **Contents: Read-only**. Scegli la
+   scadenza più lunga e copia il token.
+3. **Worker.** Cloudflare → **Workers & Pages** → `salotto-proxy` →
+   **Settings** → **Variables and Secrets** → **Add**:
+   - tipo **Secret**, nome `ADDONS_GITHUB_TOKEN`, valore il token GitHub;
+   - solo se il repository non è `gbagliesi/salotto-addons`: tipo **Text**,
+     nome `ADDONS_REPO`, valore `proprietario/nome` (ramo: `ADDONS_REF`,
+     di solito non serve).
+4. **Prova.** `https://salotto-proxy.<sottodominio>.workers.dev/addons/health`
+   risponde `ok`.
+
+In Salotto → **🧩 Add-on** → **Sfoglia repository** compaiono per primi gli
+«add-on del Worker»: si sceglie quali installare; poi si aggiornano da soli.
+Gli add-on installati dal vecchio repository pubblico passano al Worker da
+soli. Gli add-on non sono un segreto assoluto: chi ha un token li può
+scaricare e leggere.
+
+### Token per gli amici
+
+Ogni amico ha un token suo, che si revoca da solo senza toccare il tuo.
+Cloudflare → `salotto-proxy` → **Settings** → **Variables and Secrets** →
+**Add** → tipo **Secret**, nome `TOKENS`, valore una riga per amico:
+
+```
+anna=un-token-lungo-di-anna
+marco=un-token-lungo-di-marco
+```
+
+Nomi: lettere minuscole, cifre e trattini. Token: almeno 16 caratteri
+(`openssl rand -hex 24`). L'amico in Salotto → **Impostazioni** mette
+l'indirizzo del tuo Worker e il suo token: ha proxy, telecomando, add-on e
+sincronizzazione, ma i suoi preferiti stanno separati dai tuoi (e da quelli
+degli altri amici). Per revocare un amico togli la sua riga e salva.
+
+`TOKENS` non è toccato dalle pubblicazioni del Worker: l'Action riscrive
+solo `TOKEN` (con il secret GitHub `PROXY_TOKEN`, se c'è). Tutto il traffico
+degli amici conta sul tuo piano gratuito (100.000 richieste al giorno).
+
 ## Telecomando dal cellulare
 
 Il telecomando (menu **📱 Telecomando** di Salotto) passa dallo stesso

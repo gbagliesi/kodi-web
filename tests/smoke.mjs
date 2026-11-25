@@ -8,6 +8,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { ADDONS } from './addons-dir.mjs';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
@@ -233,7 +234,7 @@ async function uiTests() {
     });
     await page.reload();
     await page.waitForSelector('.hero');
-    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), JSON.parse(fs.readFileSync(path.join(ROOT, 'addons/plugin.video.iptv/addon.json'), 'utf8')).version);
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), JSON.parse(fs.readFileSync(path.join(ADDONS, 'plugin.video.iptv/addon.json'), 'utf8')).version);
     await waitFor(() => page.evaluate(() => !!window.salotto.addons.getInstalled('plugin.video.raiplay')), 8000);
     // removed by the user: it stays removed
     await page.evaluate(() => window.salotto.addons.uninstall('plugin.video.raiplay'));

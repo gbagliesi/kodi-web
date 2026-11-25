@@ -28,7 +28,8 @@ const stores = new Map();
 const SYNC = { idFromName: (n) => n, get: (id) => { if (!stores.has(id)) stores.set(id, new SyncStore(fakeCtx())); return stores.get(id); } };
 const OWNER = 'owner-token-1234567890';
 const ANNA = 'anna-token-abcdefghijkl';
-const env = { TOKEN: OWNER, TOKENS: `anna=${ANNA}\nmarco=corto, bad name=xxxxxxxxxxxxxxxxxxxx`, SYNC, ADDONS_GITHUB_TOKEN: 'ghp_test', ADDONS_REPO: 'me/private' };
+const LUCA = 'luca-token-0123456789ab';
+const env = { TOKEN: OWNER, TOKENS: `anna=${ANNA}\nmarco=corto, bad name=xxxxxxxxxxxxxxxxxxxx`, TOKEN_LUCA_B: LUCA, TOKEN_PIA: 'corto', SYNC, ADDONS_GITHUB_TOKEN: 'ghp_test', ADDONS_REPO: 'me/private' };
 
 // ---- GitHub contents API, mocked: the private repository is a copy of addons/ with the demo add-on
 const PRIVATE = {
@@ -59,7 +60,9 @@ const sync = async (token, body) => {
 };
 
 async function unit() {
-  assert.deepEqual(friendTokens(env).map(f => f.name), ['anna'], 'short tokens and bad names are ignored');
+  assert.deepEqual(friendTokens(env).map(f => f.name), ['anna', 'luca-b'], 'short tokens and bad names are ignored; TOKEN_<NAME> secrets count');
+  assert.equal((await call('/proxy/health?token=' + LUCA)).status, 200, 'a TOKEN_<NAME> secret works');
+  assert.notDeepEqual((await sync(LUCA, { since: 0, changes: [] })).entries, undefined);
   // tokens
   assert.equal((await call('/proxy/health?token=' + OWNER)).status, 200);
   assert.equal((await call('/proxy/health?token=' + ANNA)).status, 200, 'a friend token works');

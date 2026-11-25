@@ -40,9 +40,10 @@
  *           refuses everything (503), so a fresh deploy is never an open proxy.
  *           Use a long random value of your own (docs/CLOUDFLARE.md shows how to make one);
  *           the example once printed in the docs is refused.
- *   TOKENS  secret, optional: tokens for friends, one "name=token" per line (or separated by
- *           commas). Each works like TOKEN, but its sync groups are its own: a friend never
- *           sees the owner's favourites. Remove a line to revoke that friend.
+ *   TOKEN_<NAME>  secrets, optional: one per friend (TOKEN_MARCO = Marco's token, at least 16
+ *           characters). Each works like TOKEN, but its sync groups are its own: a friend never
+ *           sees the owner's favourites. Delete the secret to revoke that friend.
+ *   TOKENS  secret, optional: the same in one secret, one "name=token" per line.
  *   ADDONS_GITHUB_TOKEN  secret, optional: GitHub fine-grained token, read-only on the private
  *           add-on repository. ADDONS_REPO (variable, default gbagliesi/salotto-addons) and
  *           ADDONS_REF (default main) say which repository and branch.
@@ -85,6 +86,12 @@ export function friendTokens(env) {
     const name = line.slice(0, i).trim().toLowerCase();
     const token = line.slice(i + 1).trim();
     if (FRIEND_RE.test(name) && token.length >= MIN_FRIEND_TOKEN && !PUBLISHED_EXAMPLES.has(token)) out.push({ name, token });
+  }
+  // one secret per friend (TOKEN_MARCO = Marco's token): added and deleted on its own
+  for (const [key, value] of Object.entries(env)) {
+    const m = /^TOKEN_([A-Z0-9_]{1,30})$/i.exec(key);
+    const token = typeof value === 'string' ? value.trim() : '';
+    if (m && token.length >= MIN_FRIEND_TOKEN && !PUBLISHED_EXAMPLES.has(token)) out.push({ name: m[1].toLowerCase().replace(/_/g, '-'), token });
   }
   return out;
 }

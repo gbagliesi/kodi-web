@@ -212,21 +212,22 @@ scaricare e leggere.
 ### Token per gli amici
 
 Ogni amico ha un token suo, che si revoca da solo senza toccare il tuo.
-Cloudflare → `salotto-proxy` → **Settings** → **Variables and Secrets** →
-**Add** → tipo **Secret**, nome `TOKENS`, valore una riga per amico:
 
-```
-anna=un-token-lungo-di-anna
-marco=un-token-lungo-di-marco
-```
+1. Crea il token: nel Terminale `openssl rand -hex 24` (almeno 16 caratteri).
+2. Cloudflare → `salotto-proxy` → **Settings** → **Variables and Secrets** →
+   **Add** → tipo **Secret**, nome `TOKEN_` più il nome dell'amico (per esempio
+   `TOKEN_MARCO`; lettere, cifre e `_`), valore il token → **Deploy**.
+3. All'amico dai l'indirizzo del Worker e il token: lo mette in Salotto →
+   **Impostazioni**. Ha proxy, telecomando, add-on e sincronizzazione, ma i
+   suoi preferiti stanno separati dai tuoi (e da quelli degli altri amici).
 
-Nomi: lettere minuscole, cifre e trattini. Token: almeno 16 caratteri
-(`openssl rand -hex 24`). L'amico in Salotto → **Impostazioni** mette
-l'indirizzo del tuo Worker e il suo token: ha proxy, telecomando, add-on e
-sincronizzazione, ma i suoi preferiti stanno separati dai tuoi (e da quelli
-degli altri amici). Per revocare un amico togli la sua riga e salva.
+Per revocare un amico cancella il suo secret. Un secret non si può rileggere:
+se un amico perde il token, crea un token nuovo con **Rotate**.
 
-`TOKENS` non è toccato dalle pubblicazioni del Worker: l'Action riscrive
+In alternativa tutti in un secret `TOKENS`, una riga `nome=token` per amico
+(ma per aggiungerne uno vanno riscritte tutte le righe).
+
+I secret degli amici non sono toccati dalle pubblicazioni del Worker: l'Action riscrive
 solo `TOKEN` (con il secret GitHub `PROXY_TOKEN`, se c'è). Tutto il traffico
 degli amici conta sul tuo piano gratuito (100.000 richieste al giorno).
 

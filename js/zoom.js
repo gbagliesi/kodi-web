@@ -80,19 +80,28 @@ function contentBox() {
   } catch { return null; }
 }
 
-/** Enlarges the picture to fill the screen: without the black bars if they can be found. */
+// At most this much of the real picture may be cut off by "fill": a film on a phone held
+// upright must stay whole (filling the height would leave only its middle on screen).
+const MAX_CROP = 0.12;
+
+/**
+ * Enlarges the picture to fill the screen sensibly: first the black bars burnt into the film
+ * are removed (when they can be found), then the picture is enlarged a little more only if
+ * that cuts off no more than MAX_CROP of it at the edges.
+ */
 function fill(announce = true) {
   const f = frame();
   if (!f) return false;
-  const b = contentBox();
-  let ns = 1, cx = 0, cy = 0;
-  if (b) {
-    const cw = (b.x1 - b.x0) * f.fw, ch = (b.y1 - b.y0) * f.fh;
-    ns = Math.min(f.W / cw, f.H / ch);       // the whole picture, without the bars
-    cx = ((b.x0 + b.x1) / 2 - 0.5) * f.fw; cy = ((b.y0 + b.y1) / 2 - 0.5) * f.fh;
+  const b = contentBox() || { x0: 0, y0: 0, x1: 1, y1: 1 };
+  const cw = (b.x1 - b.x0) * f.fw, ch = (b.y1 - b.y0) * f.fh;
+  const whole = Math.min(f.W / cw, f.H / ch);   // the whole picture, without the bars
+  const cover = Math.max(f.W / cw, f.H / ch);   // no black left on screen
+  let ns = 1 - whole / cover <= MAX_CROP ? cover : whole;
+  if (ns < 1.04) {
+    if (announce) showBadge(f.H > f.W ? 'Ruota il telefono per vederlo più grande' : 'L\'immagine riempie già lo schermo');
+    return false;
   }
-  if (ns < 1.04) { ns = Math.max(f.W / f.fw, f.H / f.fh); cx = cy = 0; } // no bars found: cover the screen
-  if (ns < 1.04) { if (announce) showBadge('L\'immagine riempie già lo schermo'); return false; }
+  const cx = ((b.x0 + b.x1) / 2 - 0.5) * f.fw, cy = ((b.y0 + b.y1) / 2 - 0.5) * f.fh;
   s = Math.min(MAX, ns); tx = -cx * s; ty = -cy * s;
   mode = 'fill';
   apply(true);

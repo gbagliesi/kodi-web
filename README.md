@@ -39,6 +39,8 @@ con browser. Supporta gli **add-on**, scritti in JavaScript.
 |---|---|
 | **TV in diretta** | Canali live da playlist M3U con guida TV XMLTV (anche `.gz`). Già pronte due playlist pubbliche di canali italiani in chiaro ([Free-TV/IPTV](https://github.com/Free-TV/IPTV) e [iptv-org](https://github.com/iptv-org/iptv)); se ne possono aggiungere altre |
 | **RaiPlay** | Catalogo on demand e ricerca di RaiPlay. I video liberi si guardano in Salotto con i sottotitoli ufficiali Rai (file .srt) quando ci sono; quelli per cui RaiPlay chiede l'accesso (gran parte di film e fiction) si aprono su raiplay.it. Molti solo dall'Italia; fuori da Safari serve il proxy |
+| **La7** | Programmi e puntate on demand di la7play.it, con ricerca. Le puntate libere si guardano in Salotto; film, documentari e serie protetti (DRM) si aprono su la7play.it |
+| **Mediaset Infinity** | Vetrina del catalogo di Mediaset Infinity: sezioni, programmi, puntate e clip, ricerca tra i programmi. Mediaset protegge le puntate (DRM) e non apre il catalogo ad altri siti: serve il proxy e ogni video si apre su mediasetinfinity.mediaset.it |
 | **Internet Archive** | Film di pubblico dominio, noir, fantascienza, cartoni d'epoca, documentari da archive.org |
 | **Radio dal mondo** | Migliaia di radio da radio-browser.info, per paese e genere |
 | **Podcast** | Ricerca nel catalogo Apple Podcasts e feed RSS personali |

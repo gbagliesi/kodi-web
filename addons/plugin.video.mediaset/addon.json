@@ -1,0 +1,13 @@
+{
+  "id": "plugin.video.mediaset",
+  "name": "Mediaset Infinity",
+  "version": "1.0.0",
+  "author": "Salotto",
+  "summary": "Il catalogo di Mediaset Infinity, da sfogliare in Salotto",
+  "description": "Sfoglia le sezioni e i programmi di Mediaset Infinity (programmi TV, fiction e serie, cinema, documentari, kids, news e sport) e cerca tra i programmi. Mediaset protegge le puntate intere (DRM) e non pubblica un catalogo aperto ad altri siti: ogni video si apre su mediasetinfinity.mediaset.it. Serve il proxy delle Impostazioni.",
+  "provides": [
+    "video"
+  ],
+  "icon": "icon.svg",
+  "main": "main.js"
+}

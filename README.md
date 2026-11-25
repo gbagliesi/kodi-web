@@ -87,8 +87,9 @@ passino dal proxy.
 
 - Per sicurezza rifiuta gli indirizzi della rete locale (`ALLOW_PRIVATE=1`
   per abilitarli, ad esempio per un NAS).
-- Se il server è raggiungibile da Internet imposta `PROXY_TOKEN=segreto` e
-  usa in *Impostazioni* un URL come `https://host/proxy?token=segreto&url=`.
+- Se il server è raggiungibile da Internet imposta `PROXY_TOKEN` con un valore
+  casuale tuo (per esempio quello di `openssl rand -hex 24`) e scrivilo in
+  *Impostazioni → Token del proxy*.
 
 ## Perché add-on JavaScript e non quelli di Kodi?
 

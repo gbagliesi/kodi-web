@@ -26,6 +26,14 @@
       "icon": "plugin.video.raiplay/icon.svg"
     },
     {
+      "id": "plugin.video.la7",
+      "name": "La7",
+      "version": "1.0.0",
+      "description": "Programmi e puntate on demand di La7 (la7play.it)",
+      "manifest": "plugin.video.la7/addon.json",
+      "icon": "plugin.video.la7/icon.svg"
+    },
+    {
       "id": "plugin.video.iptv",
       "name": "TV in diretta",
       "version": "1.5.0",

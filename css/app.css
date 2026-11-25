@@ -498,10 +498,10 @@ body.tv .yt-player.bar-hidden .yt-bar { opacity: 0; pointer-events: none; }
 @media (max-width: 600px) { .yt-ext-long { display: none; } .yt-bar { gap: 8px; } .yt-title { font-size: 16px; } }
 /* TV: Salotto's own controls under the video (the remote can't reach YouTube's buttons) */
 .yt-ctrl, .yt-menu { display: none; }
-body.tv .yt-ctrl { display: flex; flex-direction: column; gap: 10px; position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 14px 24px 18px; background: linear-gradient(0deg, rgba(0, 0, 0, .9), rgba(0, 0, 0, .55)); transition: opacity .25s; }
-body.tv .yt-player.bar-hidden .yt-ctrl { opacity: 0; pointer-events: none; }
-body.tv .yt-player.bar-hidden.peek .yt-ctrl { opacity: 1; }
-body.tv .yt-player.peek .yt-btn-row { display: none; }
+.yt-player.kbd .yt-ctrl { display: flex; flex-direction: column; gap: 10px; position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 14px 24px 18px; background: linear-gradient(0deg, rgba(0, 0, 0, .9), rgba(0, 0, 0, .55)); transition: opacity .25s; }
+.yt-player.kbd.bar-hidden .yt-ctrl { opacity: 0; pointer-events: none; }
+.yt-player.kbd.bar-hidden.peek .yt-ctrl { opacity: 1; }
+.yt-player.kbd.peek .yt-btn-row { display: none; }
 .yt-seek-row { display: flex; align-items: center; gap: 14px; font-variant-numeric: tabular-nums; font-size: 15px; }
 .yt-seek { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .25); overflow: hidden; }
 .yt-seek-fill { height: 100%; width: 0; background: var(--accent); }
@@ -509,7 +509,7 @@ body.tv .yt-player.peek .yt-btn-row { display: none; }
 .yt-btn-row .icon-btn { background: rgba(255, 255, 255, .12); font-size: 20px; }
 .yt-player:not(.is-playlist) #yt-prev, .yt-player:not(.is-playlist) #yt-next { display: none; }
 .yt-player.is-live #yt-rew, .yt-player.is-live #yt-fwd, .yt-player.is-live #yt-rate { display: none; }
-body.tv .yt-menu:not([hidden]) { display: flex; flex-direction: column; gap: 6px; position: absolute; right: 24px; bottom: 120px; z-index: 3; width: 340px; max-height: 70%; overflow-y: auto; padding: 12px; border-radius: 14px; background: rgba(20, 24, 30, .97); box-shadow: 0 12px 40px rgba(0, 0, 0, .6); }
+.yt-player.kbd .yt-menu:not([hidden]) { display: flex; flex-direction: column; gap: 6px; position: absolute; right: 24px; bottom: 120px; z-index: 3; width: 340px; max-height: 70%; overflow-y: auto; padding: 12px; border-radius: 14px; background: rgba(20, 24, 30, .97); box-shadow: 0 12px 40px rgba(0, 0, 0, .6); }
 .yt-menu-title { font-weight: 600; padding: 4px 8px 8px; color: var(--muted); }
 .yt-menu .row { min-height: 0; padding: 10px 14px; }
 .yt-menu .row.on { color: var(--accent); }

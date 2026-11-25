@@ -36,6 +36,9 @@ let seekTarget = null, seekAt = 0, seekRun = 0; // quick ◀▶ presses add up
 let ccTrack = '';      // language code of the captions shown, '' = off
 let returnFocus = null;
 const TV = () => document.body.classList.contains('tv');
+// keyboard or remote in use (TV app, Mac keyboard, phone remote): Salotto's own controls, as
+// neither reaches the buttons inside YouTube's frame; mouse and touch use YouTube's controls
+const KBD = () => document.body.classList.contains('tv') || !!root?.classList.contains('kbd');
 
 export const isOpen = () => !!root && !root.hidden;
 
@@ -66,16 +69,20 @@ function build() {
   msg = h('div', { class: 'yt-msg', id: 'yt-msg', hidden: true });
   root = h('div', { class: 'yt-player', id: 'yt-player', tabindex: '-1', hidden: true }, bar, stage, ctrl, menu, msg);
   document.body.append(root);
-  // a click on the video moves the focus into YouTube's frame: on TV the remote must keep
-  // talking to Salotto, so take it back
+  // mouse or finger on the video: YouTube's own controls, Salotto's step aside
+  root.addEventListener('pointerdown', (e) => {
+    if (!TV() && !ctrl.contains(e.target) && !menu.contains(e.target) && !bar.contains(e.target)) { closeMenu(false); root.classList.remove('kbd'); }
+  });
+  // a click on the video moves the focus into YouTube's frame (the mouse still works there):
+  // the keyboard and the remote must keep talking to Salotto, so take the focus back
   window.addEventListener('blur', () => {
-    if (!isOpen() || !TV()) return;
+    if (!isOpen()) return;
     setTimeout(takeFocusBack, 0);
   });
 }
 
 function takeFocusBack() {
-  if (isOpen() && TV() && document.activeElement?.tagName === 'IFRAME') { document.activeElement.blur(); root.focus({ preventScroll: true }); }
+  if (isOpen() && document.activeElement?.tagName === 'IFRAME') { document.activeElement.blur(); root.focus({ preventScroll: true }); }
 }
 
 const fmt = (t) => {
@@ -162,12 +169,12 @@ function updateFav() {
 function showBar(focus = false) {
   root.classList.remove('bar-hidden', 'peek');
   clearTimeout(barTimer);
-  if (TV()) barTimer = setTimeout(hideBar, 8000);
+  if (KBD()) barTimer = setTimeout(hideBar, 8000);
   tick();
-  if (focus) (TV() ? playBtn : closeBtn).focus({ preventScroll: true });
+  if (focus) (KBD() ? playBtn : closeBtn).focus({ preventScroll: true });
 }
 function hideBar() {
-  if (!TV()) return;
+  if (!KBD()) return;
   clearTimeout(barTimer);
   closeMenu(false);
   root.classList.add('bar-hidden');
@@ -175,7 +182,7 @@ function hideBar() {
 }
 // TV: after ◀▶ with the controls hidden, the progress bar shows up for a moment (no focus)
 function peek() {
-  if (!TV() || !root.classList.contains('bar-hidden')) return;
+  if (!KBD() || !root.classList.contains('bar-hidden')) return;
   root.classList.add('peek');
   tick();
   clearTimeout(peekTimer);
@@ -249,6 +256,7 @@ export async function play(item, yt, opts = {}) {
   seekTarget = null; ccTrack = '';
   menu.hidden = true;
   root.classList.remove('peek');
+  root.classList.toggle('kbd', TV() || document.body.classList.contains('kbd-nav'));
   root.classList.toggle('is-playlist', !!yt.playlist);
   root.classList.toggle('is-live', !!yt.live);
   title.textContent = item.label || 'YouTube';
@@ -259,7 +267,7 @@ export async function play(item, yt, opts = {}) {
   showBar(false);
   // the focus waits on the player itself: OK = play/pause, ▲ = the bar's buttons
   root.focus({ preventScroll: true });
-  if (TV()) hideBar();
+  if (KBD()) hideBar();
   document.body.classList.add('yt-open');
   stage.replaceChildren(h('div', { id: 'yt-frame' }));
   stage.append(h('div', { class: 'yt-loading', id: 'yt-loading' }, h('span', { class: 'spinner' }), 'Caricamento del video…'));
@@ -295,11 +303,11 @@ export async function play(item, yt, opts = {}) {
     },
   });
   const iframe = stage.querySelector('iframe');
-  if (iframe) { iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen'); iframe.setAttribute('tabindex', TV() ? '-1' : '0'); }
+  if (iframe) { iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen'); iframe.setAttribute('tabindex', '-1'); }
   clearInterval(saveTimer);
   saveTimer = setInterval(save, 10000);
   clearInterval(tickTimer);
-  tickTimer = setInterval(() => { if (TV() && (!root.classList.contains('bar-hidden') || root.classList.contains('peek'))) tick(); else takeFocusBack(); }, 500);
+  tickTimer = setInterval(() => { if (KBD() && (!root.classList.contains('bar-hidden') || root.classList.contains('peek'))) tick(); else takeFocusBack(); }, 500);
 }
 
 function teardown() {
@@ -331,7 +339,7 @@ export const onClose = (fn) => { onCloseCb = fn; };
 /** Back (TV remote, phone remote, Esc): the error box or the bar first on TV, then close. */
 export function back() {
   if (closeMenu()) return;
-  if (TV() && !root.classList.contains('bar-hidden') && msg.hidden) { hideBar(); return; }
+  if (KBD() && !root.classList.contains('bar-hidden') && msg.hidden) { hideBar(); return; }
   close();
 }
 
@@ -359,6 +367,10 @@ export function skip(s, show = true) {
 export function handleKey(e) {
   if (!isOpen()) return false;
   const k = e.key;
+  if (/^(Arrow|Enter$| $)/.test(k) && !KBD()) {
+    // first key after the mouse: wake Salotto's controls (the key also does its job)
+    root.classList.add('kbd', 'bar-hidden');
+  }
   const a = document.activeElement;
   const inBar = (bar.contains(a) || ctrl.contains(a)) && !root.classList.contains('bar-hidden');
   const inMsg = (!msg.hidden && msg.contains(a)) || (!menu.hidden && menu.contains(a));
@@ -367,8 +379,8 @@ export function handleKey(e) {
   if (k === 'MediaTrackNext' || k === 'MediaFastForward') { if (current?.yt.playlist) player?.nextVideo?.(); else skip(30); return true; }
   if (k === 'MediaTrackPrevious' || k === 'MediaRewind') { if (current?.yt.playlist) player?.previousVideo?.(); else skip(-30); return true; }
   if (inBar || inMsg) {
-    if (TV()) showBar(false); // keep it up while moving in it
-    if (TV() && !menu.hidden) clearTimeout(barTimer); // no hiding while choosing
+    if (KBD()) showBar(false); // keep it up while moving in it
+    if (KBD() && !menu.hidden) clearTimeout(barTimer); // no hiding while choosing
     return false; // arrows move between the buttons (spatial navigation), Enter presses
   }
   if (k === 'Enter') { togglePlay(); return true; }
@@ -381,7 +393,7 @@ export function handleKey(e) {
     return true;
   }
   if (k === 'ArrowUp') { showBar(true); return true; }
-  if (k === 'ArrowDown') { if (TV()) hideBar(); return true; }
+  if (k === 'ArrowDown') { if (KBD()) hideBar(); return true; }
   return false;
 }
 

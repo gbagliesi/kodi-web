@@ -38,10 +38,11 @@ Si installa da **Add-on → Installa da URL** incollando l'indirizzo di
 | Campo | Significato |
 |---|---|
 | `id` | Identificatore unico, per convenzione `plugin.<tipo>.<nome>` |
-| `provides` | Sezioni in cui compare: `video`, `audio`, `live` |
+| `provides` | Sezioni in cui compare: `video` (Video), `audio` (Musica), `live` o `tv` (TV) |
 | `main` | Script da eseguire, relativo al manifest |
 | `proxy` | `auto` (default): richiesta diretta, proxy solo se il browser la blocca. `always`: sempre tramite proxy |
-| `settings` | Tipi: `text`, `url`, `number`, `bool`, `select`, `textarea`. L'utente li modifica dalla scheda dell'add-on |
+| `settings` | Tipi: `text`, `url`, `number`, `bool`, `select`, `textarea`. L'utente li modifica dalla scheda dell'add-on. Con la sincronizzazione attiva passano agli altri dispositivi |
+| `syncStore` | Facoltativo: elenco di chiavi di `ctx.store` da sincronizzare tra i dispositivi (per esempio `["channels"]` per i canali salvati di YouTube) |
 
 ## Codice (`main.js`)
 
@@ -99,6 +100,8 @@ addon.register({
 | `info` | `{ plot, year, duration (secondi), genre }` |
 | `resolve` | `true` per forzare la chiamata a `resolve()` anche se c'è `url` |
 | `action` | `search` apre la ricerca, `settings` apre le impostazioni dell'add-on |
+| `key` | Facoltativo: identificatore stabile, usato per preferiti e ordine personalizzato |
+| `external` | Indirizzo di una pagina da aprire nel browser invece che nel lettore |
 | `youtube` | `{ video: 'ID' }` o `{ playlist: 'ID' }`: si apre nel lettore ufficiale di YouTube incorporato (anche come risposta di `resolve()`) |
 
 ### Stream restituito da `resolve()`
@@ -120,6 +123,9 @@ aggiunge e riscrive le playlist HLS.
 | | |
 |---|---|
 | `ctx.settings` | Valori correnti delle impostazioni |
+| `ctx.store.get(key)` / `ctx.store.set(key, value)` | Piccolo archivio persistente dell'add-on (sopravvive ai riavvii). Le chiavi elencate in `syncStore` passano agli altri dispositivi |
+| `ctx.refresh` | `true` quando l'utente ha chiesto di aggiornare la lista |
+| `ctx.addon` | `{ id, name, version }` dell'add-on |
 | `ctx.http.json(url, opts)` / `.text()` / `.get()` | Richieste HTTP con fallback automatico al proxy. `opts`: `headers`, `timeout`, `viaProxy`, `type: 'response'` |
 | `ctx.http.proxied(url)` | URL riscritto per passare dal proxy (se presente) |
 | `ctx.xml` | Utility minime per XML/RSS: `blocks(src, tag)`, `text(src, tag)`, `attr(src, tag, name)`, `attrs(str)` |

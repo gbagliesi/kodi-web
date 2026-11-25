@@ -167,19 +167,30 @@ async function round(keepalive) {
   const local = await entries();
   const now = Date.now();
   const changes = [];
+  const want = [];
   if (st.joined) {
     for (const [id, v] of Object.entries(local)) {
       if (st.pending[id] !== undefined) continue; // still waiting to be applied here
       const s = st.snap[id];
       if (JSON.stringify(v).length > MAX_VALUE) continue; // the Worker would refuse it
-      if (!s || s.split('.')[0] !== hash(v)) changes.push({ id, v, t: now });
+      // add-on data seen here for the first time (e.g. just made syncable) never beats the copy
+      // the other devices already share: it only fills a gap
+      if (!s) changes.push({ id, v, t: id.startsWith('astore/') ? 1 : now });
+      else if (s.split('.')[0] !== hash(v)) changes.push({ id, v, t: now });
     }
-    for (const id of Object.keys(st.snap)) if (!(id in local) && st.pending[id] === undefined) changes.push({ id, v: null, t: now });
+    for (const id of Object.keys(st.snap)) {
+      if (id in local || st.pending[id] !== undefined) continue;
+      // add-on data is never deleted by the user, only lost with the browser's storage:
+      // ask the others' copy back instead of deleting it everywhere
+      if (id.startsWith('astore/')) { want.push(id); continue; }
+      changes.push({ id, v: null, t: now });
+    }
   }
   if (keepalive && !changes.length) return;
+  for (const id of want) delete st.snap[id]; // so the copy that comes back gets written
   setStatus({ state: 'busy' });
   // first time in the group: take what the others have, then add what only this device has
-  const res = await post(ep, c.group, { since: st.joined ? st.rev : 0, changes }, keepalive);
+  const res = await post(ep, c.group, { since: st.joined ? st.rev : 0, changes, want }, keepalive);
   if (JSON.stringify(config()) !== JSON.stringify(c)) return; // switched off or moved meanwhile
 
   const got = {};

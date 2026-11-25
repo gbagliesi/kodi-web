@@ -161,6 +161,7 @@ const MAX_CHANGES = 3000;
 const MAX_VALUE = 64 * 1024;
 const ID_MAX = 600;
 const TOMBSTONE_DAYS = 90;
+const HISTORY_DAYS = 30;
 
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 
@@ -171,6 +172,8 @@ export class SyncStore {
     this.sql.exec('CREATE TABLE IF NOT EXISTS entries (id TEXT PRIMARY KEY, v TEXT, t INTEGER NOT NULL, r INTEGER NOT NULL)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS entries_r ON entries (r)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, n INTEGER NOT NULL)');
+    // every value replaced or deleted, kept HISTORY_DAYS: lets a lost value be found again
+    this.sql.exec('CREATE TABLE IF NOT EXISTS history (id TEXT NOT NULL, v TEXT NOT NULL, t INTEGER NOT NULL, replaced INTEGER NOT NULL)');
   }
 
   meta(k) { return this.sql.exec('SELECT n FROM meta WHERE k = ?', k).toArray()[0]?.n || 0; }
@@ -185,10 +188,11 @@ export class SyncStore {
     } catch { return text('JSON non valido', 400); }
     const since = Math.max(0, Math.floor(+body.since || 0));
     const changes = Array.isArray(body.changes) ? body.changes.slice(0, MAX_CHANGES) : [];
+    const want = Array.isArray(body.want) ? body.want.filter(id => typeof id === 'string').slice(0, 200) : [];
     const now = Date.now();
     let rev = this.meta('rev');
     // nothing new on either side: the usual visit, one row read
-    if (!changes.length && since === rev) return json({ rev, full: false, entries: {} });
+    if (!changes.length && !want.length && since === rev) return json({ rev, full: false, entries: {} });
 
     const touched = new Set();
     const write = () => {
@@ -198,8 +202,9 @@ export class SyncStore {
         if (v && v.length > MAX_VALUE) continue;
         const t = Math.min(Math.floor(+c.t) || now, now); // a clock in the future must not win forever
         touched.add(c.id);
-        const cur = this.sql.exec('SELECT t FROM entries WHERE id = ?', c.id).toArray()[0];
+        const cur = this.sql.exec('SELECT v, t FROM entries WHERE id = ?', c.id).toArray()[0];
         if (cur && cur.t > t) continue; // a newer change from another device is already here
+        if (cur && cur.v != null && cur.v !== v) this.sql.exec('INSERT INTO history (id, v, t, replaced) VALUES (?, ?, ?, ?)', c.id, cur.v, cur.t, now);
         rev++;
         this.sql.exec('INSERT INTO entries (id, v, t, r) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET v = excluded.v, t = excluded.t, r = excluded.r', c.id, v, t, rev);
       }
@@ -209,6 +214,7 @@ export class SyncStore {
         const old = now - TOMBSTONE_DAYS * 86400000;
         const max = this.sql.exec('SELECT MAX(r) AS m FROM entries WHERE v IS NULL AND t < ?', old).toArray()[0]?.m;
         if (max) { this.sql.exec('DELETE FROM entries WHERE v IS NULL AND t < ?', old); this.setMeta('pruned', Math.max(max, this.meta('pruned'))); }
+        this.sql.exec('DELETE FROM history WHERE replaced < ?', now - HISTORY_DAYS * 86400000);
         this.setMeta('pruneAt', rev);
       }
     };
@@ -221,7 +227,7 @@ export class SyncStore {
     const entries = {};
     for (const row of rows) entries[row.id] = { v: row.v == null ? null : JSON.parse(row.v), t: row.t };
     // the device's own changes that lost against a newer one: tell it what won
-    for (const id of touched) {
+    for (const id of [...touched, ...want]) {
       if (entries[id]) continue;
       const row = this.sql.exec('SELECT v, t FROM entries WHERE id = ?', id).toArray()[0];
       if (row) entries[id] = { v: row.v == null ? null : JSON.parse(row.v), t: row.t };

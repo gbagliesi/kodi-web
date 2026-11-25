@@ -15,6 +15,7 @@ const crumbs = $('crumbs');
 const backBtn = $('back-btn');
 const searchBtn = $('search-btn');
 const viewBtn = $('view-btn');
+const setupBtn = $('setup-btn');
 const pinBtn = $('pin-btn');
 
 // ---------------------------------------------------------------- helpers
@@ -183,9 +184,11 @@ async function route() {
   const { parts, params } = parseRoute();
   currentRouteKey = location.hash;
   const [section = '', ...rest] = parts;
+  if (SECTION_KINDS[section]) lastSection = section;
+  else if (section !== 'browse' && !(section === 'addons' && rest.length)) lastSection = '';
   renderMenu(section === 'browse' || section === 'addon' ? (rest[0] && sectionForAddon(rest[0])) : section);
   backBtn.hidden = !(section === 'browse' || section === 'addon' || (section === 'addons' && rest.length));
-  searchBtn.hidden = true; viewBtn.hidden = true;
+  searchBtn.hidden = true; viewBtn.hidden = true; setupBtn.hidden = true; viewBtn.title = 'Vista e ordine';
   searchBtn.onclick = null;
   // pages that can be the start page (📌): sections and add-on folders
   pinBtn.hidden = !['video', 'music', 'live', 'guide', 'files', 'favourites', 'browse'].includes(section);
@@ -196,7 +199,7 @@ async function route() {
       case '': renderHome(); break;
       case 'video': renderSection('video', 'Video'); break;
       case 'music': renderSection('audio', 'Musica'); break;
-      case 'live': renderSection('live', 'TV in diretta'); break;
+      case 'live': renderTv(); break;
       case 'guide': await renderGuide(params); break;
       case 'files': renderFiles(); break;
       case 'favourites': await renderFavourites(); break;
@@ -213,9 +216,40 @@ async function route() {
   view.scrollTop = y || 0;
 }
 
+// The order of the add-on tiles is one for all sections and travels with sync (setting
+// addonOrder). Reordering only some of them (e.g. those in TV) moves them among their own places.
+function reorderAddons(subset) {
+  const all = addons.listInstalled();
+  const ids = new Set(subset.map(a => a.manifest.id));
+  reorderView('', subset.map(a => ({ key: a.manifest.id, label: a.manifest.name, icon: a.manifest.icon || '' })), null, {
+    keyOf: (it) => it.key,
+    onDone: (list) => {
+      const moved = list.map(it => it.key);
+      const order = all.map(a => ids.has(a.manifest.id) ? moved.shift() : a.manifest.id);
+      store.setSettings({ addonOrder: order });
+      toast('Ordine degli add-on salvato');
+      route();
+    },
+  });
+}
+
+/** ▦ on Home and in the sections: reorder the add-ons shown there. */
+function offerAddonReorder(list) {
+  if (list.length < 2) return;
+  viewBtn.hidden = false;
+  viewBtn.title = 'Riordina gli add-on';
+  viewBtn.onclick = () => reorderAddons(list);
+}
+
+// The section the user was last in (Video, Musica, TV): an add-on listed in several sections
+// keeps that one highlighted in the menu while it is open.
+let lastSection = '';
+const SECTION_KINDS = { video: ['video'], music: ['audio'], live: ['live', 'tv'] };
+
 function sectionForAddon(id) {
   const a = addons.getInstalled(id);
   const p = a?.manifest.provides || [];
+  if (SECTION_KINDS[lastSection]?.some(k => p.includes(k))) return lastSection;
   if (p.includes('live')) return 'live';
   if (p.includes('video')) return 'video';
   if (p.includes('audio')) return 'music';
@@ -260,6 +294,7 @@ function renderHome() {
       : h('div', { class: 'empty' }, 'Nessun add-on installato. ', h('button', { class: 'btn focusable', onclick: () => go('addons/repo') }, 'Sfoglia il repository')),
     h('p', { class: 'hint', style: { textAlign: 'center', marginTop: '28px', color: 'var(--muted)', fontSize: '12px' } }, 'Salotto ' + versionLabel()),
   );
+  offerAddonReorder(installed);
   focusFirst();
 }
 
@@ -275,6 +310,30 @@ function renderSection(kind, title) {
         h('span', { class: 'tile-ico' }, '＋'), h('span', { class: 'tile-name' }, 'Altri add-on'), h('span', { class: 'tile-sub' }, 'Sfoglia il repository'))),
     !list.length ? h('div', { class: 'empty' }, 'Nessun add-on installato per questa sezione.') : null,
   );
+  offerAddonReorder(list);
+  focusFirst();
+}
+
+// TV: the live channels and the TV guide, then the broadcasters' own add-ons (RaiPlay, La7,
+// Mediaset Infinity…: add-ons that say "tv" in provides) for the programmes already aired.
+function renderTv() {
+  setCrumbs(['TV']);
+  const live = addons.addonsProviding('live');
+  const tv = addons.addonsProviding('tv').filter(a => !live.includes(a));
+  const open = (a) => () => { location.hash = browseHash(a.manifest.id); };
+  fill(view,
+    h('div', { class: 'section-title first' }, 'In diretta'),
+    h('div', { class: 'tiles' },
+      ...live.map(a => addonTile(a, open(a))),
+      h('button', { class: 'tile focusable', onclick: () => go('guide') },
+        h('span', { class: 'tile-ico' }, '🗓'), h('span', { class: 'tile-name' }, 'Guida TV'), h('span', { class: 'tile-sub' }, 'Cosa c\'è adesso e dopo'))),
+    h('div', { class: 'section-title' }, 'Programmi delle reti TV'),
+    h('div', { class: 'tiles' },
+      ...tv.map(a => addonTile(a, open(a))),
+      h('button', { class: 'tile focusable', onclick: () => go('addons/repo') },
+        h('span', { class: 'tile-ico' }, '＋'), h('span', { class: 'tile-name' }, 'Altri add-on'), h('span', { class: 'tile-sub' }, 'Sfoglia il repository'))),
+  );
+  offerAddonReorder([...live, ...tv]);
   focusFirst();
 }
 
@@ -351,6 +410,9 @@ async function renderBrowse(id, path, params) {
   const rec = addons.getInstalled(id);
   if (!rec) { fill(view, h('div', { class: 'empty' }, 'Add-on non installato.')); setCrumbs(['Add-on']); return; }
   const m = rec.manifest;
+  // ⚙ in the top bar: the add-on's settings, also when its list cannot be loaded (e.g. a missing key)
+  setupBtn.hidden = false;
+  setupBtn.onclick = () => go('addons/' + encodeURIComponent(id));
   if (id === 'plugin.video.youtube') yt.preload();
   const query = params.get('q');
   const titleTrail = (params.get('t') || '').split('␟').filter(Boolean);
@@ -589,9 +651,11 @@ async function viewAndSortDialog(listKey, sourceItems, { updatedAt, refresh, onS
 }
 
 /** Manual order: ▲ ▼ on each row (works with touch, mouse and TV remote). */
-function reorderView(listKey, items, onSave) {
+function reorderView(listKey, items, onSave, { keyOf = itemKey, onDone } = {}) {
+  const itemKey = keyOf;
   const list = [...items];
   const done = h('button', { class: 'btn primary focusable', onclick: () => {
+    if (onDone) { onDone(list); return; }
     const cur = getSort(listKey);
     setSort(listKey, { ...cur, mode: 'custom', order: list.map(itemKey), seen: {}, gone: {} });
     onSave ? onSave() : route();
@@ -600,6 +664,7 @@ function reorderView(listKey, items, onSave) {
   const rowsBox = h('div', { class: 'list reorder' });
   const draw = (focusKey, dir) => {
     fill(rowsBox, ...list.map((it, i) => h('div', { class: 'row reorder-row' },
+      it.icon !== undefined ? h('span', { class: 'row-thumb', style: bg(it.icon) }, safeImg(it.icon) ? '' : '🧩') : null,
       h('span', { class: 'row-main' }, h('div', { class: 'row-label' }, it.live && it.number ? h('span', { class: 'ch-num' }, it.number) : null, it.label)),
       h('button', { class: 'icon-btn focusable', 'aria-label': 'Su', 'data-k': itemKey(it) + '|up', disabled: i === 0, onclick: () => move(i, -1) }, '▲'),
       h('button', { class: 'icon-btn focusable', 'aria-label': 'Giù', 'data-k': itemKey(it) + '|down', disabled: i === list.length - 1, onclick: () => move(i, 1) }, '▼'))));
@@ -975,14 +1040,22 @@ function renderAddons() {
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary focusable', onclick: () => go('addons/repo') }, 'Sfoglia repository'),
       h('button', { class: 'btn focusable', onclick: installFromUrlDialog }, 'Installa da URL'),
-      h('button', { class: 'btn focusable', onclick: addRepoDialog }, 'Aggiungi repository')),
+      h('button', { class: 'btn focusable', onclick: addRepoDialog }, 'Aggiungi repository'),
+      list.length > 1 ? h('button', { class: 'btn focusable', onclick: () => reorderAddons(list) }, 'Riordina') : null),
     h('div', { class: 'section-title' }, `Installati (${list.length})`),
-    list.length ? h('div', { class: 'list' }, ...list.map(a => h('button', { class: 'row focusable', onclick: () => go('addons/' + encodeURIComponent(a.manifest.id)) },
-      h('span', { class: 'row-thumb', style: bg(a.manifest.icon) }, safeImg(a.manifest.icon) ? '' : '🧩'),
-      h('span', { class: 'row-main' },
-        h('div', { class: 'row-label' }, a.manifest.name),
-        h('div', { class: 'row-sub' }, `${a.manifest.id} · v${a.manifest.version}${a.enabled === false ? ' · disattivato' : ''}`)),
-      h('span', { class: 'row-end' }, '›')))) : h('div', { class: 'empty' }, 'Nessun add-on installato.'),
+    list.length ? h('div', { class: 'list' }, ...list.map(a => {
+      const id = encodeURIComponent(a.manifest.id);
+      const off = a.enabled === false;
+      // the row opens the add-on (a disabled one opens its page, to turn it back on); ⚙ = settings
+      return h('div', { class: 'row-pair' },
+        h('button', { class: 'row focusable', onclick: () => { off ? go('addons/' + id) : location.hash = browseHash(a.manifest.id); } },
+          h('span', { class: 'row-thumb', style: bg(a.manifest.icon) }, safeImg(a.manifest.icon) ? '' : '🧩'),
+          h('span', { class: 'row-main' },
+            h('div', { class: 'row-label' }, a.manifest.name),
+            h('div', { class: 'row-sub' }, [a.manifest.summary, 'v' + a.manifest.version, off ? 'disattivato' : ''].filter(Boolean).join(' · '))),
+          h('span', { class: 'row-end' }, off ? '' : '▶')),
+        h('button', { class: 'row row-side focusable', 'aria-label': 'Impostazioni di ' + a.manifest.name, title: 'Impostazioni e informazioni', onclick: () => go('addons/' + id) }, '⚙'));
+    })) : h('div', { class: 'empty' }, 'Nessun add-on installato.'),
   );
   focusFirst();
 }
@@ -1311,9 +1384,14 @@ window.addEventListener('hashchange', route);
 // what came from the other devices shows up on Home and Favourites right away
 window.addEventListener('salotto:synced', (e) => {
   const ids = e.detail?.ids || [];
-  const section = parseRoute().parts[0] || '';
-  if (!['', 'favourites'].includes(section) || player.isOpen() || yt.isOpen() || !$('modal').hidden) return;
-  if (ids.some(id => /^(fav|addon|settings)\//.test(id))) route();
+  const { parts } = parseRoute();
+  const section = parts[0] || '';
+  if (player.isOpen() || yt.isOpen() || !$('modal').hidden || view.querySelector('.reorder-bar')) return;
+  if (['', 'favourites'].includes(section)) { if (ids.some(id => /^(fav|addon|settings)\//.test(id))) route(); return; }
+  // the add-on tiles (their order, added or removed add-ons) in the sections and the add-on list
+  if (['video', 'music', 'live'].includes(section) || (section === 'addons' && parts.length === 1)) {
+    if (ids.some(id => id === 'settings/addonOrder' || id.startsWith('addon/'))) route();
+  }
 });
 
 addons.setNotifyHandler((msg, m) => toast(`${m.name}: ${msg}`, 4000));

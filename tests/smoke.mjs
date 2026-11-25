@@ -259,6 +259,49 @@ async function uiTests() {
     await page.click('#pl-close');
     console.log('✓ Internet Archive add-on resolves an MP4');
 
+    // TV: live channels + guide, then the broadcasters' add-ons; the menu keeps TV highlighted
+    await page.goto(BASE + '#/live');
+    await page.waitForSelector('.tile:has-text("Guida TV")');
+    const tvTiles = await page.locator('#view .tile .tile-name').allTextContents();
+    for (const n of ['TV in diretta', 'Guida TV', 'RaiPlay', 'La7', 'Mediaset Infinity']) assert.ok(tvTiles.includes(n), 'TV section shows ' + n + ': ' + tvTiles);
+    assert.ok(!tvTiles.includes('Video di prova'), 'TV section has no plain video add-ons');
+    await page.click('.tile:has-text("La7")');
+    await waitFor(() => page.evaluate(() => location.hash.startsWith('#/browse/plugin.video.la7')));
+    await page.waitForSelector('#setup-btn:not([hidden])'); // ⚙ add-on settings in the top bar
+    assert.match(await page.locator('.menu-item.active').innerText(), /TV/);
+    await page.click('#setup-btn');
+    await waitFor(() => page.evaluate(() => location.hash === '#/addons/plugin.video.la7'));
+    console.log('✓ TV section lists the broadcasters\' add-ons, ⚙ opens the add-on settings');
+
+    // Add-on list: the row opens the add-on, ⚙ its page; the order can be changed and is a synced setting
+    await page.goto(BASE + '#/addons');
+    await page.click('.row-pair:has-text("Video di prova") .row:not(.row-side)');
+    await waitFor(() => page.evaluate(() => location.hash.startsWith('#/browse/plugin.video.demo')));
+    await page.goto(BASE + '#/addons');
+    await page.click('.row-pair:has-text("Video di prova") .row-side');
+    await waitFor(() => page.evaluate(() => location.hash === '#/addons/plugin.video.demo'));
+    await page.goto(BASE + '#/video');
+    await page.waitForSelector('.tile:has-text("YouTube")');
+    const tilesBefore = await page.locator("#view .tile .tile-name").allTextContents();
+    await page.click('#view-btn');
+    await page.waitForSelector('.reorder-row');
+    const last = tilesBefore.filter(n => !['Apri URL', 'Altri add-on'].includes(n)).pop();
+    for (let i = 0; i < 12; i++) {
+      const up = page.locator(`.reorder-row:has-text("${last}") button[aria-label="Su"]`);
+      if (await up.isDisabled()) break;
+      await up.click();
+    }
+    await page.click('.reorder-bar .btn.primary');
+    await page.waitForSelector('.tile:has-text("YouTube")');
+    assert.equal((await page.locator('#view .tile .tile-name').allTextContents())[0], last, 'moved add-on comes first');
+    const order = await page.evaluate(() => window.salotto.store?.getSettings?.().addonOrder || JSON.parse(localStorage.getItem('salotto.settings') || '{}').addonOrder);
+    assert.ok(Array.isArray(order) && order.length >= 5, 'order saved in the settings: ' + order);
+    await page.goto(BASE + '#/');
+    await page.waitForSelector('.hero');
+    assert.equal((await page.locator('.tiles').last().locator('.tile-name').allTextContents())[0], last, 'same order on Home');
+    await page.evaluate(() => window.salotto.store?.setSettings?.({ addonOrder: [] }));
+    console.log('✓ add-on rows open the add-on, ⚙ the settings; tiles reorderable');
+
     // Live TV with presets, groups, EPG and HLS
     await page.goto(BASE + '#/live');
     await page.click('.tile:has-text("TV in diretta")');

@@ -233,7 +233,7 @@ async function uiTests() {
     });
     await page.reload();
     await page.waitForSelector('.hero');
-    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), '1.5.0');
+    assert.equal(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.iptv').manifest.version), JSON.parse(fs.readFileSync(path.join(ROOT, 'addons/plugin.video.iptv/addon.json'), 'utf8')).version);
     await waitFor(() => page.evaluate(() => !!window.salotto.addons.getInstalled('plugin.video.raiplay')), 8000);
     // removed by the user: it stays removed
     await page.evaluate(() => window.salotto.addons.uninstall('plugin.video.raiplay'));

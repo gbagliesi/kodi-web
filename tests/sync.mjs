@@ -146,6 +146,7 @@ async function ui() {
       addons.setEnabled('plugin.audio.podcast', false);
       store.setSettings({ viewMode: 'list' });
       store.setResume('plugin.video.demo|film', 600, 5400);
+      store.save('sort', { favs: { mode: 'custom', order: ['f1', 'f2'] } }); // reordered by hand: Primo first
       return addons.writeAddonStore('plugin.video.youtube', 'channels', [{ id: 'UCprova', title: 'Canale di prova' }]);
     }, [fav('f1', 'Primo'), fav('f2', 'Secondo')]);
     await syncNow(a);
@@ -154,7 +155,12 @@ async function ui() {
     // ---- device B, new: gets all of it, start page included
     const b = await device(browser, 'B');
     await waitFor(async () => (await favKeys(b)).length === 2, 10000, 'B favourites');
-    assert.deepEqual(await favKeys(b), ['f2', 'f1'], 'same order');
+    assert.deepEqual((await favKeys(b)).sort(), ['f1', 'f2']);
+    // Home shows them in the order chosen by hand on A, like the Favourites page
+    await b.goto(BASE + '#/');
+    await b.waitForSelector('#view :text("Secondo")');
+    const home = await b.textContent('#view');
+    assert.ok(home.indexOf('Primo') < home.indexOf('Secondo'), 'Home keeps the hand-made order');
     const bState = await b.evaluate(() => {
       const { store, addons } = window.salotto;
       return { key: addons.getAddonSettings('plugin.video.youtube').apiKey, podcast: addons.getInstalled('plugin.audio.podcast').enabled, view: store.getSettings().viewMode, start: store.getSettings().startPage, proxy: store.getSettings().proxyUrl, resume: store.getResume('plugin.video.demo|film') };

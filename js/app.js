@@ -275,7 +275,8 @@ function renderHome() {
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Buongiorno' : hour < 18 ? 'Buon pomeriggio' : 'Buonasera';
   const installed = addons.listInstalled().filter(a => a.enabled !== false);
-  const favs = store.getFavourites().slice(0, 8);
+  // the same order as the Favourites page
+  const favs = orderedFavourites().items.slice(0, 8).map(it => it._fav);
   fill(view, 
     h('div', { class: 'hero' },
       h('h1', {}, greet),
@@ -755,6 +756,13 @@ function openFavourite(f, favs = []) {
   }
 }
 
+/** Favourites in the order shown on their page (by hand, name, number… chosen there). */
+function orderedFavourites() {
+  const favs = store.getFavourites();
+  const all = favs.map(f => ({ ...f.item, key: f.key, _fav: f, subtitle: addons.getInstalled(f.addonId)?.manifest.name || f.item.subtitle }));
+  return { all, items: sortItems(all, getSort('favs')) };
+}
+
 async function renderFavourites() {
   setCrumbs(['Preferiti']);
   const favs = store.getFavourites();
@@ -765,10 +773,9 @@ async function renderFavourites() {
   }
   // Favourites can be ordered like any list (by hand, by name, by number); "original" is the
   // order in which they were added.
-  const all = favs.map(f => ({ ...f.item, key: f.key, _fav: f, subtitle: addons.getInstalled(f.addonId)?.manifest.name || f.item.subtitle }));
   const cfg = getSort('favs');
-  trackSort('favs', cfg, all);
-  const items = sortItems(all, cfg);
+  trackSort('favs', cfg, orderedFavourites().all);
+  const { all, items } = orderedFavourites();
   for (const it of items) delete it._new; // no NUOVO badge on favourites
   const ordered = items.map(it => it._fav);
   viewBtn.hidden = false;

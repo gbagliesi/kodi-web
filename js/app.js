@@ -1322,7 +1322,8 @@ async function forceUpdate() {
   toast('Aggiornamento…');
   try {
     if ('serviceWorker' in navigator) for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
-    if (window.caches) for (const k of await caches.keys()) await caches.delete(k);
+    // the app's files only: what add-ons saved for the user (e.g. YouTube channels) stays
+    if (window.caches) for (const k of await caches.keys()) if (k !== 'salotto-addon-data') await caches.delete(k);
   } catch (e) { console.warn(e); }
   const u = new URL(location.href);
   u.searchParams.set('r', Date.now());

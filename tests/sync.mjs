@@ -153,6 +153,12 @@ async function ui() {
     });
     assert.deepEqual(bState, { key: 'chiave-di-prova', podcast: false, view: 'list', start: '#/live', proxy: RELAY, resume: 600 });
     assert.deepEqual(await b.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels')), [{ id: 'UCprova', title: 'Canale di prova' }], 'YouTube saved channels');
+    // the browser loses the add-on data (or an old «Forza aggiornamento»): it comes back, never deleted everywhere
+    await b.evaluate(() => caches.delete('salotto-addon-data'));
+    await syncNow(b);
+    assert.deepEqual(await b.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels')), [{ id: 'UCprova', title: 'Canale di prova' }], 'lost add-on data restored');
+    await syncNow(a);
+    assert.deepEqual(await a.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels')), [{ id: 'UCprova', title: 'Canale di prova' }], 'not deleted on A');
     await b.goto(BASE + '#/favourites');
     await b.waitForSelector('#view :text("Secondo")');
     console.log('✓ a new device gets favourites, resume points, settings, add-on settings and saved YouTube channels and the start page (not the proxy)');
@@ -170,7 +176,7 @@ async function ui() {
 
     // ---- a device that joins with favourites of its own keeps them and shares them
     const c = await device(browser, 'C', { sync: { on: false, group: 'casa' } });
-    await c.evaluate((f) => window.salotto.store.toggleFavourite(f), fav('c1', 'Di C'));
+    await c.evaluate((f) => { window.salotto.store.toggleFavourite(f); return window.salotto.addons.writeAddonStore('plugin.video.youtube', 'channels', []); }, fav('c1', 'Di C'));
     await syncNow(c);
     assert.deepEqual(await favKeys(c), ['c1'], 'off: nothing arrives');
     assert.equal(await c.evaluate(() => window.salotto.addons.getAddonSettings('plugin.video.youtube').apiKey), '');
@@ -180,6 +186,9 @@ async function ui() {
     await c.check('#sync-on');
     await waitFor(async () => (await favKeys(c)).length === 2, 10000, 'C joined');
     assert.deepEqual((await favKeys(c)).sort(), ['c1', 'f2']);
+    await syncNow(c); await syncNow(a);
+    assert.equal((await a.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels'))).length, 1, "C's empty channel list did not wipe A's");
+    assert.equal((await c.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels'))).length, 1, 'C got the channels');
     await waitFor(() => c.textContent('#sync-status').then(t => /Sincronizzato alle/.test(t)), 8000, 'status');
     if (SHOTS) await c.screenshot({ path: path.join(SHOTS, 'sync-on.png') });
     await syncNow(a);
@@ -205,6 +214,13 @@ async function ui() {
     await b.evaluate((f) => window.salotto.store.toggleFavourite(f), fav('auto', 'Da solo'));
     await waitFor(async () => { await syncNow(a); return (await favKeys(a)).includes('auto'); }, 15000, 'auto push');
     console.log('✓ changes go out by themselves');
+    // «Forza aggiornamento» keeps what add-ons saved
+    await a.goto(BASE + '#/settings');
+    await a.click('text=Forza aggiornamento');
+    await a.waitForURL(/[?&]r=/);
+    await a.waitForFunction(() => window.salotto?.addons);
+    assert.equal((await a.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels'))).length, 1, 'force update keeps add-on data');
+    console.log('✓ «Forza aggiornamento» keeps the YouTube channels; lost add-on data comes back from the others');
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

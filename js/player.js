@@ -224,7 +224,7 @@ async function attach(stream) {
       if (!data.fatal) return;
       if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR && getProxy() && !triedProxy && !stream.proxy) {
         triedProxy = true;
-        routeWhy = 'lo stream diretto (' + hostOf(stream.url) + ') non ha risposto: riprovato tramite proxy';
+        routeWhy = (stream.resolveTried && routeWhy) ? routeWhy : RELINKER.test(stream.url) ? 'l\'indirizzo Rai (' + hostOf(stream.url) + ') non si lascia leggere da altri siti: passa tutto dal proxy' : 'lo stream diretto (' + hostOf(stream.url) + ') non ha risposto: riprovato tramite proxy';
         showMsg('Riprovo tramite proxy…', 2500);
         attach({ ...stream, proxy: true }).then(() => v.play().catch(() => {}));
         return;

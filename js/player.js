@@ -7,6 +7,7 @@ import * as cast from './cast.js';
 import * as epg from './epg.js';
 import * as avsync from './avsync.js';
 import * as subs from './subtitles.js';
+import * as zoom from './zoom.js';
 
 const UA = navigator.userAgent;
 const APPLE = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
@@ -406,6 +407,7 @@ export async function play(item, stream, opts = {}) {
   clearTimeout(avTimer);
   updateSyncBtn();
   subs.newItem({ audio, casting, key: current.key });
+  zoom.reset();
   el.route.hidden = true;
   onCloseCb = opts.onClose || null;
   el.root.hidden = false;
@@ -485,6 +487,7 @@ export function close() {
   clearTimeout(zapTimer); clearTimeout(digitTimer); digits = ''; zapToken++;
   el.osd.hidden = true; el.panel.hidden = true; el.epg.hidden = true; el.syncBox.hidden = true;
   subs.newItem(null);
+  zoom.reset();
   clearTimeout(avTimer);
   toggleStats(false);
   changed(true);
@@ -631,6 +634,7 @@ export function handleKey(e) {
     case 'i': toggleInfo(); return true;
     case 's': subs.toggle(); showMsg('Sottotitoli ' + (subs.state().on ? 'attivi' : 'spenti'), 1500); return true;
     case 'f': toggleFullscreen(); return true;
+    case 'z': zoom.toggle(); return true;
     case 'ArrowLeft': case 'ArrowRight': {
       const a = focused();
       if (a && a !== el.seek && el.root.contains(a) && a.matches('button, input')) return false;
@@ -782,6 +786,7 @@ cast.initCast({
     updateCastBtn();
     updateSyncBtn();
     subs.setCasting(active);
+    if (active) zoom.reset();
     if (!isOpen() || !current) return;
     if (active) sendToCast(localAttached ? el.video.currentTime : 0);
     else {
@@ -1326,7 +1331,7 @@ el.root.addEventListener('pointerdown', (e) => {
 }, { capture: true, passive: true });
 el.root.addEventListener('pointerup', (e) => {
   const s = swipe; swipe = null;
-  if (!s || !channels || document.visibilityState !== 'visible') return;
+  if (!s || !channels || document.visibilityState !== 'visible' || zoom.busy()) return;
   const dx = e.clientX - s.x, dy = e.clientY - s.y;
   if (Math.abs(dy) > 60 && Math.abs(dy) > 1.5 * Math.abs(dx) && Date.now() - s.t < 1000) {
     swallowClick = true;
@@ -1346,6 +1351,7 @@ function hideControls() {
 
 function onBackgroundTap() {
   if (swallowClick) { swallowClick = false; return; }
+  if (zoom.swallowClick()) return; // end of a pinch or of a drag of the enlarged picture
   // automatic full screen got lost (back from the floating window, back gesture…): a tap restores it
   if (lastPointer === 'touch' && autoFullscreen()) { wake(); return; }
   if (subs.boxOpen()) { subs.closeBox(); return; }
@@ -1357,6 +1363,7 @@ function onBackgroundTap() {
   if (hidden) wake(); else hideControls();
 }
 el.root.querySelector('.player-stage').addEventListener('click', onBackgroundTap);
+zoom.init({ root: el.root, video: el.video, enabled: () => isOpen() && !!current && !current.audio && !casting });
 el.ui.addEventListener('click', (e) => { if (e.target === el.ui) onBackgroundTap(); });
 window.addEventListener('pagehide', () => saveResume(true));
 

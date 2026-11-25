@@ -1150,6 +1150,7 @@ function renderSettings() {
       h('label', {}, 'Versione: ', h('span', { id: 'settings-version' }, versionLabel())),
       h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: forceUpdate }, 'Forza aggiornamento')),
       h('div', { class: 'hint' }, 'Scarica di nuovo l\'app ignorando la cache, se una correzione non compare. Add-on, preferiti e impostazioni restano.')),
+    h('div', { class: 'field' }, h('label', {}, 'Memoria del browser: ', (() => { const u = addons.storageUsage(); return `Salotto ${Math.round(u.salotto / 1024)} KB, altre pagine dello stesso sito ${Math.round(u.other / 1024)} KB (massimo circa 5000 KB)`; })())),
     h('p', { class: 'hint' }, 'Salotto è un media center leggero ispirato ai media center da salotto, che gira interamente nel browser. Gli add-on sono script JavaScript eseguiti in isolamento (Web Worker). Usa solo fonti di cui hai i diritti.'),
   ));
   focusFirst();

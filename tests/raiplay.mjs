@@ -32,6 +32,8 @@ const RAI = {
     { name: 'Da non perdere', type: 'RaiPlay Slider Block', header: { label: 'Da non perdere' }, contents: [
       { path_id: '/programmi/libera.json', name: 'Serie libera', images: IMG, login_required: false },
       { path_id: '/programmi/chiusa.json', name: 'Fiction con accesso', images: IMG, login_required: true },
+      { path_id: '/programmi/lenta.json', name: 'Programma lento', images: IMG, login_required: true },
+      { path_id: '/video/2025/02/f1.json', name: 'Video senza indicazione', images: IMG },
     ] },
   ] },
   '/programmi/libera.json': { name: 'Serie libera', first_item_path: '/video/2025/01/ep1.json', blocks: [{ name: 'Episodi', sets: [
@@ -42,6 +44,7 @@ const RAI = {
   '/programmi/libera/ContentSet-2.json': { items: [] },
   '/video/2025/01/ep1.json': { login_required: false, rights_management: { rights: { drm: {} } }, weblink: '/video/2025/01/ep1.html',
     video: { content_url: 'https://mediapolisvod.rai.it/relinker/relinkerServlet.htm?cont=ep1', subtitlesArray: [{ language: 'it', label: 'Italiano', url: '/dl/video/stl/Serie libera - Il primo.srt' }] } },
+  '/programmi/lenta.json': { name: 'Programma lento', first_item_path: '/video/2025/01/ep1.json', blocks: [] },
   '/programmi/chiusa.json': { name: 'Fiction con accesso', first_item_path: '/video/2025/02/f1.json', blocks: [{ name: 'Episodi', sets: [{ name: 'Stagione 1', path_id: '/programmi/chiusa/ContentSet-1.json' }] }] },
   '/programmi/chiusa/ContentSet-1.json': { items: [
     { path_id: '/video/2025/02/f1.json', name: 'Fiction - Ep 1', episode_title: 'Puntata uno', program_name: 'Fiction con accesso', season: '1', episode: '1', images: IMG, weblink: '/video/2025/02/f1.html', rights_management: { rights: { drm: {} } } },
@@ -76,6 +79,7 @@ try {
       return r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ agg: { titoli: { cards: [{ titolo: 'Serie libera', path_id: '/programmi/libera.json', immagine: '/dl/img/x.jpg' }] }, video: { cards: [] } } }) });
     }
     if (u.pathname.endsWith('.srt')) return r.fulfill({ status: 200, contentType: 'application/x-subrip', headers: cors, body: SRT });
+    if (u.pathname === '/programmi/lenta.json') return new Promise(res => setTimeout(res, 12000)).then(() => r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(RAI['/programmi/lenta.json']) }));
     const body = RAI[decodeURIComponent(u.pathname)];
     return body ? r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(body) }) : r.fulfill({ status: 404, body: '' });
   });
@@ -118,16 +122,31 @@ try {
   await page.click('.card:has-text("Puntata uno")');
   assert.deepEqual(await page.evaluate(() => window.__opened), ['https://www.raiplay.it/video/2025/02/f1.html']);
   assert.equal(await page.isVisible('#player'), false);
+  // a video whose card doesn't say: when RaiPlay turns out to ask for signing in, one tap opens it
+  await page.goBack();
+  await page.waitForSelector('.card:has-text("Video senza indicazione")');
+  await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+  await page.click('.card:has-text("Video senza indicazione")');
+  await page.click('button:has-text("Apri il sito")');
+  assert.deepEqual(await page.evaluate(() => window.__opened), ['https://www.raiplay.it/video/2025/02/f1.html']);
+  assert.equal(await page.isVisible('#player'), false, 'no attempt to play it here');
   console.log('✓ RaiPlay: catalogue rows; programmes behind RaiPlay\'s sign-in open on raiplay.it');
 
   // «Si guarda in Salotto»: only the programmes RaiPlay shows without signing in
   await page.goto(BASE + '#/browse/plugin.video.raiplay');
   await page.click('.row:has-text("Si guarda in Salotto")');
+  // the check of the catalogue takes a while: what is known so far, and a note
   await page.waitForSelector('.row:has-text("1 programmi")', { timeout: 15000 });
+  assert.match(await page.textContent('#view'), /Sto ancora controllando/);
   assert.match(await page.textContent('.row:has-text("1 programmi")'), /In evidenza/);
   await page.click('.row:has-text("1 programmi")');
   await page.waitForSelector('.card:has-text("Serie libera")');
   assert.equal(await page.locator('.card:has-text("Fiction con accesso")').count(), 0, 'locked programmes left out');
+  // back after the check: the note is gone (the list was not kept as it was), the slow one is in
+  await new Promise(r => setTimeout(r, 4000));
+  await page.goBack();
+  await page.waitForSelector('.row:has-text("2 programmi")', { timeout: 15000 });
+  assert.doesNotMatch(await page.textContent('#view'), /Sto ancora controllando/, 'no stale progress note');
   // and the other rows say which ones start here
   await page.goto(BASE + '#/browse/plugin.video.raiplay?p=' + encodeURIComponent('block:/index.json|1'));
   await page.waitForSelector('.card:has-text("Serie libera")');

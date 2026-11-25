@@ -110,8 +110,10 @@ async function freeList(arg, ctx) {
   const labels = SECTIONS.map(([, l]) => l).filter(l => bySection.has(l));
   const again = (arg ? 'free:' + arg : 'free') + '~' + scanDone;
   const progress = scan ? [{ label: `Sto ancora controllando il catalogo RaiPlay (${scanDone} di ${scanTotal})`, subtitle: 'Tocca qui tra poco per vedere gli altri', path: again }] : [];
+  const noCache = !!scan; // still filling in: Salotto asks again next time instead of keeping this
   if (!arg) {
     return {
+      noCache,
       view: 'list',
       items: [
         ...progress,
@@ -120,7 +122,7 @@ async function freeList(arg, ctx) {
       ],
     };
   }
-  return { view: 'grid', items: [...progress, ...(bySection.get(arg) || []).map(c => toItem(c)).filter(Boolean)] };
+  return { noCache, view: 'grid', items: [...progress, ...(bySection.get(arg) || []).map(c => toItem(c)).filter(Boolean)] };
 }
 
 /** A card of a RaiPlay row (programme or video). */
@@ -135,7 +137,9 @@ function toItem(c, lockedProg = false) {
     return { ...base, subtitle: [note, base.subtitle].filter(Boolean).join(' · ') || undefined, path: 'prog:' + p };
   }
   if (!isVideo(p)) return null;
-  if (lockedProg || c.login_required === true || hasDrm(c.rights_management)) return { ...base, subtitle: NOTE_LOCKED, external: webPage(c.weblink || c.url, p), playable: true, type: 'video' };
+  // an episode says whether RaiPlay asks to sign in; when it doesn't, its programme's first video does
+  const lockedHere = 'login_required' in c ? c.login_required === true : lockedProg;
+  if (lockedHere || hasDrm(c.rights_management)) return { ...base, subtitle: NOTE_LOCKED, external: webPage(c.weblink || c.url, p), playable: true, type: 'video' };
   return { ...base, playable: true, type: 'video' };
 }
 
@@ -214,7 +218,10 @@ addon.register({
   async resolve(item, ctx) {
     const v = await json(ctx, item.id);
     if (locked(v)) {
-      throw new Error((v.login_required ? 'RaiPlay chiede l\'accesso per questo video' : 'Questo video è protetto') + ': aprilo su raiplay.it (' + webPage(v.weblink, item.id) + ').');
+      return {
+        external: webPage(v.weblink, item.id),
+        message: (v.login_required ? 'RaiPlay chiede l\'accesso con il tuo account per questo video' : 'Questo video è protetto') + ': si guarda su raiplay.it.',
+      };
     }
     const url = v.video && v.video.content_url;
     if (!url) throw new Error('RaiPlay non indica il video da riprodurre');

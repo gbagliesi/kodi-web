@@ -155,10 +155,27 @@ try {
     await page.keyboard.press('Enter');
     await page.keyboard.press('ArrowRight');
     assert.deepEqual(await page.evaluate(() => window.__yt.calls.slice(1)), ['pause', 'seek:10']);
+    // Mac keyboard: ▲ shows Salotto's controls (YouTube's own buttons can't be reached), → moves in them
+    assert.ok(await page.evaluate(() => document.getElementById('yt-player').classList.contains('peek')), 'progress shown after → on a computer too');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-play');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-fwd');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-cc');
+    await page.keyboard.press('Escape'); // controls away first
+    assert.equal(await page.isVisible('#yt-player'), true);
+    assert.ok(await page.evaluate(() => document.getElementById('yt-player').classList.contains('bar-hidden')));
+    // the mouse: YouTube's own controls, Salotto's step aside
+    await page.mouse.click(5, 300);
+    await waitFor(() => page.evaluate(() => document.activeElement.id === 'yt-player'), 3000, 'focus taken back from YouTube\'s frame');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-play', 'a key brings them back');
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     assert.equal(await page.isVisible('#yt-player'), false);
     assert.ok(await page.evaluate(() => window.__yt.calls.includes('destroy')));
-    console.log('✓ YouTube without a key: a pasted link plays in YouTube\'s player, OK / → / Esc');
+    console.log('✓ YouTube without a key: a pasted link plays in YouTube\'s player; Mac keyboard: OK, →, ▲ controls, Esc');
 
     // a search without a key explains what is needed
     await page.goto(BASE + '#/browse/plugin.video.youtube?q=gatti&t=x');

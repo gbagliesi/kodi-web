@@ -405,7 +405,7 @@ export async function play(item, stream, opts = {}) {
   avNative = false; subsNative = false;
   clearTimeout(avTimer);
   updateSyncBtn();
-  subs.newItem({ audio, casting });
+  subs.newItem({ audio, casting, key: current.key });
   el.route.hidden = true;
   onCloseCb = opts.onClose || null;
   el.root.hidden = false;

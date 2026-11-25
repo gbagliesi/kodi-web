@@ -16,8 +16,9 @@ const PRESETS = [
 // ---------------------------------------------------------------- TGR (Rai regional news)
 // Rai streams each region's Rai 3 on its own CDN (tgr<region>-live.akamaized.net). Checked
 // 2026-11-25: Bolzano, Trento and Friuli Venezia Giulia (also the Slovenian «FJK» channel) are
-// on all day; the other regions are switched on only around their newscasts — the playlist
-// stays, but its chunk list answers 404 in between. Lazio has no stream of its own.
+// on all day; the other regions are switched on only around their newscasts (~19:00 for the
+// 19:30 TG, carrying national Rai 3 until the regional edition starts) — the playlist stays,
+// but its chunk list answers 404 in between. Lazio has no stream of its own (scanned).
 // The past editions come from rainews.it (each region's «notiziari» page, through the proxy).
 const TGR_REGIONS = [
   // [label, rainews slug, live stream name, Akamai id]
@@ -69,7 +70,7 @@ async function tgrOnAir(r, ctx) {
 
 function tgrLiveItem(r, on) {
   const sub = r.allDay ? (on === false ? 'Non risponde in questo momento' : 'Sempre acceso: Rai 3 con i programmi regionali')
-    : on === true ? '● In onda ora'
+    : on === true ? '● Acceso ora · trasmette Rai 3, il TG regionale va in onda ' + TGR_HOURS
       : on === false ? 'Spento ora · si accende durante il TG regionale (' + TGR_HOURS + ')'
         : 'Si accende durante il TG regionale (' + TGR_HOURS + ')';
   return {
@@ -135,7 +136,7 @@ async function tgrList(path, ctx) {
     const n = states.filter((on, i) => on && !lives[i].allDay).length;
     return {
       view: 'list',
-      message: n ? `In onda ora: ${n} TG regionali (●).` : 'I canali regionali si accendono solo durante i TG (' + TGR_HOURS + '); Bolzano, Trento e Friuli Venezia Giulia sono sempre accesi.',
+      message: n ? `Canali regionali accesi ora: ${n} (●). Rai li accende circa mezz'ora prima del TG: fino all'inizio trasmettono Rai 3 nazionale.` : 'I canali regionali si accendono solo durante i TG (' + TGR_HOURS + '); Bolzano, Trento e Friuli Venezia Giulia sono sempre accesi.',
       items: [
         { label: 'Ultime edizioni (on demand)', subtitle: 'I notiziari già andati in onda, regione per regione · da rainews.it', path: 'tgr/ed' },
         ...lives.map((r, i) => tgrLiveItem(r, states[i])),

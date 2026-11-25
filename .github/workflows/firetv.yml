@@ -19,6 +19,8 @@ concurrency:
 
 jobs:
   build:
+    # a fork made only for one's own proxy (docs/CLOUDFLARE.md) publishes nothing else
+    if: ${{ !github.event.repository.fork }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

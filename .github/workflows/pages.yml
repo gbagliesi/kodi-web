@@ -22,6 +22,8 @@ jobs:
   # Build and deploy are two jobs (as in GitHub's own Pages workflow): deploying in the same job
   # right after the upload often failed with "No artifacts named github-pages were found".
   build:
+    # a fork made only for one's own proxy (docs/CLOUDFLARE.md) publishes nothing else
+    if: ${{ !github.event.repository.fork }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

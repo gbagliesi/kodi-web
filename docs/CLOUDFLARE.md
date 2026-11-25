@@ -96,6 +96,48 @@ già impostate su Cloudflare restano come sono.
 Apri il Worker → **Edit code**, sostituisci tutto il codice con quello di
 `cloudflare/worker.js` e clicca **Deploy**. Le variabili e il token restano.
 
+## Il proxy per un amico (tutto da GitHub, si aggiorna da solo)
+
+Chi vuole un proxy suo può farlo senza toccare il codice: un *fork* di
+questo progetto su GitHub pubblica il Worker sul suo account Cloudflare e poi,
+ogni notte, lo aggiorna all'ultima versione. Non serve mai fare «Sync fork».
+Servono circa 15 minuti, una volta sola.
+
+1. **Account.** Registrati su https://github.com/signup e su
+   https://dash.cloudflare.com/sign-up (gratuiti, basta un'email).
+2. **Sottodominio Cloudflare.** Su Cloudflare apri **Compute (Workers)** →
+   **Workers & Pages**. Se chiede di scegliere il sottodominio `workers.dev`,
+   scrivine uno (per esempio il tuo nome) e conferma.
+3. **Token API e Account ID.** Segui i punti 1 e 2 di
+   «Aggiornare il Worker → Automatico» qui sopra: alla fine hai il token API
+   Cloudflare e l'Account ID.
+4. **Token del proxy.** Crea un token casuale come al punto 3.1 della guida
+   (`openssl rand -hex 24`). È la «password» del tuo proxy.
+5. **Fork.** Apri https://github.com/gbagliesi/kodi-web, clicca **Fork** in
+   alto a destra → **Create fork**.
+6. **Secret.** Nel tuo fork → **Settings** → **Secrets and variables** →
+   **Actions** → **New repository secret**, tre volte:
+   - `CLOUDFLARE_API_TOKEN` = il token API del punto 3;
+   - `CLOUDFLARE_ACCOUNT_ID` = l'Account ID del punto 3;
+   - `PROXY_TOKEN` = il token del punto 4.
+7. **Prima pubblicazione.** Nel fork apri la scheda **Actions** → clicca
+   **I understand my workflows, go ahead and enable them** → a sinistra
+   **Aggiorna il Worker Cloudflare** → **Run workflow** → **Run workflow**.
+   Dopo un minuto deve comparire la spunta verde.
+8. **Salotto.** L'indirizzo è `https://salotto-proxy.<sottodominio>.workers.dev`
+   (lo trovi anche su Cloudflare → **Workers & Pages** → `salotto-proxy`). In
+   Salotto → **Impostazioni** incolla l'indirizzo e, come token, il
+   `PROXY_TOKEN`. Deve comparire «proxy raggiungibile ✓».
+
+Da quel momento il fork pubblica ogni notte il Worker più recente di questo
+progetto. Nel fork non gira nient'altro (né il sito né l'app Fire TV).
+Se per 60 giorni nessuno apre il fork, GitHub sospende l'aggiornamento
+notturno e manda un'email: basta aprire **Actions** e riattivarlo.
+
+L'aggiornamento automatico vuol dire fidarsi di chi modifica questo progetto:
+il Worker gira sul tuo account. Chi preferisce controllare può non creare il
+fork e aggiornare **a mano** (sezione sopra) quando vuole.
+
 ## Telecomando dal cellulare
 
 Il telecomando (menu **📱 Telecomando** di Salotto) passa dallo stesso

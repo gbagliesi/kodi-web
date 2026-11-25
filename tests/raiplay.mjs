@@ -76,7 +76,7 @@ try {
     if (u.pathname.endsWith('/msearch')) {
       if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'POST' } });
       searched = JSON.parse(r.request().postData()).params.param;
-      return r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ agg: { titoli: { cards: [{ titolo: 'Serie libera', path_id: '/programmi/libera.json', immagine: '/dl/img/x.jpg' }] }, video: { cards: [] } } }) });
+      return r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify({ agg: { titoli: { cards: [{ titolo: 'Serie libera', path_id: '/programmi/libera.json', immagine: '/dl/img/x.jpg' }] }, video: { cards: [{ titolo: 'Puntata chiusa', programma: 'Fiction con accesso', path_id: '/video/2025/02/f1.json', immagine: '/dl/img/x.jpg' }] } } }) });
     }
     if (u.pathname.endsWith('.srt')) return r.fulfill({ status: 200, contentType: 'application/x-subrip', headers: cors, body: SRT });
     if (u.pathname === '/programmi/lenta.json') return new Promise(res => setTimeout(res, 12000)).then(() => r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(RAI['/programmi/lenta.json']) }));
@@ -162,6 +162,7 @@ try {
   await page.keyboard.press('Enter');
   await page.waitForSelector('.card:has-text("Serie libera")');
   assert.equal(searched, 'libera');
+  assert.match(await page.textContent('.card:has-text("Puntata chiusa")'), /Si apre su raiplay\.it/, 'search video checked: marked before the tap');
   await page.click('.card:has-text("Serie libera")');
   await page.waitForSelector('.row:has-text("Stagione 2")');
   await page.click('.row:has-text("Stagione 1")');

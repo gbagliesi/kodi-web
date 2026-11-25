@@ -153,6 +153,7 @@ function buildUrl(stream) {
 
 // "Diretto" / "Proxy" badge next to the title: how the stream reaches this device (or the TV)
 let localRoute = '', routeLabel = '';
+let playing = null, routeWhy = '';   // the stream as attached (address really used), and why it goes that way
 const isProxied = (u) => { const p = getProxy(); return !!p && String(u).startsWith(p.split('?')[0]); };
 function showRoute(proxied, where = '') {
   const label = (where ? where + ' · ' : '') + (proxied ? 'Proxy' : 'Diretto');
@@ -163,6 +164,7 @@ function showRoute(proxied, where = '') {
   el.route.hidden = false;
 }
 
+const hostOf = (u) => { try { return new URL(u).host; } catch { return String(u); } };
 const RELINKER = /^https:\/\/mediapolis(vod)?\.rai\.it\/relinker\//i;
 
 function nativeWanted() {
@@ -175,6 +177,8 @@ async function attach(stream) {
   destroyHls();
   const v = el.video;
   const url = buildUrl(stream);
+  playing = stream;
+  if (!stream.resolvedFrom && !stream.resolveTried && !stream.proxy) routeWhy = '';
   localRoute = isProxied(url) ? 'proxy' : 'direct';
   if (!casting) showRoute(localRoute === 'proxy');
   // Apple devices play HLS natively (and without CORS limits); elsewhere hls.js
@@ -191,7 +195,11 @@ async function attach(stream) {
   // in hls.js, ask the proxy where it leads and fetch the stream directly (from Italy, like Safari)
   if (!native && !stream.proxy && !stream.resolvedFrom && getProxy() && RELINKER.test(stream.url)) {
     const real = await resolveRedirect(stream.url);
-    if (real && /\.m3u8(\?|$)/i.test(real) && await corsOk(real)) return attach({ ...stream, url: real, resolvedFrom: stream.url });
+    if (real && /\.m3u8(\?|$)/i.test(real) && await corsOk(real)) {
+      routeWhy = 'il proxy ha solo chiesto a Rai dove si trova lo stream; il video arriva da ' + hostOf(real) + ' direttamente';
+      return attach({ ...stream, url: real, resolvedFrom: stream.url });
+    }
+    routeWhy = real ? 'lo stream indicato da Rai (' + hostOf(real) + ') non si lascia leggere da qui: passa tutto dal proxy' : 'il proxy non ha saputo dire dove porta l\'indirizzo Rai: passa tutto dal proxy';
     stream = { ...stream, resolveTried: true };
   }
   if (subsMse && !native && !stream.proxy && getProxy() && looksHls(stream.url, stream.mime) && !(await corsOk(stream.url))) {
@@ -216,6 +224,7 @@ async function attach(stream) {
       if (!data.fatal) return;
       if (data.type === window.Hls.ErrorTypes.NETWORK_ERROR && getProxy() && !triedProxy && !stream.proxy) {
         triedProxy = true;
+        routeWhy = 'lo stream diretto (' + hostOf(stream.url) + ') non ha risposto: riprovato tramite proxy';
         showMsg('Riprovo tramite proxy…', 2500);
         attach({ ...stream, proxy: true }).then(() => v.play().catch(() => {}));
         return;
@@ -678,7 +687,9 @@ function statsRows() {
   if (isLive()) rows.push(['Finestra diretta', w ? Math.round(w.end - w.start) + ' s' : 'nessuna']);
   const q = v.getVideoPlaybackQuality?.();
   if (q && q.totalVideoFrames) rows.push(['Fotogrammi persi', q.droppedVideoFrames + ' di ' + q.totalVideoFrames]);
-  try { rows.push(['Server', new URL(current.stream.url).host]); } catch { /* ignore */ }
+  const used = playing?.url || current?.stream.url;
+  if (used) rows.push(['Server', hostOf(used) + (playing?.resolvedFrom ? ' (da ' + hostOf(playing.resolvedFrom) + ')' : '')]);
+  if (routeWhy) rows.push(['Perché', routeWhy]);
   return rows;
 }
 function renderStats() {

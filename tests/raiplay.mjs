@@ -173,6 +173,11 @@ try {
   await waitFor(() => page.evaluate(() => document.getElementById('video').currentTime > 0.5), 15000, 'video plays');
   assert.equal(resolved, 1, 'relinker resolved through the proxy');
   assert.match(await page.textContent('#pl-route'), /Diretto/);
+  await page.click('#pl-route');
+  const stats = await page.textContent('#pl-stats');
+  assert.match(stats, /Server\s*\S+ \(da mediapolisvod\.rai\.it\)/, 'details: the server really used, and the Rai address it came from: ' + stats);
+  assert.match(stats, /Perché\s*il proxy ha solo chiesto a Rai/, 'details say why it is direct');
+  await page.click('#pl-route');
   await waitFor(() => page.evaluate(() => { const o = document.getElementById('pl-subs'); return !o.hidden && /primo episodio/.test(o.textContent); }), 10000, 'official subtitles shown');
   assert.equal(await page.evaluate(() => document.getElementById('pl-subs').textContent), 'Ciao, sono il primo episodio.', 'SRT tags removed');
   console.log('✓ RaiPlay: search, seasons, free episode plays (relinker resolved, stream direct) with its official SRT subtitles');

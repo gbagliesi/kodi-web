@@ -63,7 +63,9 @@ const GUIDE = buildGuide();
 }
 
 const RADIO = [{ stationuuid: 'u1', name: 'Radio Prova', url_resolved: 'https://example.org/radio.mp3', country: 'Italy', tags: 'pop', bitrate: 128, favicon: '' },
-  { stationuuid: 'u2', name: 'Solo HTTP', url_resolved: 'http://example.org/radio.mp3', country: 'Italy', tags: '', bitrate: 64, favicon: '' }];
+  { stationuuid: 'u2', name: 'Solo HTTP', url_resolved: 'http://example.org/radio.mp3', country: 'Italy', tags: '', bitrate: 64, favicon: '' },
+  { stationuuid: 'u3', name: 'Rai Radio 3', url_resolved: 'http://icestreaming.rai.it/3.mp3', country: 'Italy', tags: 'cultura', bitrate: 128, favicon: '' },
+  { stationuuid: 'u4', name: 'Rai Radio 3 bis', url_resolved: 'https://icestreaming.rai.it/3.mp3', country: 'Italy', tags: '', bitrate: 128, favicon: '' }];
 
 // Fake Google Cast SDK: records what would be sent to the TV
 const FAKE_CAST = `(() => {
@@ -213,7 +215,7 @@ async function uiTests() {
     await page.goto(BASE);
     await page.waitForSelector('.hero');
     const installed = await page.evaluate(() => window.salotto.addons.listInstalled().map(a => a.manifest.id));
-    assert.equal(installed.length, 9, 'bundled add-ons installed: ' + installed);
+    assert.equal(installed.length, 10, 'bundled add-ons installed: ' + installed);
     console.log('✓ app boots and installs bundled add-ons:', installed.join(', '));
     // An outdated add-on from the official repository is updated on the next start
     await page.evaluate(() => {
@@ -513,7 +515,17 @@ async function uiTests() {
     await page.goto(BASE + '#/browse/plugin.audio.radiobrowser?p=top');
     await page.waitForSelector('.row:has-text("Radio Prova")');
     assert.equal(await page.locator('.row:has-text("Solo HTTP")').count(), 0);
-    console.log('✓ radio add-on filters out insecure streams');
+    assert.equal(await page.locator('.row:has-text("Rai Radio 3")').count(), 1, 'HTTP Rai stream upgraded to HTTPS, duplicate stream shown once');
+    console.log('✓ radio add-on filters out insecure streams, upgrades known HTTPS hosts, drops duplicates');
+
+    // Radio italiane: curated official streams + catalogue without duplicates
+    await page.goto(BASE + '#/browse/plugin.audio.radioitalia?p=g%2Frai');
+    await page.waitForSelector('.row:has-text("Rai Radio 3")');
+    assert.ok(await page.locator('.row:has-text("Rai Radio Kids")').count() === 1);
+    await page.goto(BASE + '#/browse/plugin.audio.radioitalia?p=all%2F0');
+    await page.waitForSelector('.row:has-text("Radio Prova")');
+    assert.equal(await page.locator('.row:has-text("Rai Radio 3")').count(), 0, 'catalogue hides streams already in the curated list');
+    console.log('✓ Radio italiane: Rai channels listed, catalogue deduplicated against the curated list');
 
     // Add-on settings round-trip
     await page.goto(BASE + '#/addons/plugin.video.iptv');

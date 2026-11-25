@@ -46,6 +46,7 @@ con browser. Supporta gli **add-on**, scritti in JavaScript.
 | **Mediaset Infinity** | Vetrina del catalogo di Mediaset Infinity: sezioni, programmi, puntate e clip, ricerca tra i programmi. Mediaset protegge le puntate (DRM) e non apre il catalogo ad altri siti: serve il proxy e ogni video si apre su mediasetinfinity.mediaset.it |
 | **Internet Archive** | Film di pubblico dominio, noir, fantascienza, cartoni d'epoca, documentari da archive.org |
 | **Radio dal mondo** | Migliaia di radio da radio-browser.info, per paese e genere |
+| **Radio italiane** | Rai Radio 1, 2, 3 e tutti i canali Rai, le nazionali (RTL 102.5, Deejay, 105, RDS, Radio 24…) e le principali radio italiane con gli stream ufficiali; catalogo completo per regione |
 | **Podcast** | Ricerca nel catalogo Apple Podcasts e feed RSS personali |
 | **Video di prova** | Cortometraggi open source e stream HLS di test; anche l'esempio più semplice di add-on |
 

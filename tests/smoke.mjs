@@ -666,6 +666,49 @@ async function uiTests() {
     await waitFor(async () => (await rowLabels()).join('|') === 'Alfa|Charlie|Bravo');
     console.log('✓ favourites: by name and in a custom order');
 
+    // ☆ straight from a channel list, without opening the channel: tap, keyboard (* / ☰), right click
+    await page.evaluate(() => window.salotto.store.save('favourites', []));
+    await page.goto(G);
+    await page.waitForSelector('.row:has-text("La7")');
+    const la7Pair = page.locator('.row-pair', { has: page.locator('.row-label:has-text("La7")') });
+    await la7Pair.locator('.fav-star').click();
+    assert.equal(await page.isVisible('#player:not([hidden])'), false, 'the star does not open the channel');
+    let favLabels = await page.evaluate(() => window.salotto.store.getFavourites().map(f => f.item.label));
+    assert.deepEqual(favLabels, ['La7'], 'added from the list');
+    assert.equal(await la7Pair.locator('.fav-star').textContent(), '★');
+    const favKey = await page.evaluate(() => window.salotto.store.getFavourites()[0].key);
+    assert.match(favKey, /^plugin\.video\.iptv\|/, 'same key the player uses');
+    // keyboard: * on the focused row toggles it
+    const euro = page.locator('#view .row:has-text("Euronews")');
+    await euro.focus();
+    await page.keyboard.press('*');
+    await waitFor(() => page.evaluate(() => window.salotto.store.getFavourites().some(f => f.item.label === 'Euronews')));
+    await page.keyboard.press('*');
+    await waitFor(() => page.evaluate(() => !window.salotto.store.getFavourites().some(f => f.item.label === 'Euronews')));
+    // TV remote ☰ (ContextMenu key)
+    await euro.focus();
+    await page.keyboard.press('ContextMenu');
+    await waitFor(() => page.evaluate(() => window.salotto.store.getFavourites().some(f => f.item.label === 'Euronews')));
+    assert.equal(await page.isVisible('#player:not([hidden])'), false);
+    // right click / long press takes it off again
+    await page.waitForTimeout(900);
+    await euro.click({ button: 'right' });
+    await waitFor(() => page.evaluate(() => !window.salotto.store.getFavourites().some(f => f.item.label === 'Euronews')));
+    // the Favourites page shows it and its star takes it off
+    await page.goto(BASE + '#/favourites');
+    await page.waitForSelector('.row:has-text("La7")');
+    await page.locator('.row-pair .fav-star').first().click();
+    await waitFor(() => page.evaluate(() => window.salotto.store.getFavourites().length === 0));
+    // grid view: the star sits on the tile
+    await page.evaluate(() => window.salotto.store.setSettings({ viewMode: 'grid' }));
+    await page.goto(G);
+    await page.waitForSelector('.card-wrap .card-star');
+    await page.locator('.card-wrap', { has: page.locator('.label:has-text("La7")') }).locator('.card-star').click();
+    assert.deepEqual(await page.evaluate(() => window.salotto.store.getFavourites().map(f => f.item.label)), ['La7'], 'added from a tile');
+    assert.equal(await page.isVisible('#player:not([hidden])'), false);
+    await page.evaluate(() => { window.salotto.store.setSettings({ viewMode: 'auto' }); window.salotto.store.save('favourites', []); });
+    console.log('✓ favourites straight from the lists: ☆ on rows and tiles, * / ☰ key, right click, off from the Favourites page');
+
     // Playlist updates: summary after a manual update, last good copy when the download fails
     {
       const uc = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
@@ -723,6 +766,17 @@ async function uiTests() {
       assert.ok(mh <= 1, 'TV: the whole side menu fits on screen');
       await tv.goto(BASE + '#/browse/plugin.video.iptv?p=p%2F0%2Fg%2FGeneralisti');
       await tv.waitForSelector('.row:has-text("La7")');
+      // ▶ from a channel reaches its ☆, OK adds it to the favourites; ◀ goes back, ▼ stays on the channels
+      await tv.evaluate(() => document.querySelector('#view .row').focus());
+      await tv.keyboard.press('ArrowRight');
+      assert.equal(await tv.evaluate(() => document.activeElement.classList.contains('fav-star')), true, 'TV: ▶ reaches the star');
+      await tv.keyboard.press('Enter');
+      await waitFor(() => tv.evaluate(() => window.salotto.store.getFavourites().length === 1));
+      assert.equal(await tv.isVisible('#player:not([hidden])'), false, 'TV: the star does not open the channel');
+      await tv.keyboard.press('ArrowLeft');
+      await tv.keyboard.press('ArrowDown');
+      assert.equal(await tv.evaluate(() => document.activeElement.classList.contains('row') && !document.activeElement.classList.contains('fav-star')), true, 'TV: ▼ moves along the channels');
+      await tv.evaluate(() => window.salotto.store.save('favourites', []));
       await tv.click('.row:has-text("Rai 1") >> nth=0');
       await tv.waitForSelector('#player:not([hidden])');
       const tvTitle = () => tv.textContent('#pl-title');

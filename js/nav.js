@@ -80,7 +80,10 @@ export function move(dir, repeating = false) {
     list[0].focus();
     return true;
   }
-  const next = best(cur, dir, sameRegion(cur, dir, list));
+  // a row with a button beside it (☆, ⚙): ◀▶ go between the two
+  const pair = cur.parentElement?.classList.contains('row-pair') && (dir === 'left' || dir === 'right')
+    ? (dir === 'left' ? cur.previousElementSibling : cur.nextElementSibling) : null;
+  const next = pair && list.includes(pair) ? pair : best(cur, dir, sameRegion(cur, dir, list));
   if (next) {
     next.focus({ preventScroll: true });
     // Instant scrolling: a smooth scroll restarted on every key repeat makes long lists stutter

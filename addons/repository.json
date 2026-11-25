@@ -60,10 +60,18 @@
     {
       "id": "plugin.audio.radiobrowser",
       "name": "Radio dal mondo",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "Migliaia di radio in diretta da radio-browser.info",
       "manifest": "plugin.audio.radiobrowser/addon.json",
       "icon": "plugin.audio.radiobrowser/icon.svg"
+    },
+    {
+      "id": "plugin.audio.radioitalia",
+      "name": "Radio italiane",
+      "version": "1.0.0",
+      "description": "Rai Radio 1, 2, 3 e canali Rai, le nazionali e le principali radio italiane con gli stream ufficiali",
+      "manifest": "plugin.audio.radioitalia/addon.json",
+      "icon": "plugin.audio.radioitalia/icon.svg"
     },
     {
       "id": "plugin.audio.podcast",

@@ -55,10 +55,83 @@ export function getProxy() { return proxyUrl; }
 export function proxify(url) { return proxyUrl ? proxyUrl + encodeURIComponent(url) : url; }
 
 // ---------------------------------------------------------------- registry
+// The list of add-ons lives in localStorage; their code in Cache Storage (localStorage holds only
+// 5 MB for the whole site, shared with any other page on the same address).
+const CODE_CACHE = 'salotto-addon-data';
+const codeUrl = (id) => new URL('__addon-code/' + encodeURIComponent(id), location.href).href;
+async function putCode(id, code) {
+  try {
+    if (!self.caches) return false;
+    await (await caches.open(CODE_CACHE)).put(codeUrl(id), new Response(code, { headers: { 'Content-Type': 'text/javascript' } }));
+    return true;
+  } catch { return false; }
+}
+async function dropCode(id) { try { if (self.caches) await (await caches.open(CODE_CACHE)).delete(codeUrl(id)); } catch { /* ignore */ } }
+async function getCode(rec) {
+  if (rec.code) return rec.code;
+  try {
+    const r = self.caches && await (await caches.open(CODE_CACHE)).match(codeUrl(rec.manifest.id));
+    if (r) return await r.text();
+  } catch { /* fetched again below */ }
+  // the browser cleared it: download it again from where it came from
+  if (rec.manifestUrl) {
+    const m = JSON.parse(await fetchText(rec.manifestUrl));
+    const code = await fetchText(new URL(m.main, rec.manifestUrl).href);
+    putCode(rec.manifest.id, code);
+    return code;
+  }
+  throw new Error("Il codice dell'add-on non c'è più: reinstallalo");
+}
+
+/** How much of localStorage this site uses: { salotto, other, biggest: [[key, bytes]] }. */
+export function storageUsage() {
+  let salotto = 0, other = 0;
+  const all = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      const n = (k.length + (localStorage.getItem(k) || '').length) * 2;
+      all.push([k, n]);
+      if (k.startsWith('salotto:')) salotto += n; else other += n;
+    }
+  } catch { /* unavailable */ }
+  return { salotto, other, biggest: all.sort((a, b) => b[1] - a[1]).slice(0, 5) };
+}
+const kb = (n) => Math.round(n / 1024) + ' KB';
+export function storageFullMessage() {
+  const u = storageUsage();
+  return `Spazio di archiviazione del browser esaurito (Salotto ${kb(u.salotto)}, altre pagine dello stesso sito ${kb(u.other)}). Più grandi: ` +
+    u.biggest.map(([k, n]) => k + ' ' + kb(n)).join(', ');
+}
+
+/** Frees what Salotto can do without: memories of list changes, old resume points. */
+function trimStorage() {
+  const sort = load('sort', null);
+  if (sort) { for (const k of Object.keys(sort)) { delete sort[k].seen; delete sort[k].gone; } save('sort', sort); }
+  const resume = load('resume', null);
+  if (resume) { const keys = Object.keys(resume); for (const k of keys.slice(0, Math.max(0, keys.length - 50))) delete resume[k]; save('resume', resume); }
+}
+
 function readInstalled() { return load('addons', {}); }
 function writeInstalled(map) {
-  if (!save('addons', map)) throw new Error('Spazio di archiviazione esaurito');
+  if (!save('addons', map)) {
+    trimStorage();
+    if (!save('addons', map)) {
+      console.warn(storageFullMessage());
+      throw new Error(storageFullMessage());
+    }
+  }
   emit();
+}
+
+/** Moves the code of add-ons installed by older versions out of localStorage. */
+async function migrateCode() {
+  const map = readInstalled();
+  let changed = false;
+  for (const rec of Object.values(map)) {
+    if (rec.code && await putCode(rec.manifest.id, rec.code)) { delete rec.code; changed = true; }
+  }
+  if (changed) save('addons', map);
 }
 
 export function listInstalled() {
@@ -115,14 +188,15 @@ export async function installFromManifestUrl(manifestUrl, { source = 'url' } = {
   return installRaw(absolutize(manifest, abs), code, { source, manifestUrl: abs });
 }
 
-export function installRaw(manifest, code, { source = 'local', manifestUrl = '' } = {}) {
+export async function installRaw(manifest, code, { source = 'local', manifestUrl = '' } = {}) {
   const errs = validateManifest(manifest);
   if (errs.length) throw new Error('Manifest non valido: ' + errs.join(', '));
   const map = readInstalled();
   const prev = map[manifest.id];
+  const stored = await putCode(manifest.id, code);
   map[manifest.id] = {
     manifest,
-    code,
+    ...(stored ? {} : { code }),
     source,
     manifestUrl,
     enabled: prev ? prev.enabled !== false : true,
@@ -140,6 +214,7 @@ export function uninstall(id) {
   delete map[id];
   stopHost(id);
   writeInstalled(map);
+  dropCode(id);
 }
 
 export function setEnabled(id, enabled) {
@@ -198,6 +273,7 @@ export function compareVersions(a, b) {
 const BUNDLED_BEFORE_0_15 = ['plugin.video.demo', 'plugin.video.archive', 'plugin.video.iptv', 'plugin.audio.radiobrowser', 'plugin.audio.podcast'];
 export async function ensureBundledAddons() {
   const firstRun = !load('bundled-installed', false);
+  await migrateCode().catch(() => {});
   try {
     const repo = await fetchRepository('addons/repository.json');
     // add-ons added to the app later are installed once too (one removed by the user stays removed)
@@ -237,7 +313,9 @@ class AddonHost {
       for (const p of this.pending.values()) p.reject(err);
       this.pending.clear();
     };
-    this.worker.postMessage({ type: 'init', code: record.code, manifest: record.manifest, proxy: proxyUrl });
+    getCode(record).then(
+      code => this.worker.postMessage({ type: 'init', code, manifest: record.manifest, proxy: proxyUrl }),
+      err => this._readyReject(err));
   }
 
   setProxy(p) { this.worker.postMessage({ type: 'proxy', proxy: p }); }

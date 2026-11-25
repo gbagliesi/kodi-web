@@ -30,8 +30,8 @@ const RAI = {
   '/index.json': { contents: [
     { name: 'Hero', type: 'RaiPlay Hero Block', contents: [{ path_id: '/programmi/libera.json', name: 'Hero' }] },
     { name: 'Da non perdere', type: 'RaiPlay Slider Block', header: { label: 'Da non perdere' }, contents: [
-      { path_id: '/programmi/libera.json', name: 'Serie libera', images: IMG },
-      { path_id: '/programmi/chiusa.json', name: 'Fiction con accesso', images: IMG },
+      { path_id: '/programmi/libera.json', name: 'Serie libera', images: IMG, login_required: false },
+      { path_id: '/programmi/chiusa.json', name: 'Fiction con accesso', images: IMG, login_required: true },
     ] },
   ] },
   '/programmi/libera.json': { name: 'Serie libera', first_item_path: '/video/2025/01/ep1.json', blocks: [{ name: 'Episodi', sets: [
@@ -119,6 +119,21 @@ try {
   assert.deepEqual(await page.evaluate(() => window.__opened), ['https://www.raiplay.it/video/2025/02/f1.html']);
   assert.equal(await page.isVisible('#player'), false);
   console.log('✓ RaiPlay: catalogue rows; programmes behind RaiPlay\'s sign-in open on raiplay.it');
+
+  // «Si guarda in Salotto»: only the programmes RaiPlay shows without signing in
+  await page.goto(BASE + '#/browse/plugin.video.raiplay');
+  await page.click('.row:has-text("Si guarda in Salotto")');
+  await page.waitForSelector('.row:has-text("1 programmi")', { timeout: 15000 });
+  assert.match(await page.textContent('.row:has-text("1 programmi")'), /In evidenza/);
+  await page.click('.row:has-text("1 programmi")');
+  await page.waitForSelector('.card:has-text("Serie libera")');
+  assert.equal(await page.locator('.card:has-text("Fiction con accesso")').count(), 0, 'locked programmes left out');
+  // and the other rows say which ones start here
+  await page.goto(BASE + '#/browse/plugin.video.raiplay?p=' + encodeURIComponent('block:/index.json|1'));
+  await page.waitForSelector('.card:has-text("Serie libera")');
+  assert.match(await page.textContent('.card:has-text("Serie libera")'), /Si guarda in Salotto/);
+  assert.match(await page.textContent('.card:has-text("Fiction con accesso")'), /serve l'accesso/);
+  console.log('✓ RaiPlay: «Si guarda in Salotto» lists the free programmes; rows marked');
 
   // search → programme with two seasons → episode with subtitles
   await page.goto(BASE + '#/browse/plugin.video.raiplay');

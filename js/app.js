@@ -1156,8 +1156,14 @@ async function renderRepo() {
   if (!location.hash.startsWith('#/addons/repo')) return;
   const sections = [];
   if (!workerRepo) sections.push(h('div', { class: 'empty' }, 'Gli add-on privati arrivano dal tuo Worker: imposta indirizzo e token del proxy in Impostazioni.'));
+  // an add-on already offered by the Worker is not listed again by the public repository
+  const shown = new Set(workerRepo && !results[0].error ? results[0].addons.map(a => a.id) : []);
   for (const [i, r] of results.entries()) {
     const isWorker = workerRepo && i === 0;
+    if (!isWorker && !r.error) {
+      r.addons = r.addons.filter(a => !shown.has(a.id));
+      if (!r.addons.length) continue;
+    }
     sections.push(h('div', { class: 'section-title' }, isWorker ? (r.name || 'Add-on del Worker') : (r.name || r.url)));
     if (r.error) {
       const removable = !isWorker && repos.indexOf(all[i]) > 0;

@@ -34,6 +34,14 @@
       "icon": "plugin.video.la7/icon.svg"
     },
     {
+      "id": "plugin.video.mediaset",
+      "name": "Mediaset Infinity",
+      "version": "1.0.0",
+      "description": "Il catalogo di Mediaset Infinity, da sfogliare in Salotto (i video si aprono sul sito)",
+      "manifest": "plugin.video.mediaset/addon.json",
+      "icon": "plugin.video.mediaset/icon.svg"
+    },
+    {
       "id": "plugin.video.iptv",
       "name": "TV in diretta",
       "version": "1.5.0",

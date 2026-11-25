@@ -9,6 +9,9 @@
  *
  * Usage:  node server.js [--port 8787] [--host 0.0.0.0]
  * Env:    PROXY_TOKEN=secret   require ?token=secret on every proxy call
+ *         ADDONS_DIR=dir       serve /addons/ from this folder (a checkout of the private add-on
+ *                              repository); default ../salotto-addons when it exists, otherwise
+ *                              the public addons/ folder of this project
  *         ALLOW_PRIVATE=1      allow proxying to LAN addresses (off by default)
  */
 'use strict';
@@ -27,6 +30,10 @@ const HOST = arg('host', process.env.HOST || '0.0.0.0');
 const ROOT = __dirname;
 const TOKEN = process.env.PROXY_TOKEN || '';
 const ALLOW_PRIVATE = process.env.ALLOW_PRIVATE === '1';
+const ADDONS_DIR = (() => {
+  const dir = path.resolve(process.env.ADDONS_DIR || path.join(ROOT, '..', 'salotto-addons'));
+  return fs.existsSync(path.join(dir, 'repository.json')) ? dir : '';
+})();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -130,8 +137,11 @@ async function handleProxy(req, res, q) {
 function serveStatic(req, res, pathname) {
   let rel = decodeURIComponent(pathname);
   if (rel.endsWith('/')) rel += 'index.html';
-  const file = path.normalize(path.join(ROOT, rel));
-  if (!file.startsWith(ROOT + path.sep) || /[\\/]\.|node_modules|[\\/]tests[\\/]/.test(file.slice(ROOT.length))) {
+  // the private add-ons, when their repository is checked out next to this one
+  const base = ADDONS_DIR && rel.startsWith('/addons/') ? ADDONS_DIR : ROOT;
+  if (base !== ROOT) rel = rel.slice('/addons'.length);
+  const file = path.normalize(path.join(base, rel));
+  if (!file.startsWith(base + path.sep) || /[\\/]\.|node_modules|[\\/]tests[\\/]/.test(file.slice(base.length))) {
     res.writeHead(404).end('not found'); return;
   }
   fs.stat(file, (err, st) => {

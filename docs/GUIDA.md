@@ -148,8 +148,11 @@ WebM, MP3, HLS `.m3u8`).
 
 ## 4. Gli add-on
 
-Gli add-on inclusi si installano da soli al primo avvio e si aggiornano da
-soli quando esce una versione nuova.
+Gli add-on stanno in un repository privato e arrivano dal Worker: si vedono
+solo con indirizzo e token del proxy impostati (punto 2). In **🧩 Add-on** →
+**Sfoglia repository** scegli quali installare («Add-on del Worker», in cima);
+quelli installati si aggiornano da soli quando esce una versione nuova. Senza
+token resta solo «Video di prova».
 
 | Add-on | Sezione | Cosa fa | Proxy |
 |---|---|---|---|

@@ -5,6 +5,7 @@
 // Run: NODE_PATH=$(npm root -g) node tests/sync.mjs   (SHOTS=dir saves screenshots)
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { ADDONS } from './addons-dir.mjs';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';

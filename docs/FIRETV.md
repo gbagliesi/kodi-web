@@ -23,9 +23,17 @@ tienilo premuto con il tasto ☰ per spostarlo in prima fila.
 
 ## Da sapere
 
-- **Proxy:** come su Chrome, i canali Rai e altri canali "solo Italia" passano dal
-  proxy Cloudflare. Inseriscilo in **Opzioni** dentro l'app (indirizzo e token),
-  perché le impostazioni non sono condivise con gli altri dispositivi.
+- **Proxy e sincronizzazione:** come su Chrome, i canali Rai e altri canali
+  "solo Italia" passano dal proxy Cloudflare. Al primo avvio apri **Opzioni**
+  dentro l'app e inserisci indirizzo e token del proxy, poi **Salva** (guida:
+  [GUIDA.md, punto 2](GUIDA.md#2-primo-avvio-proxy-e-sincronizzazione)).
+  Indirizzo e token vanno scritti anche qui, perché non passano da un
+  dispositivo all'altro; preferiti, add-on, chiave di YouTube e il resto
+  arrivano poi da soli con la sincronizzazione.
+- **Scrivere indirizzo e token:** seleziona il campo, premi OK e usa la
+  tastiera sullo schermo. Va fatto una volta sola.
+- **Preferiti:** seleziona un canale o un elemento e premi ☰ per aggiungerlo
+  o toglierlo dai preferiti (negli elenchi anche ▶ porta alla stellina ☆).
 - **Telecomando nel lettore:** con i comandi nascosti ▲▼ cambiano canale, ◀▶
   vanno indietro/avanti, OK mostra i comandi. Con i comandi visibili le frecce si
   muovono tra i pulsanti (anche quelli in alto, come l'elenco canali). Cambiando
@@ -33,6 +41,12 @@ tienilo premuto con il tasto ☰ per spostarlo in prima fila.
   tempo ◀ torna indietro di 10 s e ▶ porta sul pulsante LIVE (OK = torna in diretta). Il tasto ☰
   apre l'elenco canali; dal primo canale ▲ porta al campo "Numero" (OK per scriverlo). Indietro: chiude l'elenco, poi nasconde i comandi, poi
   chiude il lettore.
+- **Telecomando dal cellulare:** **Opzioni → Collega il cellulare** mostra il
+  codice QR da inquadrare con il telefono ([TELECOMANDO.md](TELECOMANDO.md)).
+- **Sottotitoli:** quelli del canale sì; quelli generati dal computer no
+  (servono un Mac o un PC).
+- **YouTube:** OK = pausa, ◀▶ = indietro/avanti 10 s, ▲ = barra, Indietro =
+  chiudi.
 - **Menu a sinistra:** ▲▼ restano nel menu; per passare alla pagina usa ▶ e per
   tornare al menu ◀.
 - **Campi di testo (Opzioni):** OK per scrivere; le frecce ◀▶ escono dal campo

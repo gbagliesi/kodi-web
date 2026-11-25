@@ -1,7 +1,7 @@
 {
   "id": "plugin.video.youtube",
   "name": "YouTube",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": "Salotto",
   "summary": "Cerca e guarda i video di YouTube con il lettore ufficiale",
   "description": "Ricerca di video, canali e playlist, video di tendenza in Italia, dirette e i tuoi canali preferiti. I video si guardano con il lettore ufficiale di YouTube incorporato (pubblicità comprese). Per cercare e sfogliare serve una chiave gratuita della YouTube Data API (vedi le impostazioni); senza chiave puoi aprire un link YouTube e vedere gli ultimi video dei canali salvati (questo passa dal proxy).",
@@ -20,7 +20,7 @@
       "type": "text",
       "label": "Chiave API (YouTube Data API v3)",
       "default": "",
-      "hint": "Gratuita: console.cloud.google.com → nuovo progetto → Libreria → «YouTube Data API v3» → Abilita → Credenziali → Crea credenziali → Chiave API. Limitala a «Siti web» https://gbagliesi.github.io/* e all'API YouTube Data. Resta solo in questo browser. Ogni ricerca consuma 100 delle 10.000 unità gratuite al giorno (circa 100 ricerche); sfogliare costa quasi niente."
+      "hint": "Gratuita: console.cloud.google.com → nuovo progetto → Libreria → «YouTube Data API v3» → Abilita → Credenziali → Crea credenziali → Chiave API. Limitala a «Siti web» https://gbagliesi.github.io/* e all'API YouTube Data. Con la sincronizzazione attiva passa agli altri tuoi Salotto. Istruzioni passo per passo: docs/GUIDA.md del progetto. Ogni ricerca consuma 100 delle 10.000 unità gratuite al giorno (circa 100 ricerche); sfogliare costa quasi niente."
     },
     {
       "id": "region",

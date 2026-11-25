@@ -30,27 +30,25 @@ let genStatus = '';         // what the generated subtitles are doing (shown in 
 let genText = null;         // { pieces, from, dur }
 let lagShown = false;
 
-// ---- timing of the subtitles, per video: some files are out of step with the video (a delay), or
-// made for the TV version, which runs 4% faster than the film (PAL 25 fps): «ritmo film»
-const FILM = 25 / 24;
-let sync = { d: 0, f: false };
-const loadSync = (key) => ({ d: 0, f: false, ...((key && load('subsync', {})[key]) || {}) });
+// ---- timing of the subtitles, per video: some files are a few seconds out of step with the speech
+let sync = { d: 0 };
+const loadSync = (key) => ({ d: +((key && load('subsync', {})[key]?.d) || 0) });
 function saveSync() {
   if (!item?.key) return;
   const all = load('subsync', {});
   delete all[item.key];
-  if (sync.d || sync.f) all[item.key] = sync;
+  if (sync.d) all[item.key] = sync;
   const keys = Object.keys(all);
   for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete all[k];
   save('subsync', all);
 }
-const toVideo = (t) => t * (sync.f ? FILM : 1) + sync.d;     // file time → video time
-const toFile = (t) => (t - sync.d) / (sync.f ? FILM : 1);    // video time → file time
+const toVideo = (t) => t + sync.d;     // file time → video time
+const toFile = (t) => t - sync.d;      // video time → file time
 /** Tracks the browser holds (Safari may draw them): their cues are moved to the new times. */
 function retime(track, force = false) {
   const list = track.cues;
   if (!list || !list.length) return;
-  const sig = list.length + '|' + sync.d + '|' + sync.f;
+  const sig = list.length + '|' + sync.d;
   if (!force && track.__salottoSync === sig) return;
   track.__salottoSync = sig;
   for (const c of list) {
@@ -59,7 +57,7 @@ function retime(track, force = false) {
   }
 }
 function setSync(next) {
-  sync = { d: Math.round(Math.max(-600, Math.min(600, next.d)) * 10) / 10, f: !!next.f };
+  sync = { d: Math.round(Math.max(-600, Math.min(600, next.d)) * 10) / 10 };
   saveSync();
   const t = tracks.find(x => x.id === active);
   if (t?.kind === 'tt') retime(t.ref, true);
@@ -555,8 +553,7 @@ function renderSync() {
   );
   const row2 = document.createElement('div'); row2.className = 'cc-mrow';
   row2.append(
-    btn('Ritmo film ' + (sync.f ? '✓' : ''), 'Per i film con sottotitoli fatti per la TV: l\'anticipo cresce piano piano durante il film', () => setSync({ ...sync, f: !sync.f }), sync.f),
-    btn('Azzera', 'Torna ai tempi del file', () => setSync({ d: 0, f: false })),
+    btn('Azzera', 'Torna ai tempi del file', () => setSync({ d: 0 })),
   );
   el.sync.append(h, row, row2);
 }

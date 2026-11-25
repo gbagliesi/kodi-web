@@ -7,6 +7,7 @@ import { focused } from './focus.js';
 import { load, save, getSettings } from './storage.js';
 import { buildProxyUrl } from './addons.js';
 import * as player from './player.js';
+import * as yt from './youtube.js';
 
 const KEY = 'remote';
 let handlers = null;       // set by app.js: sources(), channels(src), openChannel(src, i), navigate(route), back()
@@ -115,7 +116,8 @@ async function sendChannels(src) {
 function pressKey(key) {
   if (key === 'Back') {
     // in the player: list / info → controls → close, like a TV remote
-    if (player.isOpen() && document.getElementById('modal')?.hidden !== false) player.back(true);
+    if (yt.isOpen()) yt.back();
+    else if (player.isOpen() && document.getElementById('modal')?.hidden !== false) player.back(true);
     else handlers?.back();
     return;
   }
@@ -132,6 +134,12 @@ function pressKey(key) {
 
 async function onCommand(m) {
   const st = player.remoteState();
+  // a YouTube video: YouTube's player takes play/pause, skip and stop
+  if (yt.isOpen()) {
+    if (m.c === 'play') { yt.togglePlay(); return; }
+    if (m.c === 'skip') { yt.skip(m.s); return; }
+    if (m.c === 'stop') { yt.close(); return; }
+  }
   switch (m.c) {
     case 'zap': if (!player.zap(m.d > 0 ? 1 : -1)) send({ t: 'toast', text: 'Apri prima un canale' }); break;
     case 'tune': player.tuneTo(m.i); break;

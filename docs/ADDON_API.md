@@ -99,6 +99,7 @@ addon.register({
 | `info` | `{ plot, year, duration (secondi), genre }` |
 | `resolve` | `true` per forzare la chiamata a `resolve()` anche se c'è `url` |
 | `action` | `search` apre la ricerca, `settings` apre le impostazioni dell'add-on |
+| `youtube` | `{ video: 'ID' }` o `{ playlist: 'ID' }`: si apre nel lettore ufficiale di YouTube incorporato (anche come risposta di `resolve()`) |
 
 ### Stream restituito da `resolve()`
 

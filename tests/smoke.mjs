@@ -213,7 +213,7 @@ async function uiTests() {
     await page.goto(BASE);
     await page.waitForSelector('.hero');
     const installed = await page.evaluate(() => window.salotto.addons.listInstalled().map(a => a.manifest.id));
-    assert.equal(installed.length, 8, 'bundled add-ons installed: ' + installed);
+    assert.equal(installed.length, 9, 'bundled add-ons installed: ' + installed);
     console.log('✓ app boots and installs bundled add-ons:', installed.join(', '));
     // An outdated add-on from the official repository is updated on the next start
     await page.evaluate(() => {

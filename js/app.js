@@ -2,6 +2,7 @@ import { focused, hooks as focusHooks } from './focus.js';
 import * as store from './storage.js';
 import * as addons from './addons.js';
 import * as player from './player.js';
+import * as yt from './youtube.js';
 import * as epg from './epg.js';
 import { handleNavKey, focusables } from './nav.js';
 import { versionLabel } from './version.js';
@@ -649,10 +650,17 @@ async function pick(addonId, it, trail = [], channels) {
     location.hash = browseHash(addonId, it.path ?? '', { t: [...trail, it.label].join('␟') });
     return;
   }
+  // YouTube: straight into YouTube's own player, still inside the tap (sound on autoplay)
+  if (yt.ytOf(it)) {
+    if (player.isOpen()) player.close();
+    yt.play(it, yt.ytOf(it), { favEntry: { key: addonId + '|' + (it.path || it.url || it.id || it.label), addonId, item: it } });
+    return;
+  }
   toast('Apertura di «' + it.label + '»…', 1500);
   try {
     const r = await openEntry(addonId, it);
     // the add-on found out only now that it plays on its own site: ask, so the tap opens it
+    if (yt.ytOf(r.stream)) { yt.play(r.item, yt.ytOf(r.stream), { favEntry: r.favEntry }); return; }
     if (r.stream.external) {
       if (/^https:\/\//i.test(r.stream.external) && await confirmBox(it.label, r.stream.message || 'Questo contenuto si guarda sul suo sito.', 'Apri il sito')) window.open(r.stream.external, '_blank', 'noopener');
       return;
@@ -1176,7 +1184,7 @@ remote.init({
     const r = await entry.open();
     await player.play(r.item, r.stream, { favEntry: r.favEntry, channels: list.length > 1 ? { list, index: i } : undefined });
   },
-  navigate: (r) => { if (['', 'live', 'guide', 'favourites', 'video', 'music', 'settings'].includes(r)) { if (player.isOpen()) player.close(); go(r); } },
+  navigate: (r) => { if (['', 'live', 'guide', 'favourites', 'video', 'music', 'settings'].includes(r)) { if (player.isOpen()) player.close(); yt.close(); go(r); } },
   back: () => { if (!window.salottoBack()) { /* already on Home */ } },
 });
 let remoteCount = 0;
@@ -1248,6 +1256,7 @@ async function renderRemote() {
 document.addEventListener('keydown', (e) => {
   const modalEl = $('modal');
   if (!modalEl.hidden && e.key === 'Escape') { modalEl._close?.(undefined); e.preventDefault(); return; }
+  if (modalEl.hidden && yt.handleKey(e)) { e.preventDefault(); return; }
   if (player.handleKey(e)) { e.preventDefault(); return; }
   const a = focused();
   const typing = a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !['checkbox', 'range', 'button'].includes(a.type)));
@@ -1298,7 +1307,7 @@ console.info('Salotto', versionLabel());
 })();
 
 // exposed for debugging / tests
-window.salotto = { addons, store, player, focusHooks };
+window.salotto = { addons, store, player, yt, focusHooks };
 
 // ---------------------------------------------------------------- Fire TV / Android TV app
 // The TV app (android/) is a window on this site: its user agent ends with "SalottoTV".
@@ -1309,6 +1318,7 @@ if (isTvApp) document.body.classList.add('tv', 'kbd-nav');
 window.salottoBack = () => {
   const m = $('modal');
   if (!m.hidden) { m._close?.(undefined); return true; }
+  if (yt.isOpen()) { yt.back(); return true; }
   if (player.isOpen()) { player.back(); return true; }
   if (location.hash && location.hash !== '#/') { history.back(); return true; }
   return false;

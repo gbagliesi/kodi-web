@@ -2,6 +2,7 @@
 // Touch and mouse work natively; this only kicks in on key presses.
 
 import { focused } from './focus.js';
+import { navScope as ytScope } from './youtube.js';
 
 const DIRS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
@@ -14,6 +15,8 @@ function visible(el) {
 function scope() {
   const modal = document.getElementById('modal');
   if (!modal.hidden) return modal;
+  const yt = ytScope();
+  if (yt) return yt;
   const player = document.getElementById('player');
   if (!player.hidden) {
     // the channel list covers part of the controls: while it has the focus, stay inside it

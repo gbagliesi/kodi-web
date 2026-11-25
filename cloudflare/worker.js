@@ -48,6 +48,7 @@
  *           add-on repository. ADDONS_REPO (variable, default gbagliesi/salotto-addons) and
  *           ADDONS_REF (default main) say which repository and branch.
  *   GET /proxy/health?token=…  -> "ok", or 401 when the token is wrong, 503 when TOKEN is unset.
+ *   GET /proxy/friends?token=<TOKEN> -> which friends' tokens the Worker sees (names, lengths).
  *
  * Setup guide: docs/CLOUDFLARE.md
  */
@@ -356,6 +357,18 @@ async function handle(request, env) {
     // without ?token= it only says the Worker is there; with one it also checks it
     if (!env.TOKEN || PUBLISHED_EXAMPLES.has(String(env.TOKEN)) || u.searchParams.has('token')) return refuse(env, u) || text('ok');
     return text('ok');
+  }
+  if (u.pathname.endsWith('/proxy/friends')) {
+    // the owner checks which friends' tokens the Worker sees: names and lengths, never the values
+    const no = refuse(env, u);
+    if (no) return no;
+    if (caller(env, u.searchParams.get('token')) !== '') return text('solo con il token del proprietario', 403);
+    const secrets = Object.keys(env).filter(k => /^TOKENS?(_|$)/i.test(k) && k !== 'TOKEN');
+    return json({
+      friends: friendTokens(env).map(f => ({ name: f.name, length: f.token.length })),
+      secrets: secrets.map(k => ({ name: k, length: typeof env[k] === 'string' ? env[k].trim().length : null, hasEquals: typeof env[k] === 'string' && env[k].includes('=') })),
+      minLength: MIN_FRIEND_TOKEN,
+    });
   }
   if (/\/remote\/(health|ws|status)$/.test(u.pathname)) return handleRemote(request, env, u);
   if (/\/sync(\/health)?$/.test(u.pathname)) return handleSync(request, env, u);

@@ -4,8 +4,8 @@
 //        "block:<json>|<n>" -> the items of row n of a page
 //        "prog:<json>"      -> a programme: its seasons / groups, or the episodes when only one
 //        "set:<json>"       -> the episodes of a season
-//        "free" / "free:<n>" -> «Si guarda in Salotto»: the programmes of each section that RaiPlay
-//                              shows without signing in (its cards say so: login_required)
+//        "free" / "free:<section>" -> «Si guarda in Salotto»: the programmes RaiPlay shows
+//                              without signing in, by section (see progFree)
 //        search             -> RaiPlay's own search
 // Videos for which RaiPlay asks to sign in (most films and series) or that are protected (DRM)
 // open on raiplay.it: Salotto does not sign in to RaiPlay and does not get around it.
@@ -41,29 +41,86 @@ const webPage = (weblink, pathId) => abs(weblink || String(pathId || '').replace
 const NOTE_LOCKED = 'Si apre su raiplay.it (RaiPlay chiede l\'accesso)';
 const NOTE_FREE = '▶ Si guarda in Salotto';
 const NOTE_LOCKED_PROG = 'Su raiplay.it (serve l\'accesso)';
-/** A section card: free to watch here? (undefined when the card doesn't say) */
-const cardFree = (c) => ('login_required' in c ? !c.login_required && !hasDrm(c.rights_management) : undefined);
-
-/** «Si guarda in Salotto»: the free programmes of every section, each in its own section. */
-async function freeList(arg, ctx) {
+// ---- «Si guarda in Salotto». A video card's login_required is right; a programme card's is not
+// (Report or Superquark say «sign in» but their episodes are free): a programme is checked on its
+// first video, in the background, and the answer is remembered on this device for a week.
+const FREE_KEY = 'free-v1';
+const RECHECK = 7 * 86400e3;
+const RESCAN = 86400e3;        // the catalogue is looked through again once a day (new programmes)
+let cache = null;              // { progs: { path: { free, at } }, at }
+let scan = null, scanDone = 0, scanTotal = 0;
+async function loadCache(ctx) {
+  if (!cache) cache = (ctx.store && await ctx.store.get(FREE_KEY).catch(() => null)) || { progs: {}, at: 0 };
+  return cache;
+}
+const saveCache = (ctx) => (ctx.store ? ctx.store.set(FREE_KEY, cache).catch(() => {}) : null);
+/** Free to watch here? true / false / undefined (not known yet) */
+function progFree(c) {
+  const known = cache && cache.progs[c.path_id];
+  if (known) return known.free;
+  if (c.login_required === false) return !hasDrm(c.rights_management);
+  return undefined;
+}
+/** Every programme card of the sections, each in its own section rather than «In evidenza». */
+async function catalogue(ctx) {
   const pages = await Promise.all(SECTIONS.map(([p, label]) => json(ctx, p).then(j => ({ j, label })).catch(() => null)));
-  const seen = new Set(), bySection = new Map();
-  // a programme belongs to its own section rather than to «In evidenza»
+  const all = new Map();
   for (const pg of [...pages.slice(1), pages[0]]) {
     if (!pg) continue;
-    for (const b of pg.j.contents || []) for (const c of b.contents || []) {
-      if (!isProg(c.path_id) || seen.has(c.path_id) || cardFree(c) !== true) continue;
-      seen.add(c.path_id);
-      if (!bySection.has(pg.label)) bySection.set(pg.label, []);
-      bySection.get(pg.label).push(c);
+    for (const b of pg.j.contents || []) {
+      if (/Hero/i.test(b.type || '')) continue; // the big banner repeats a programme of the rows
+      for (const c of b.contents || []) if (isProg(c.path_id) && !all.has(c.path_id)) all.set(c.path_id, { c, section: pg.label });
     }
   }
-  const labels = SECTIONS.map(([, l]) => l).filter(l => bySection.has(l));
-  if (arg === '') {
-    if (!labels.length) return { view: 'list', items: [{ label: 'Nessun programma trovato: riprova più tardi' }] };
-    return { view: 'list', items: labels.map((l, n) => ({ label: l, subtitle: bySection.get(l).length + ' programmi', path: 'free:' + n })) };
+  return all;
+}
+async function runScan(ctx, all) {
+  const now = Date.now();
+  const todo = [...all.values()].map(x => x.c).filter(c => c.login_required !== false && !(cache.progs[c.path_id] && now - cache.progs[c.path_id].at < RECHECK)).map(c => c.path_id);
+  scanDone = 0; scanTotal = todo.length;
+  let i = 0, sinceSave = 0;
+  const worker = async () => {
+    while (i < todo.length) {
+      const p = todo[i++];
+      try {
+        const prog = await json(ctx, p);
+        const first = prog.first_item_path ? await json(ctx, prog.first_item_path) : null;
+        cache.progs[p] = { free: !!first && !locked(first), at: Date.now() };
+      } catch { /* next time */ }
+      scanDone++;
+      if (++sinceSave >= 60) { sinceSave = 0; saveCache(ctx); }
+    }
+  };
+  await Promise.all(Array.from({ length: 8 }, worker));
+  cache.at = Date.now();
+  await saveCache(ctx);
+}
+async function freeList(arg, ctx) {
+  await loadCache(ctx);
+  const all = await catalogue(ctx);
+  if (!scan && (ctx.refresh || Date.now() - cache.at > RESCAN)) scan = runScan(ctx, all).catch(() => {}).finally(() => { scan = null; });
+  // the first time it takes about half a minute: show what is known after a few seconds
+  if (scan) await Promise.race([scan, new Promise(r => setTimeout(r, cache.at ? 0 : 9000))]);
+  const bySection = new Map();
+  for (const { c, section } of all.values()) {
+    if (progFree(c) !== true) continue;
+    if (!bySection.has(section)) bySection.set(section, []);
+    bySection.get(section).push(c);
   }
-  return { view: 'grid', items: (bySection.get(labels[Number(arg)]) || []).map(c => toItem(c)).filter(Boolean) };
+  const labels = SECTIONS.map(([, l]) => l).filter(l => bySection.has(l));
+  const again = (arg ? 'free:' + arg : 'free') + '~' + scanDone;
+  const progress = scan ? [{ label: `Sto ancora controllando il catalogo RaiPlay (${scanDone} di ${scanTotal})`, subtitle: 'Tocca qui tra poco per vedere gli altri', path: again }] : [];
+  if (!arg) {
+    return {
+      view: 'list',
+      items: [
+        ...progress,
+        ...labels.map((l, n) => ({ label: l, subtitle: bySection.get(l).length + ' programmi', path: 'free:' + l })),
+        ...(!scan && !labels.length ? [{ label: 'Nessun programma trovato: riprova più tardi', path: again }] : []),
+      ],
+    };
+  }
+  return { view: 'grid', items: [...progress, ...(bySection.get(arg) || []).map(c => toItem(c)).filter(Boolean)] };
 }
 
 /** A card of a RaiPlay row (programme or video). */
@@ -73,12 +130,12 @@ function toItem(c, lockedProg = false) {
   const sub = [c.season && c.episode ? `St ${c.season} Ep ${c.episode}` : '', c.program_name && c.episode_title ? c.program_name : (c.subtitle || '')].filter(Boolean).join(' · ');
   const base = { id: p, label, thumb: img(c.images) || abs(c.immagine), subtitle: sub || undefined, info: { plot: (c.description || c.sommario || '').slice(0, 400), duration: seconds(c.duration || c.durata) } };
   if (isProg(p)) {
-    const free = cardFree(c);
+    const free = progFree(c);
     const note = free === true ? NOTE_FREE : free === false ? NOTE_LOCKED_PROG : '';
     return { ...base, subtitle: [note, base.subtitle].filter(Boolean).join(' · ') || undefined, path: 'prog:' + p };
   }
   if (!isVideo(p)) return null;
-  if (lockedProg || hasDrm(c.rights_management)) return { ...base, subtitle: NOTE_LOCKED, external: webPage(c.weblink || c.url, p), playable: true, type: 'video' };
+  if (lockedProg || c.login_required === true || hasDrm(c.rights_management)) return { ...base, subtitle: NOTE_LOCKED, external: webPage(c.weblink || c.url, p), playable: true, type: 'video' };
   return { ...base, playable: true, type: 'video' };
 }
 
@@ -88,6 +145,7 @@ async function programme(path, ctx) {
   let first = null;
   if (p.first_item_path) first = await json(ctx, p.first_item_path).catch(() => null);
   const lockedProg = locked(first);
+  if (cache && first) { cache.progs[path] = { free: !lockedProg, at: Date.now() }; saveCache(ctx); }
   const sets = [];
   for (const b of p.blocks || []) for (const s of b.sets || []) sets.push({ block: b.name, set: s });
   if (sets.length === 1) return episodes(sets[0].set.path_id, ctx, lockedProg);
@@ -120,7 +178,8 @@ addon.register({
         ],
       };
     }
-    if (path === 'free' || path.startsWith('free:')) return freeList(path.slice(5), ctx);
+    await loadCache(ctx);
+    if (/^free(:|~|$)/.test(path)) return freeList(path.replace(/~\d*$/, '').slice(5), ctx);
     const i = path.indexOf(':');
     const kind = path.slice(0, i), arg = path.slice(i + 1);
     if (kind === 'page') {
@@ -143,6 +202,7 @@ addon.register({
   },
 
   async search(text, ctx) {
+    await loadCache(ctx);
     const body = { ...SEARCH_TEMPLATES, params: { param: text, from: null, sort: 'relevance', onlyVideoQuery: false } };
     const r = await ctx.http.post(SEARCH_URL, body, { headers: { 'Content-Type': 'application/json' }, type: 'json' });
     const agg = (r && r.agg) || {};

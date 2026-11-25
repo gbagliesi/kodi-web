@@ -20,7 +20,7 @@
     {
       "id": "plugin.video.raiplay",
       "name": "RaiPlay",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "description": "Programmi, film e serie on demand di RaiPlay, con i sottotitoli ufficiali",
       "manifest": "plugin.video.raiplay/addon.json",
       "icon": "plugin.video.raiplay/icon.svg"

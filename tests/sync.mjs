@@ -69,13 +69,21 @@ async function unit() {
   assert.ok(r.body.entries['fav/a'].t <= Date.now());
   r = await send({ since: 4, changes: [{ id: 'fav/a', v: { key: 'a', again: 1 }, t: Date.now() }] });
   assert.equal(r.body.entries['fav/a'].v.again, 1, 're-added after a far-future delete');
+  // weak: fills a gap or a deletion, never replaces a shared value (the losing value is kept in history)
+  r = await send({ since: 0, changes: [{ id: 'astore/x/list', v: [1], t: Date.now(), weak: true }] });
+  assert.deepEqual(r.body.entries['astore/x/list'].v, [1]);
+  r = await send({ since: 0, changes: [{ id: 'astore/x/list', v: [], t: Date.now(), weak: true }] });
+  assert.deepEqual(r.body.entries['astore/x/list'].v, [1], 'weak loses against a value');
+  await send({ since: 0, changes: [{ id: 'astore/x/list', v: null, t: Date.now() }] });
+  r = await send({ since: 0, changes: [{ id: 'astore/x/list', v: [2], t: Date.now() - 60000, weak: true }] });
+  assert.deepEqual(r.body.entries['astore/x/list'].v, [2], 'weak wins against a deletion');
   // groups are separate
   r = await send({ since: 0, changes: [] }, 'token=tok&group=bambini');
   assert.deepEqual(r.body.entries, {});
   // device from before a reset (since > rev) gets everything
   r = await send({ since: 999, changes: [] });
   assert.equal(r.body.full, true);
-  assert.equal(Object.keys(r.body.entries).length, 3);
+  assert.equal(Object.keys(r.body.entries).length, 4);
   // too big values are refused one by one
   r = await send({ since: 5, changes: [{ id: 'big', v: 'x'.repeat(70000), t: Date.now() }] });
   assert.equal(r.body.entries.big, undefined);
@@ -214,6 +222,18 @@ async function ui() {
     await b.evaluate((f) => window.salotto.store.toggleFavourite(f), fav('auto', 'Da solo'));
     await waitFor(async () => { await syncNow(a); return (await favKeys(a)).includes('auto'); }, 15000, 'auto push');
     console.log('✓ changes go out by themselves');
+    // Giuseppe's case: an old deletion of the channels on the Worker, then channels added again here
+    const CH = 'astore/plugin.video.youtube/channels';
+    const st = await a.evaluate(() => JSON.parse(localStorage.getItem('salotto:sync-state')).rev);
+    await send({ since: st, changes: [{ id: CH, v: null, t: Date.now() }] });
+    await a.evaluate(() => caches.delete('salotto-addon-data'));
+    await syncNow(a);
+    await a.evaluate(() => window.salotto.addons.writeAddonStore('plugin.video.youtube', 'channels', [{ id: 'UCnuovo', title: 'Nuovo' }]));
+    await syncNow(a); await syncNow(a);
+    assert.deepEqual(await a.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels')), [{ id: 'UCnuovo', title: 'Nuovo' }], 'channels added after an old deletion stay');
+    await syncNow(b);
+    assert.deepEqual(await b.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels')), [{ id: 'UCnuovo', title: 'Nuovo' }], 'and reach the other devices');
+    console.log('✓ channels added again after an old deletion stay and travel');
     // «Forza aggiornamento» keeps what add-ons saved
     await a.goto(BASE + '#/settings');
     await a.click('text=Forza aggiornamento');

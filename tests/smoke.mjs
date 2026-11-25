@@ -96,6 +96,13 @@ const FAKE_CAST = `(() => {
 async function mock(context) {
   await context.route(BASE + 'epg/it.json', r => r.fulfill({ status: 200, contentType: 'application/json', body: GUIDE }));
   await context.route(/^https:\/\/(raw\.githubusercontent\.com|iptv-org\.github\.io)\//, r => r.fulfill({ status: 200, contentType: 'audio/x-mpegurl', body: M3U.replace('#EXTM3U', `#EXTM3U x-tvg-url="https://epg.example.org/epg_DE1.xml.gz, https://epg.example.org/epg_IT1.xml, https://epg.example.org/epg_US1.xml.gz"`), headers: { 'access-control-allow-origin': '*' } }));
+  // Rai regional streams: Toscana and Bolzano on air, the others switched off (chunk list 404)
+  await context.route(/^https:\/\/tgr\w+-live\.akamaized\.net\//, r => {
+    const u = r.request().url();
+    const on = /tgr(toscana|bolzano)-/.test(u);
+    if (/playlist\.m3u8$/.test(u)) return r.fulfill({ status: 200, contentType: 'application/x-mpegURL', headers: { 'access-control-allow-origin': '*' }, body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2000000\n../../../1/x/x/x_1300/chunklist.m3u8\n' });
+    return r.fulfill({ status: on ? 200 : 404, contentType: 'application/x-mpegURL', headers: { 'access-control-allow-origin': '*' }, body: on ? '#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\na.ts\n' : '' });
+  });
   await context.route('https://epg.example.org/**', r => r.request().url().endsWith('/epg_IT1.xml') ? r.fulfill({ status: 200, contentType: 'application/xml', body: EPG, headers: { 'access-control-allow-origin': '*' } }) : r.fulfill({ status: 404, body: '' }));
   await context.route('https://de1.api.radio-browser.info/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(RADIO), headers: { 'access-control-allow-origin': '*' } }));
   await context.route('https://archive.org/advancedsearch.php**', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ response: { numFound: 1, docs: [{ identifier: 'film1', title: 'Film di prova', year: 1950, description: '<b>Trama</b>' }] } }) }));
@@ -310,9 +317,23 @@ async function uiTests() {
     await page.waitForSelector('.row:has-text("Digitale terrestre Italia")');
     await page.click('.row:has-text("TGR regionali")');
     await page.waitForSelector('.row:has-text("TGR Puglia")');
-    await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+    assert.match(await page.locator('.row:has-text("TGR Toscana")').first().textContent(), /In onda ora/);
+    assert.match(await page.locator('.row:has-text("TGR Puglia")').first().textContent(), /Spento ora/);
+    assert.match(await page.locator('.row:has-text("TGR Bolzano")').first().textContent(), /Sempre acceso/);
+    assert.match(await page.locator('.empty').first().textContent(), /In onda ora: 1 TG regionali/);
+    await page.click('.row:has-text("TGR Puglia")');
+    await page.waitForSelector('.toast:has-text("non è in onda adesso")');
+    await page.click('.row:has-text("Ultime edizioni")');
+    await page.waitForSelector('.row:has-text("TGR Lazio")');
     await page.click('.row:has-text("TGR Toscana")');
+    await page.waitForSelector('.row:has-text("Apri la pagina su rainews.it")');
+    await page.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; }; });
+    await page.click('.row:has-text("Apri la pagina su rainews.it")');
     assert.deepEqual(await page.evaluate(() => window.__opened), ['https://www.rainews.it/tgr/toscana']);
+    await page.goBack();
+    await page.goBack();
+    await page.waitForSelector('.row:has-text("TGR Puglia")');
+    console.log('✓ TGR: regional streams with on-air state, editions page');
     await page.goBack();
     await page.waitForSelector('.row:has-text("Digitale terrestre Italia")');
     await page.click('.row:has-text("Digitale terrestre Italia")');

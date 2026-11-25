@@ -13,11 +13,151 @@ const PRESETS = [
   { name: 'Canali italiani (iptv-org)', url: 'https://iptv-org.github.io/iptv/countries/it.m3u', note: 'Elenco più ampio, include canali regionali e locali' },
 ];
 
-// Regional news (TGR) has no open feed: these open the edition page on rainews.it.
-const TGR = [
-  { label: 'TGR Toscana', url: 'https://www.rainews.it/tgr/toscana' },
-  { label: 'TGR Puglia', url: 'https://www.rainews.it/tgr/puglia' },
-];
+// ---------------------------------------------------------------- TGR (Rai regional news)
+// Rai streams each region's Rai 3 on its own CDN (tgr<region>-live.akamaized.net). Checked
+// 2026-11-25: Bolzano, Trento and Friuli Venezia Giulia (also the Slovenian «FJK» channel) are
+// on all day; the other regions are switched on only around their newscasts — the playlist
+// stays, but its chunk list answers 404 in between. Lazio has no stream of its own.
+// The past editions come from rainews.it (each region's «notiziari» page, through the proxy).
+const TGR_REGIONS = [
+  // [label, rainews slug, live stream name, Akamai id]
+  ['Abruzzo', 'abruzzo', 'abruzzo', 2025558],
+  ['Basilicata', 'basilicata', 'basilicata', 2025559],
+  ['Bolzano (Alto Adige)', 'bolzano', 'bolzano', 2025560, true],
+  ['Calabria', 'calabria', 'calabria', 2025561],
+  ['Campania', 'campania', 'campania', 2025562],
+  ['Emilia-Romagna', 'emiliaromagna', 'emiliaromagna', 2025563],
+  ['Friuli Venezia Giulia', 'fvg', 'friuli', 2025564, true],
+  ['FJK (in sloveno)', 'fjk', 'friulibis', 2025579, true],
+  ['Lazio', 'lazio', '', 0],
+  ['Liguria', 'liguria', 'liguria', 2025565],
+  ['Lombardia', 'lombardia', 'lombardia', 2025566],
+  ['Marche', 'marche', 'marche', 2025567],
+  ['Molise', 'molise', 'molise', 2025568],
+  ['Piemonte', 'piemonte', 'piemonte', 2025569],
+  ['Puglia', 'puglia', 'puglia', 2025570],
+  ['Sardegna', 'sardegna', 'sardegna', 2025572],
+  ['Sicilia', 'sicilia', 'sicilia', 2025573],
+  ['Toscana', 'toscana', 'toscana', 2025574],
+  ['Trento', 'trento', 'trento', 2025575, true],
+  ['Umbria', 'umbria', 'umbria', 2025576],
+  ["Valle d'Aosta", 'vda', 'valdaosta', 2025577],
+  ['Veneto', 'veneto', 'veneto', 2025578],
+].map(([name, slug, live, id, allDay]) => ({ name, slug, live, id, allDay: !!allDay }));
+const TGR_HOURS = 'alle 14:00 e alle 19:30, nei feriali anche Buongiorno Regione alle 7:40';
+const tgrStream = (r) => `https://tgr${r.live}-live.akamaized.net/hls/live/${r.id}/tgr${r.live}/tgr${r.live}/playlist.m3u8`;
+const tgrPage = (r) => 'https://www.rainews.it/tgr/' + r.slug;
+
+/** Is the region's stream on air now? true / false / null (could not tell). Kept a minute. */
+const onAirCache = new Map();
+async function tgrOnAir(r, ctx) {
+  const hit = onAirCache.get(r.live);
+  if (hit && Date.now() - hit.at < 60e3) return hit.on;
+  let on = null;
+  try {
+    const master = tgrStream(r);
+    const text = await ctx.http.text(master, { timeout: 6000 });
+    const line = text.split(/\r?\n/).find(l => l && !l.startsWith('#'));
+    if (line) {
+      try { await ctx.http.text(new URL(line, master).href, { timeout: 6000 }); on = true; }
+      catch (e) { if (/HTTP 40[34]/.test(e.message)) on = false; }
+    }
+  } catch (e) { if (/HTTP 40[34]/.test(e.message)) on = false; }
+  onAirCache.set(r.live, { on, at: Date.now() });
+  return on;
+}
+
+function tgrLiveItem(r, on) {
+  const sub = r.allDay ? (on === false ? 'Non risponde in questo momento' : 'Sempre acceso: Rai 3 con i programmi regionali')
+    : on === true ? '● In onda ora'
+      : on === false ? 'Spento ora · si accende durante il TG regionale (' + TGR_HOURS + ')'
+        : 'Si accende durante il TG regionale (' + TGR_HOURS + ')';
+  return {
+    key: 'tgr:' + r.live,
+    label: 'TGR ' + r.name + (on === true && !r.allDay ? ' ●' : ''),
+    subtitle: sub,
+    note: 'Solo dall\'Italia',
+    url: tgrStream(r),
+    mime: 'application/vnd.apple.mpegurl',
+    playable: true, live: true, type: 'video', resolve: true,
+    tgr: r.live,
+  };
+}
+
+const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+const decodeHtml = (s) => String(s || '').replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e) => (
+  e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : (ENT[e.toLowerCase()] ?? m)));
+
+/** The editions listed on a region's «notiziari» page of rainews.it (newest first). */
+const editionsCache = new Map();
+async function tgrEditions(r, ctx) {
+  const hit = editionsCache.get(r.slug);
+  if (hit && Date.now() - hit.at < 15 * 60e3) return hit.list;
+  if (!ctx.http.proxied('https://www.rainews.it/').includes('url=')) return null; // no proxy set
+  const html = decodeHtml(await ctx.http.text(tgrPage(r) + '/notiziari', { viaProxy: true, timeout: 30000 }));
+  const seen = new Set();
+  const list = [];
+  for (const chunk of html.split('{"uniquename":"ContentItem-').slice(1)) {
+    const get = (k) => { const m = new RegExp('"' + k + '":"([^"]*)"').exec(chunk); return m ? m[1] : ''; };
+    const url = (/"content_url":"(https:\/\/mediapolisvod\.rai\.it\/relinker\/[^"]+)"/.exec(chunk) || [])[1];
+    const link = get('link');
+    const kind = get('data_type');
+    if (!url || !link.startsWith('/tgr/' + r.slug + '/notiziari/') || seen.has(link)) continue;
+    seen.add(link);
+    const show = (/"broadcast":\{"name":"([^"]*)"/.exec(chunk) || [])[1] || 'TGR';
+    const hour = (/"hour":"([^"]*)"/.exec(chunk) || [])[1] || '';
+    const iso = get('edizioneIso') || get('dateIso') || get('date');
+    list.push({ show, hour, iso, url, kind, duration: get('duration'), page: 'https://www.rainews.it' + link });
+  }
+  list.sort((a, b) => String(b.iso).localeCompare(String(a.iso)));
+  editionsCache.set(r.slug, { list, at: Date.now() });
+  return list;
+}
+
+function editionItem(r, e) {
+  const d = e.iso ? new Date(e.iso.replace(/\+0000$/, 'Z')) : null;
+  const day = d && !isNaN(d) ? d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Rome' }) : '';
+  const audio = e.kind === 'audio';
+  return {
+    label: (e.show === 'TGR' ? 'TGR ' + r.name : e.show) + (e.hour ? ' delle ' + e.hour : ''),
+    subtitle: [day, e.duration && e.duration.replace(/^00:/, '') + (audio ? ' · solo audio' : '')].filter(Boolean).join(' · '),
+    url: e.url,
+    mime: audio ? undefined : 'application/vnd.apple.mpegurl',
+    playable: true, type: audio ? 'audio' : 'video', resolve: false,
+    info: { plot: 'Da rainews.it' },
+  };
+}
+
+async function tgrList(path, ctx) {
+  if (path === 'tgr') {
+    const lives = TGR_REGIONS.filter(r => r.live);
+    const states = await Promise.all(lives.map(r => Promise.race([tgrOnAir(r, ctx), new Promise(res => setTimeout(() => res(null), 7000))])));
+    const n = states.filter((on, i) => on && !lives[i].allDay).length;
+    return {
+      view: 'list',
+      message: n ? `In onda ora: ${n} TG regionali (●).` : 'I canali regionali si accendono solo durante i TG (' + TGR_HOURS + '); Bolzano, Trento e Friuli Venezia Giulia sono sempre accesi.',
+      items: [
+        { label: 'Ultime edizioni (on demand)', subtitle: 'I notiziari già andati in onda, regione per regione · da rainews.it', path: 'tgr/ed' },
+        ...lives.map((r, i) => tgrLiveItem(r, states[i])),
+      ],
+    };
+  }
+  if (path === 'tgr/ed') {
+    return { view: 'list', items: TGR_REGIONS.map(r => ({ label: 'TGR ' + r.name, subtitle: 'Ultime edizioni', path: 'tgr/ed/' + r.slug })) };
+  }
+  const r = TGR_REGIONS.find(x => 'tgr/ed/' + x.slug === path);
+  if (!r) return { view: 'list', items: [] };
+  let list = null, problem = '';
+  try { list = await tgrEditions(r, ctx); } catch (e) { problem = e.message; }
+  const site = { label: 'Apri la pagina su rainews.it', subtitle: tgrPage(r), external: tgrPage(r), playable: true, type: 'video' };
+  if (list === null && !problem) {
+    return { view: 'list', message: 'Per elencare le edizioni serve il proxy (Impostazioni › Proxy): rainews.it non si lascia leggere da altri siti.', items: [site] };
+  }
+  if (!list || !list.length) {
+    return { view: 'list', message: problem ? 'rainews.it non ha risposto: ' + problem : 'Nessuna edizione trovata su rainews.it.', items: [site] };
+  }
+  return { view: 'list', items: [...list.slice(0, 40).map(e => editionItem(r, e)), site] };
+}
 
 function playlistsFromSettings(ctx) {
   const presets = ctx.settings.presets === false ? [] : PRESETS.map(p => ({ ...p, preset: true }));
@@ -309,9 +449,7 @@ function listMeta(meta, pl, group) {
 addon.register({
   async list(path, ctx) {
     const pls = playlistsFromSettings(ctx);
-    if (path === 'tgr') {
-      return { view: 'list', items: TGR.map(t => ({ label: t.label, subtitle: 'Ultima edizione · si apre su rainews.it', external: t.url, playable: true, type: 'video' })) };
-    }
+    if (path === 'tgr' || path.startsWith('tgr/')) return tgrList(path, ctx);
     if (!path) {
       if (!pls.length) {
         return {
@@ -326,7 +464,7 @@ addon.register({
           view: 'list',
           items: [
             ...pls.map((p, i) => ({ label: p.name, subtitle: p.note || p.url, path: 'p/' + i })),
-            ...(ctx.settings.presets === false ? [] : [{ label: 'TGR regionali (Rai)', subtitle: TGR.map(t => t.label.replace('TGR ', '')).join(', ') + ' · ultime edizioni', path: 'tgr' }]),
+            ...(ctx.settings.presets === false ? [] : [{ label: 'TGR regionali (Rai)', subtitle: 'Il TG della tua regione in diretta quando va in onda, e le ultime edizioni', path: 'tgr' }]),
             { label: 'Aggiungi una playlist…', subtitle: 'Impostazioni dell\'add-on', action: 'settings' },
           ],
         };
@@ -371,7 +509,17 @@ addon.register({
   },
 
   // Channels that need special headers (Referer, User-Agent) must go through the proxy.
-  async resolve(item) {
+  async resolve(item, ctx) {
+    if (item.tgr) {
+      const r = TGR_REGIONS.find(x => x.live === item.tgr);
+      if (r && !r.allDay) {
+        onAirCache.delete(r.live);
+        if (await tgrOnAir(r, ctx) === false) {
+          throw new Error(`TGR ${r.name} non è in onda adesso: Rai accende il canale regionale solo durante il TG (${TGR_HOURS}). Le edizioni già trasmesse sono in «Ultime edizioni».`);
+        }
+      }
+      return { url: item.url, mime: item.mime };
+    }
     return { url: item.url, mime: item.mime, headers: item.headers, proxy: !!item.headers };
   },
 });

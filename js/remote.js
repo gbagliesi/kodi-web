@@ -399,10 +399,16 @@ function renderGuide() {
 
 // ---------------------------------------------------------------- sheets
 function openSheet(...nodes) {
+  if (onSheetClose) { const f = onSheetClose; onSheetClose = null; f(); }
   $('r-sheet-body').replaceChildren(...nodes);
   $('r-sheet').hidden = false;
 }
-function closeSheet() { $('r-sheet').hidden = true; }
+let onSheetClose = null;
+function closeSheet() {
+  $('r-sheet').hidden = true;
+  const f = onSheetClose; onSheetClose = null;
+  if (f) f();
+}
 $('r-sheet-close').addEventListener('click', closeSheet);
 $('r-sheet').addEventListener('click', (e) => { if (e.target === $('r-sheet')) closeSheet(); });
 
@@ -543,16 +549,128 @@ function editScreen(s) {
   setTimeout(() => input.focus(), 50);
 }
 function addFromLink(input) {
-  const h = fromHash(input.value.trim());
-  if (!h) { toast('Link non valido: copialo dalla pagina «Telecomando» di Salotto sullo schermo'); return; }
+  if (!addScreen(input.value)) { toast('Link non valido: copialo dalla pagina «Telecomando» di Salotto sullo schermo'); return; }
+  input.value = '';
+}
+/** Adds the screen in a pairing link (typed, pasted or read from a QR code); false if it is not one. */
+function addScreen(text) {
+  const h = fromHash(String(text || '').trim());
+  if (!h) return false;
   const old = screens.find(s => s.room === h.room);
   if (old) Object.assign(old, h); else screens.push(h);
   saveScreens(screens);
-  input.value = '';
   useScreen(old || h);
-  toast('Schermo aggiunto');
+  toast(old ? 'Schermo «' + nameOf(old) + '» già collegato' : 'Schermo aggiunto');
   renderScreens();
+  return true;
 }
+
+// ---------------------------------------------------------------- QR code reader
+// The phone's camera reads the QR code shown by Salotto on the screen. BarcodeDetector where the
+// browser has it (Chrome on Android), else jsQR (js/vendor/jsQR.js, loaded only when needed:
+// Safari on iPhone/iPad, Firefox). A photo of the code works too, where the camera can't be used.
+let jsqrLoad = null;
+function loadJsQR() {
+  return jsqrLoad ||= new Promise((ok, ko) => {
+    if (window.jsQR) { ok(window.jsQR); return; }
+    const s = document.createElement('script');
+    s.src = new URL('vendor/jsQR.js?v=' + BUILD, import.meta.url).href;
+    s.onload = () => (window.jsQR ? ok(window.jsQR) : ko(new Error('jsQR')));
+    s.onerror = () => { jsqrLoad = null; ko(new Error('jsQR')); };
+    document.head.append(s);
+  });
+}
+let detector;
+async function qrDetector() {
+  if (detector !== undefined) return detector;
+  detector = null;
+  try {
+    if ('BarcodeDetector' in window && (await window.BarcodeDetector.getSupportedFormats()).includes('qr_code')) detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+  } catch { /* not usable */ }
+  return detector;
+}
+const qrCanvas = document.createElement('canvas');
+/** The texts of the QR codes in an image, video frame or bitmap. */
+async function readQR(src, w, h) {
+  const d = await qrDetector();
+  if (d) {
+    try { return (await d.detect(src)).map(c => c.rawValue); } catch { /* fall back to jsQR */ }
+  }
+  const jsQR = await loadJsQR();
+  const scale = Math.min(1, 800 / Math.max(w, h)); // enough for a QR code, light on old phones
+  const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+  qrCanvas.width = cw; qrCanvas.height = ch;
+  const g = qrCanvas.getContext('2d', { willReadFrequently: true });
+  g.drawImage(src, 0, 0, cw, ch);
+  const r = jsQR(g.getImageData(0, 0, cw, ch).data, cw, ch, { inversionAttempts: 'attemptBoth' });
+  return r ? [r.data] : [];
+}
+/** Handles what the reader found: true when it was a Salotto screen. */
+function gotQR(texts, note) {
+  if (!texts.length) return false;
+  if (texts.some(t => addScreen(t))) { if (navigator.vibrate) navigator.vibrate(40); closeSheet(); showTab('remote'); return true; }
+  note.textContent = 'Questo codice QR non è quello di Salotto: inquadra il codice della pagina «📱 Telecomando» sullo schermo.';
+  return false;
+}
+
+function openScanner() {
+  const video = el('video', 'r-qr-video');
+  video.muted = true; video.playsInline = true; video.setAttribute('playsinline', ''); video.autoplay = true;
+  const frame = el('div', 'r-qr-frame');
+  const view = el('div', 'r-qr-view');
+  view.append(video, frame);
+  const note = el('p', 'r-hint', 'Inquadra il codice QR che Salotto mostra sullo schermo in ☰ → 📱 Telecomando.');
+  const file = el('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true;
+  const photo = el('button', 'r-wide', '🖼 Leggi da una foto');
+  photo.addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    const f = file.files?.[0];
+    file.value = '';
+    if (!f) return;
+    note.textContent = 'Leggo la foto…';
+    try {
+      const img = await createImageBitmap(f);
+      if (!gotQR(await readQR(img, img.width, img.height), note) && note.textContent === 'Leggo la foto…') note.textContent = 'Nella foto non trovo un codice QR: prova con una foto più vicina e nitida.';
+    } catch { note.textContent = 'Non riesco a leggere questa foto.'; }
+  });
+  openSheet(el('h2', '', 'Inquadra il codice QR'), view, note, photo, file);
+  $('r-sheet').classList.add('r-qr-open');
+
+  let stream = null, stopped = false, timer = 0;
+  onSheetClose = () => {
+    stopped = true; clearTimeout(timer);
+    $('r-sheet').classList.remove('r-qr-open');
+    if (stream) for (const t of stream.getTracks()) t.stop();
+    video.srcObject = null;
+  };
+  if (!navigator.mediaDevices?.getUserMedia) {
+    view.hidden = true;
+    note.textContent = window.isSecureContext === false ? 'La fotocamera funziona solo da una pagina https. Usa una foto del codice oppure incolla il link.' : 'Questo browser non può usare la fotocamera: usa una foto del codice oppure incolla il link.';
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then((s) => {
+    if (stopped) { for (const t of s.getTracks()) t.stop(); return; }
+    stream = s;
+    video.srcObject = s;
+    video.play().catch(() => {});
+    const tick = async () => {
+      if (stopped) return;
+      if (video.readyState >= 2 && video.videoWidth) {
+        try { if (gotQR(await readQR(video, video.videoWidth, video.videoHeight), note)) return; } catch { /* next frame */ }
+      }
+      if (!stopped) timer = setTimeout(tick, 250);
+    };
+    tick();
+  }).catch((e) => {
+    if (stopped) return;
+    view.hidden = true;
+    note.textContent = e?.name === 'NotAllowedError' || e?.name === 'SecurityError'
+      ? 'Non ho il permesso di usare la fotocamera: consentilo nelle impostazioni del browser, oppure usa una foto del codice o incolla il link.'
+      : 'Non riesco ad aprire la fotocamera: usa una foto del codice oppure incolla il link.';
+  });
+}
+for (const id of ['r-scanbtn0', 'r-scanbtn']) $(id).addEventListener('click', openScanner);
+
 $('r-addbtn').addEventListener('click', () => addFromLink($('r-addlink')));
 $('r-addbtn0').addEventListener('click', () => addFromLink($('r-addlink0')));
 

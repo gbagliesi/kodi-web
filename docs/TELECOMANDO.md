@@ -21,6 +21,10 @@ Worker Cloudflare.
    basso dell'iPad in verticale si chiama «Remote». Sulla Fire TV la pagina è
    in Impostazioni → **Collega il cellulare**.
 2. Inquadra il codice QR con la fotocamera del telefono e apri il link.
+   Se il telecomando è già aperto (o installato come app), tocca
+   **📷 Inquadra il codice QR**: la fotocamera si apre dentro il telecomando e
+   lo schermo si aggiunge da solo. Se la fotocamera non si può usare,
+   **🖼 Leggi da una foto** legge il codice da una foto o da uno screenshot.
    Oppure copia il link e mandalo al telefono.
 3. Sul telefono il pallino in alto diventa verde e sullo schermo compare
    «📱 Telecomando collegato».
@@ -111,7 +115,8 @@ Ogni schermo ha il suo link: il telefono li ricorda tutti.
 - **▲ ▼** cambiano l'ordine dell'elenco.
 - **✎** dà allo schermo un nome valido solo su questo telefono e permette di
   rimuoverlo.
-- Si può aggiungere uno schermo incollando il suo link.
+- Si può aggiungere uno schermo con **📷 Inquadra il codice QR** oppure
+  incollando il suo link.
 - In fondo ci sono la versione e **⟳ Forza aggiornamento**.
 
 ## Aggiornamenti

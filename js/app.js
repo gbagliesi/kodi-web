@@ -351,6 +351,7 @@ async function renderBrowse(id, path, params) {
   const rec = addons.getInstalled(id);
   if (!rec) { fill(view, h('div', { class: 'empty' }, 'Add-on non installato.')); setCrumbs(['Add-on']); return; }
   const m = rec.manifest;
+  if (id === 'plugin.video.youtube') yt.preload();
   const query = params.get('q');
   const titleTrail = (params.get('t') || '').split('␟').filter(Boolean);
   setCrumbs([m.name, ...titleTrail]);

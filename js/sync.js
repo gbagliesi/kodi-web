@@ -26,6 +26,7 @@ let status = { state: 'idle', at: 0, message: '' };
 const listeners = new Set();
 
 export function config() { return { on: true, group: 'casa', ...load(CONF, {}) }; }
+
 export function onStatus(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 export function getStatus() { return status; }
 function setStatus(s) {
@@ -92,25 +93,35 @@ export async function entries() {
   return out;
 }
 
+const storageFull = 'Memoria del browser piena: non riesco a salvare i dati degli altri dispositivi (Impostazioni → Memoria del browser)';
+
 /** Write what came from the other devices. Returns the ids that could not be applied yet. */
 async function apply(got, snapT) {
   const by = {};
   for (const [id, v] of Object.entries(got)) { const [ns, k] = split(id); (by[ns] ||= []).push([k, v, id]); }
   const failed = new Set();
+  // a group that could not be saved (browser storage full) stays to be applied later
+  const keep = (ns, ok) => { if (!ok) for (const [, , id] of by[ns]) failed.add(id); };
   applying = true;
   try {
     if (by.fav) {
-      const cur = new Map(load('favourites', []).filter(f => f && f.key).map(f => [f.key, f]));
-      for (const [k, v] of by.fav) { if (v == null) cur.delete(k); else cur.set(k, v); }
-      // newest first, like a favourite just added here; ones not agreed yet stay on top
-      const t = (k) => snapT('fav/' + k) ?? Infinity;
-      save('favourites', [...cur.values()].sort((a, b) => t(b.key) - t(a.key)));
+      // the ones already here keep their place; new ones go on top, newest first (like a
+      // favourite just added here). The order chosen by hand travels separately (sort/favs).
+      const list = load('favourites', []).filter(f => f && f.key);
+      const have = new Set(list.map(f => f.key));
+      const fresh = [];
+      const set = new Map();
+      for (const [k, v] of by.fav) { if (v == null) set.set(k, null); else if (have.has(k)) set.set(k, v); else fresh.push(v); }
+      const t = (k) => snapT('fav/' + k) ?? 0;
+      fresh.sort((a, b) => t(b.key) - t(a.key));
+      const kept = list.filter(f => set.get(f.key) !== null).map(f => set.get(f.key) || f);
+      keep('fav', save('favourites', [...fresh, ...kept]));
     }
     for (const name of MAPS) {
       if (!by[name]) continue;
       const m = load(name, {}) || {};
       for (const [k, v] of by[name]) { if (v == null) delete m[k]; else m[k] = v; }
-      save(name, m);
+      keep(name, save(name, m));
     }
     if (by.sort) {
       const m = load('sort', {}) || {};
@@ -121,14 +132,14 @@ async function apply(got, snapT) {
         if (m[k]?.gone) keep.gone = m[k].gone;
         m[k] = { ...v, ...keep };
       }
-      save('sort', m);
+      keep('sort', save('sort', m));
     }
     if (by.settings) {
       const s = load('settings', {}) || {};
       for (const [k, v] of by.settings) { if (!SETTINGS_KEYS.includes(k)) continue; if (v == null) delete s[k]; else s[k] = v; }
-      save('settings', s);
+      keep('settings', save('settings', s));
     }
-    if (by.subs) { const [, v] = by.subs[0]; if (v == null) save('subs', {}); else save('subs', v); }
+    if (by.subs) { const [, v] = by.subs[0]; keep('subs', save('subs', v == null ? {} : v)); }
   } finally { applying = false; }
   for (const [k, v, id] of by.astore || []) {
     const i = k.indexOf('/');
@@ -208,6 +219,7 @@ async function round(keepalive) {
   // what this device already has needs no writing
   const toApply = {};
   for (const [id, v] of Object.entries(got)) if (hash(cur[id] ?? null) !== hash(v ?? null)) toApply[id] = v;
+  const before = { ...st.snap };
   for (const [id, e] of Object.entries(wins)) {
     if (e.v == null) delete st.snap[id];
     else st.snap[id] = hash(e.v) + '.' + e.t;
@@ -215,13 +227,18 @@ async function round(keepalive) {
   const snapT = (id) => { const s = st.snap[id]; return s ? +s.split('.')[1] : undefined; };
   const failed = await apply(toApply, snapT);
   st.pending = {};
-  for (const id of failed) st.pending[id] = got[id];
+  // what could not be written here is not agreed: it must never look like a change of this device
+  for (const id of failed) {
+    st.pending[id] = got[id];
+    if (!id.startsWith('addon/') && !id.startsWith('astore/')) { if (before[id]) st.snap[id] = before[id]; else delete st.snap[id]; }
+  }
   st.rev = res.rev;
   const first = !st.joined;
   st.joined = true;
-  save(STATE, st);
+  if (!save(STATE, st)) throw Object.assign(new Error(storageFull), { kind: 'storage' });
   const n = Object.keys(toApply).length;
-  setStatus({ state: failed.size ? 'partial' : 'ok', at: Date.now(), message: failed.size ? `${failed.size} add-on non ancora installati, riprovo più tardi` : '' });
+  const full = [...failed].some(id => !id.startsWith('addon/') && !id.startsWith('astore/'));
+  setStatus({ state: failed.size ? 'partial' : 'ok', at: Date.now(), message: full ? storageFull : failed.size ? `${failed.size} add-on non ancora installati, riprovo più tardi` : '' });
   if (n) window.dispatchEvent(new CustomEvent('salotto:synced', { detail: { ids: Object.keys(toApply) } }));
   if (first) again = true; // now send what only this device had
 }

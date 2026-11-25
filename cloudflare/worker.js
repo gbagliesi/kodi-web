@@ -27,11 +27,25 @@
  *                                             after revision `since` (v null = deleted).
  *   One Durable Object (SyncStore, SQLite) per group; needs the SYNC binding of wrangler.toml.
  *
+ * Private add-ons (only here, not in server.js):
+ *   GET /addons/health                      -> "ok" when ADDONS_GITHUB_TOKEN is set
+ *   GET /addons/<token>/<path>               -> a file of the private add-on repository
+ *                                             (repository.json, <id>/addon.json, main.js, icons),
+ *                                             read from GitHub with ADDONS_GITHUB_TOKEN. The token
+ *                                             is in the path so the relative links of
+ *                                             repository.json and addon.json keep it.
+ *
  * Settings (Worker → Settings → Variables and Secrets):
  *   TOKEN   secret, REQUIRED: every call must carry ?token=<TOKEN>. Without it the Worker
  *           refuses everything (503), so a fresh deploy is never an open proxy.
  *           Use a long random value of your own (docs/CLOUDFLARE.md shows how to make one);
  *           the example once printed in the docs is refused.
+ *   TOKENS  secret, optional: tokens for friends, one "name=token" per line (or separated by
+ *           commas). Each works like TOKEN, but its sync groups are its own: a friend never
+ *           sees the owner's favourites. Remove a line to revoke that friend.
+ *   ADDONS_GITHUB_TOKEN  secret, optional: GitHub fine-grained token, read-only on the private
+ *           add-on repository. ADDONS_REPO (variable, default gbagliesi/salotto-addons) and
+ *           ADDONS_REF (default main) say which repository and branch.
  *   GET /proxy/health?token=…  -> "ok", or 401 when the token is wrong, 503 when TOKEN is unset.
  *
  * Setup guide: docs/CLOUDFLARE.md
@@ -59,12 +73,39 @@ function sameSecret(a, b) {
   return diff === 0;
 }
 
-/** null when the call carries the right token, otherwise the response refusing it. */
-function refuse(env, u) {
+const FRIEND_RE = /^[a-z0-9-]{1,30}$/;
+const MIN_FRIEND_TOKEN = 16;
+
+/** Friends' tokens from the TOKENS secret: [{ name, token }]. Short or malformed lines are ignored. */
+export function friendTokens(env) {
+  const out = [];
+  for (const line of String(env.TOKENS || '').split(/[\n,;]+/)) {
+    const i = line.indexOf('=');
+    if (i < 0) continue;
+    const name = line.slice(0, i).trim().toLowerCase();
+    const token = line.slice(i + 1).trim();
+    if (FRIEND_RE.test(name) && token.length >= MIN_FRIEND_TOKEN && !PUBLISHED_EXAMPLES.has(token)) out.push({ name, token });
+  }
+  return out;
+}
+
+/** Who carries this token: '' for the owner (TOKEN), the friend's name, or null. */
+function caller(env, given) {
+  given = String(given || '');
+  if (!given) return null;
+  let who = null;
+  // every token is compared, so the time taken does not tell which one matched
+  if (sameSecret(given, String(env.TOKEN))) who = '';
+  for (const f of friendTokens(env)) if (sameSecret(given, f.token) && who === null) who = f.name;
+  return who;
+}
+
+/** null when the call carries a valid token, otherwise the response refusing it. */
+function refuse(env, u, given = u.searchParams.get('token')) {
   const token = String(env.TOKEN || '');
   if (!token) return text('proxy non protetto: imposta il secret TOKEN nel Worker (docs/CLOUDFLARE.md)', 503);
   if (PUBLISHED_EXAMPLES.has(token)) return text('il TOKEN del Worker è quello di esempio della guida: scegline uno nuovo (docs/CLOUDFLARE.md)', 503);
-  if (!sameSecret(u.searchParams.get('token') || '', token)) return text('token mancante o errato', 401);
+  if (caller(env, given) === null) return text('token mancante o errato', 401);
   return null;
 }
 
@@ -252,7 +293,53 @@ function handleSync(request, env, u) {
   if (request.method !== 'POST') return text('metodo non consentito', 405);
   const group = (u.searchParams.get('group') || 'casa').toLowerCase();
   if (!GROUP_RE.test(group)) return text('gruppo non valido', 400);
-  return env.SYNC.get(env.SYNC.idFromName('sync:' + group)).fetch(request);
+  // a friend's groups live apart from the owner's (and from the other friends')
+  const who = caller(env, u.searchParams.get('token'));
+  return env.SYNC.get(env.SYNC.idFromName(who ? 'friend:' + who + ':' + group : 'sync:' + group)).fetch(request);
+}
+
+// ---------------------------------------------------------------- private add-ons
+const ADDON_PATH_RE = /^\/addons\/([^/]+)\/((?:[A-Za-z0-9_-][A-Za-z0-9._-]*\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*)$/;
+const ADDON_TYPES = { json: 'application/json; charset=utf-8', js: 'text/javascript; charset=utf-8', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', m3u: 'audio/x-mpegurl; charset=utf-8', m3u8: 'application/vnd.apple.mpegurl', txt: 'text/plain; charset=utf-8' };
+const ADDON_CACHE_SECONDS = 300;
+
+async function handleAddons(request, env, u) {
+  if (u.pathname.endsWith('/addons/health')) return env.ADDONS_GITHUB_TOKEN ? text('ok') : text('add-on privati non configurati: imposta il secret ADDONS_GITHUB_TOKEN (docs/CLOUDFLARE.md)', 501);
+  const m = ADDON_PATH_RE.exec(u.pathname.replace(/^.*?(\/addons\/)/, '$1'));
+  if (!m) return text('percorso non valido', 400);
+  let given;
+  try { given = decodeURIComponent(m[1]); } catch { return text('token mancante o errato', 401); }
+  const no = refuse(env, u, given);
+  if (no) return no;
+  if (request.method !== 'GET' && request.method !== 'HEAD') return text('metodo non consentito', 405);
+  if (!env.ADDONS_GITHUB_TOKEN) return text('add-on privati non configurati: imposta il secret ADDONS_GITHUB_TOKEN (docs/CLOUDFLARE.md)', 501);
+
+  const file = m[2];
+  const repo = String(env.ADDONS_REPO || 'gbagliesi/salotto-addons');
+  const ref = String(env.ADDONS_REF || 'main');
+  const ext = (file.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
+  // cached without the token in the key: one copy for every caller, refreshed every few minutes
+  const cache = globalThis.caches?.default;
+  const key = new Request('https://salotto-addons.cache/' + repo + '/' + ref + '/' + file);
+  let res = cache && await cache.match(key).catch(() => null);
+  if (!res) {
+    let up;
+    try {
+      up = await fetch('https://api.github.com/repos/' + repo + '/contents/' + file + '?ref=' + encodeURIComponent(ref), {
+        headers: { Authorization: 'Bearer ' + env.ADDONS_GITHUB_TOKEN, Accept: 'application/vnd.github.raw', 'User-Agent': 'salotto-worker', 'X-GitHub-Api-Version': '2022-11-28' },
+      });
+    } catch (e) { return text('GitHub non raggiungibile: ' + (e && e.message ? e.message : e), 502); }
+    if (up.status === 404) return text('file non trovato', 404);
+    if (up.status === 401 || up.status === 403) return text('il Worker non può leggere il repository degli add-on: controlla ADDONS_GITHUB_TOKEN', 502);
+    if (!up.ok) return text('GitHub: HTTP ' + up.status, 502);
+    res = new Response(await up.arrayBuffer(), { headers: { 'Content-Type': ADDON_TYPES[ext] || 'application/octet-stream', 'Cache-Control': 'max-age=' + ADDON_CACHE_SECONDS } });
+    if (cache) { try { await cache.put(key, res.clone()); } catch { /* not cached */ } }
+  }
+  const out = new Headers(CORS);
+  out.set('Content-Type', res.headers.get('Content-Type') || 'application/octet-stream');
+  out.set('Cache-Control', 'private, no-cache');
+  out.set('X-Content-Type-Options', 'nosniff');
+  return new Response(request.method === 'HEAD' ? null : res.body, { status: 200, headers: out });
 }
 
 async function handle(request, env) {
@@ -265,6 +352,7 @@ async function handle(request, env) {
   }
   if (/\/remote\/(health|ws|status)$/.test(u.pathname)) return handleRemote(request, env, u);
   if (/\/sync(\/health)?$/.test(u.pathname)) return handleSync(request, env, u);
+  if (/\/addons\//.test(u.pathname)) return handleAddons(request, env, u);
   // /proxy/<name> (e.g. /proxy/live.m3u8) works too: some native players pick the format from the extension
   if (!/\/proxy(\/[\w.-]+)?$/.test(u.pathname)) return text('Salotto proxy: usa /proxy?url=…', 404);
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('metodo non consentito', 405);
@@ -273,7 +361,8 @@ async function handle(request, env) {
   // fetches streams from a Google address anyway.
   const no = refuse(env, u);
   if (no) return no;
-  const token = String(env.TOKEN);
+  // the playlist's segments carry the caller's own token (a friend's works only while it is valid)
+  const token = String(u.searchParams.get('token'));
 
   let target;
   try { target = new URL(u.searchParams.get('url') || ''); } catch { return text('url mancante o non valido', 400); }

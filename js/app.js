@@ -1149,14 +1149,20 @@ async function renderRepo() {
   setCrumbs(['Add-on', 'Repository']);
   loading('Lettura dei repository…');
   const repos = store.getSettings().repositories;
-  const results = await Promise.all(repos.map(u => addons.fetchRepository(u).catch(e => ({ url: u, error: e }))));
+  // the private add-ons of the Worker set as proxy come first (only with its token)
+  const workerRepo = addons.workerRepositoryUrl();
+  const all = [...(workerRepo ? [workerRepo] : []), ...repos];
+  const results = await Promise.all(all.map(u => addons.fetchRepository(u).catch(e => ({ url: u, error: e }))));
   if (!location.hash.startsWith('#/addons/repo')) return;
   const sections = [];
-  for (const r of results) {
-    sections.push(h('div', { class: 'section-title' }, r.name || r.url));
+  if (!workerRepo) sections.push(h('div', { class: 'empty' }, 'Gli add-on privati arrivano dal tuo Worker: imposta indirizzo e token del proxy in Impostazioni.'));
+  for (const [i, r] of results.entries()) {
+    const isWorker = workerRepo && i === 0;
+    sections.push(h('div', { class: 'section-title' }, isWorker ? (r.name || 'Add-on del Worker') : (r.name || r.url)));
     if (r.error) {
-      sections.push(h('div', { class: 'error-box' }, r.error.message,
-        repos.indexOf(r.url) > 0 && h('div', {}, h('button', { class: 'btn danger focusable', onclick: () => { store.setSettings({ repositories: repos.filter(x => x !== r.url) }); renderRepo(); } }, 'Rimuovi repository'))));
+      const removable = !isWorker && repos.indexOf(all[i]) > 0;
+      sections.push(h('div', { class: 'error-box' }, isWorker ? 'Add-on privati non disponibili: ' + r.error.message : r.error.message,
+        removable && h('div', {}, h('button', { class: 'btn danger focusable', onclick: () => { store.setSettings({ repositories: repos.filter(x => x !== all[i]) }); renderRepo(); } }, 'Rimuovi repository'))));
       continue;
     }
     sections.push(h('div', { class: 'list' }, ...r.addons.map(a => {

@@ -57,6 +57,34 @@ export async function detectProxy() {
   return proxyUrl;
 }
 export function getProxy() { return proxyUrl; }
+
+// ---------------------------------------------------------------- private add-ons of the Worker
+// The Worker set as proxy serves the private add-on repository at /addons/<token>/…: the token is
+// in the path so the relative links of repository.json and addon.json keep it.
+const WORKER_ADDONS_RE = /^(https?:\/\/[^/?#]+(?:\/[^?#]*?)?)\/addons\/[^/?#]+\//;
+
+/** "<worker>/addons/<token>/" for the Worker set as proxy, or '' (no Worker, no token). */
+export function workerAddonsBase(url = proxyUrl) {
+  if (!url || !/^https?:/i.test(url)) return '';
+  try {
+    const u = new URL(url);
+    const tok = u.searchParams.get('token');
+    if (!tok || u.origin === location.origin) return '';
+    return u.origin + u.pathname.replace(/\/proxy(\/[\w.-]+)?$/, '') + '/addons/' + encodeURIComponent(tok) + '/';
+  } catch { return ''; }
+}
+export function workerRepositoryUrl() { const b = workerAddonsBase(); return b ? b + 'repository.json' : ''; }
+
+/** A Worker add-on address saved with an older token (or synced from a device that has another
+ *  one) is read with this device's current token. */
+export function withCurrentToken(url) {
+  const base = workerAddonsBase();
+  const m = base && WORKER_ADDONS_RE.exec(url);
+  if (!m || !base.startsWith(m[1] + '/addons/')) return url;
+  return base + url.slice(m[0].length);
+}
+export function isWorkerAddonUrl(url) { return WORKER_ADDONS_RE.test(String(url || '')); }
+
 export function proxify(url) { return proxyUrl ? proxyUrl + encodeURIComponent(url) : url; }
 
 // ---------------------------------------------------------------- registry
@@ -74,6 +102,7 @@ async function putCode(id, code) {
 async function dropCode(id) { try { if (self.caches) await (await caches.open(CODE_CACHE)).delete(codeUrl(id)); } catch { /* ignore */ } }
 async function getCode(rec) {
   if (rec.code) return rec.code;
+  if (rec.manifestUrl) rec = { ...rec, manifestUrl: withCurrentToken(rec.manifestUrl) };
   try {
     const r = self.caches && await (await caches.open(CODE_CACHE)).match(codeUrl(rec.manifest.id));
     if (r) return await r.text();
@@ -171,6 +200,7 @@ function absolutize(manifest, baseUrl) {
 }
 
 async function fetchText(url) {
+  url = withCurrentToken(url);
   let res;
   try {
     res = await fetch(url, { cache: 'no-cache' });
@@ -184,7 +214,7 @@ async function fetchText(url) {
 
 /** Install (or update) an add-on from the URL of its addon.json. */
 export async function installFromManifestUrl(manifestUrl, { source = 'url' } = {}) {
-  const abs = new URL(manifestUrl, location.href).href;
+  const abs = withCurrentToken(new URL(manifestUrl, location.href).href);
   let manifest;
   try { manifest = JSON.parse(await fetchText(abs)); } catch (e) {
     throw new Error(e instanceof SyntaxError ? 'addon.json non è JSON valido' : e.message);
@@ -274,7 +304,7 @@ export function setSyncedState(id, enabled, settings) {
 
 // ---------------------------------------------------------------- repositories
 export async function fetchRepository(url) {
-  const abs = new URL(url, location.href).href;
+  const abs = withCurrentToken(new URL(url, location.href).href);
   let repo;
   try { repo = JSON.parse(await fetchText(abs)); } catch (e) {
     throw new Error(e instanceof SyntaxError ? 'Il repository non è JSON valido' : e.message);
@@ -321,7 +351,30 @@ export async function ensureBundledAddons() {
   } catch (e) {
     console.warn('bundled repository unavailable', e);
   }
+  await updateFromWorker();
 }
+
+/**
+ * Add-ons of the Worker's private repository are never installed by themselves (each one is
+ * chosen in Add-on → Repository), but the installed ones are kept up to date: also those that
+ * came from the public repository of older versions, which move to the Worker this way.
+ */
+export async function updateFromWorker() {
+  const url = workerRepositoryUrl();
+  if (!url) return;
+  let repo;
+  try { repo = await fetchRepository(url); } catch (e) { console.warn('Worker add-on repository unavailable', e.message); return; }
+  for (const a of repo.addons) {
+    const inst = getInstalled(a.id);
+    if (!inst || inst.source !== 'repo') continue;
+    const newer = compareVersions(a.version, inst.manifest.version) > 0;
+    // the same version from the Worker replaces a copy from this site's public folder
+    const moving = !newer && compareVersions(a.version, inst.manifest.version) === 0 && isSiteUrl(inst.manifestUrl);
+    if (!newer && !moving) continue;
+    try { await installFromManifestUrl(a.manifest, { source: 'repo' }); } catch (e) { console.warn('Worker add-on update failed', a.id, e); }
+  }
+}
+const isSiteUrl = (u) => { try { return new URL(u, location.href).origin === location.origin; } catch { return false; } };
 
 // ---------------------------------------------------------------- execution
 class AddonHost {

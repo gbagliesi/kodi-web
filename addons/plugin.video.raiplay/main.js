@@ -212,6 +212,11 @@ addon.register({
     const agg = (r && r.agg) || {};
     const progs = ((agg.titoli && agg.titoli.cards) || []).map(c => ({ ...c, images: { landscape: c.immagine } }));
     const vids = ((agg.video && agg.video.cards) || []).map(c => ({ ...c, name: c.titolo, subtitle: c.programma, images: { landscape: c.immagine } }));
+    // search cards don't say whether RaiPlay asks to sign in: ask each video, so the tap goes the right way
+    await Promise.all(vids.map(async (c) => {
+      const v = c.path_id && await json(ctx, c.path_id).catch(() => null);
+      if (v) { c.login_required = !!v.login_required; c.weblink = v.weblink; if (!hasDrm(c.rights_management)) c.rights_management = v.rights_management; }
+    }));
     return { view: 'grid', items: [...progs, ...vids].map(c => toItem(c)).filter(Boolean) };
   },
 

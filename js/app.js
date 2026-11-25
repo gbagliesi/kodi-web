@@ -287,7 +287,7 @@ function renderHome() {
       h('button', { class: 'tile focusable', onclick: openUrlDialog },
         h('span', { class: 'tile-ico' }, '🔗'), h('span', { class: 'tile-name' }, 'Apri URL'), h('span', { class: 'tile-sub' }, 'MP4, WebM, MP3, HLS (.m3u8)'))),
     favs.length ? h('div', { class: 'section-title' }, 'Preferiti') : null,
-    favs.length ? renderItems(favs.map(f => f.item), { onPick: (it, i) => openFavourite(favs[i], favs) }) : null,
+    favs.length ? renderItems(favs.map(f => f.item), { onPick: (it, i) => openFavourite(favs[i], favs), favOf: (it, i) => favs[i] }) : null,
     h('div', { class: 'section-title' }, 'Add-on'),
     installed.length
       ? h('div', { class: 'tiles' }, ...installed.map(a => addonTile(a, () => { location.hash = browseHash(a.manifest.id); })))
@@ -365,7 +365,42 @@ function chooseView(listing) {
   return withThumb >= listing.items.length * 0.6 && listing.items.length ? 'grid' : 'list';
 }
 
-function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
+// ☆ on every entry of a list: adds it to (or removes it from) the favourites without opening it.
+// Tap/click the star; with a keyboard or TV remote the ☰ (menu) key or * on the focused entry;
+// right click or a long press works too.
+function paintStar(star, on) {
+  star.textContent = on ? '★' : '☆';
+  star.classList.toggle('on', on);
+  star.setAttribute('aria-pressed', String(on));
+  star.title = on ? 'Togli dai preferiti' : 'Aggiungi ai preferiti';
+}
+
+function repaintStars(root = view) {
+  root.querySelectorAll('.fav-star').forEach(s => { if (s._fav) paintStar(s, store.isFavourite(s._fav.key)); });
+}
+window.addEventListener('salotto:favourites', () => repaintStars());
+
+let favKeyAt = 0; // the menu key of a PC keyboard also opens a context menu: one toggle only
+function listFavToggle(entry, byKey = false) {
+  if (!byKey && Date.now() - favKeyAt < 800) return;
+  if (byKey) favKeyAt = Date.now();
+  const on = store.toggleFavourite(entry);
+  const name = entry.item?.label || 'Elemento';
+  toast(on ? `★ «${name}» aggiunto ai preferiti` : `«${name}» tolto dai preferiti`, 2000);
+}
+
+/** Wires the star and its keyboard / long-press twins on the entry's own button. */
+function favStar(entry, cls, owner) {
+  const star = h('button', { class: cls + ' fav-star', type: 'button', 'aria-label': 'Preferito: ' + (entry.item?.label || '') });
+  star._fav = entry;
+  star.addEventListener('click', (e) => { e.stopPropagation(); listFavToggle(entry); });
+  paintStar(star, store.isFavourite(entry.key));
+  owner._fav = entry;
+  owner.addEventListener('contextmenu', (e) => { e.preventDefault(); listFavToggle(entry); });
+  return star;
+}
+
+function renderItems(items, { mode = 'auto', onPick, listing, favOf } = {}) {
   const viewMode = mode === 'auto' ? chooseView(listing || { items }) : mode;
   // live channels show the number used to tune them in the player (CH ±, digits)
   const live = items.filter(x => x.live && x.playable && !x.external && !x.action);
@@ -373,23 +408,33 @@ function renderItems(items, { mode = 'auto', onPick, listing } = {}) {
   if (live.length > 1) player.channelNumbers(live).forEach((n, i) => numOf.set(live[i], n));
   const num = (it) => numOf.has(it) ? h('span', { class: 'ch-num' }, String(numOf.get(it))) : null;
   if (viewMode === 'list') {
-    return h('div', { class: 'list' }, ...items.map((it, i) => h('button', { class: 'row focusable', onclick: () => onPick(it, i) },
-      h('span', { class: 'row-thumb' + (isLogoItem(it) ? ' logo' : ''), style: bg(it.thumb) }, safeImg(it.thumb) ? '' : itemIcon(it)),
-      h('span', { class: 'row-main' },
-        h('div', { class: 'row-label' }, num(it), it.label, it._new ? h('span', { class: 'new-badge' }, 'NUOVO') : null),
-        (subOf(it) || it.info?.plot) && h('div', { class: 'row-sub' }, subOf(it) || it.info.plot)),
-      h('span', { class: 'row-end' }, it.live ? 'LIVE' : it.info?.duration ? fmtDuration(it.info.duration) : it.playable ? '▶' : '›'))));
+    return h('div', { class: 'list' }, ...items.map((it, i) => {
+      const row = h('button', { class: 'row focusable', onclick: () => onPick(it, i) },
+        h('span', { class: 'row-thumb' + (isLogoItem(it) ? ' logo' : ''), style: bg(it.thumb) }, safeImg(it.thumb) ? '' : itemIcon(it)),
+        h('span', { class: 'row-main' },
+          h('div', { class: 'row-label' }, num(it), it.label, it._new ? h('span', { class: 'new-badge' }, 'NUOVO') : null),
+          (subOf(it) || it.info?.plot) && h('div', { class: 'row-sub' }, subOf(it) || it.info.plot)),
+        h('span', { class: 'row-end' }, it.live ? 'LIVE' : it.info?.duration ? fmtDuration(it.info.duration) : it.playable ? '▶' : '›'));
+      const entry = favOf?.(it, i);
+      // the star is a button of its own next to the row: ▶ on the remote reaches it
+      return entry ? h('div', { class: 'row-pair' }, row, favStar(entry, 'row row-side focusable', row)) : row;
+    }));
   }
   // Channel and station logos are shown whole on square tiles; posters and covers fill theirs.
   const logos = items.filter(isLogoItem).length > items.length / 2;
   const shape = viewMode === 'wide' ? ' wide' : (viewMode === 'square' || logos) ? ' square' : '';
   const cls = 'grid' + shape;
-  return h('div', { class: cls }, ...items.map((it, i) => h('button', { class: 'card focusable', onclick: () => onPick(it, i), title: it.info?.plot || it.label },
-    isLogoItem(it) && safeImg(it.thumb)
-      ? h('span', { class: 'thumb logo' }, h('img', { class: 'thumb-img', src: safeImg(it.thumb), alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(h('span', { class: 'thumb-ico' }, itemIcon(it))) }))
-      : h('span', { class: 'thumb', style: bg(it.thumb) }, safeImg(it.thumb) ? '' : h('span', { class: 'thumb-ico' }, itemIcon(it))),
-    h('span', { class: 'label' }, num(it), it.label, it._new ? h('span', { class: 'new-badge' }, 'NUOVO') : null),
-    (subOf(it) || it.info?.year) && h('span', { class: 'sub' }, subOf(it) || it.info.year))));
+  return h('div', { class: cls }, ...items.map((it, i) => {
+    const card = h('button', { class: 'card focusable', onclick: () => onPick(it, i), title: it.info?.plot || it.label },
+      isLogoItem(it) && safeImg(it.thumb)
+        ? h('span', { class: 'thumb logo' }, h('img', { class: 'thumb-img', src: safeImg(it.thumb), alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(h('span', { class: 'thumb-ico' }, itemIcon(it))) }))
+        : h('span', { class: 'thumb', style: bg(it.thumb) }, safeImg(it.thumb) ? '' : h('span', { class: 'thumb-ico' }, itemIcon(it))),
+      h('span', { class: 'label' }, num(it), it.label, it._new ? h('span', { class: 'new-badge' }, 'NUOVO') : null),
+      (subOf(it) || it.info?.year) && h('span', { class: 'sub' }, subOf(it) || it.info.year));
+    const entry = favOf?.(it, i);
+    // on a tile the star sits on the picture (tap / click); the remote uses ☰ on the tile
+    return entry ? h('div', { class: 'card-wrap' }, card, favStar(entry, 'card-star', card)) : card;
+  }));
 }
 
 // Live channels show what is on now from the TV guide (unless the add-on already says it).
@@ -472,7 +517,7 @@ async function renderBrowse(id, path, params) {
     listing.message ? h('p', { class: 'empty' }, listing.message) : null,
     notice,
     sortBadge(cfg),
-    items.length ? renderItems(items, { onPick, listing }) : h('div', { class: 'empty' }, 'Nessun elemento.'),
+    items.length ? renderItems(items, { onPick, listing, favOf: (it) => favEntryOf(id, it) }) : h('div', { class: 'empty' }, 'Nessun elemento.'),
   );
   focusFirst();
 }
@@ -687,7 +732,15 @@ function reorderView(listKey, items, onSave, { keyOf = itemKey, onDone } = {}) {
 // What the player needs to open an entry: the resolved stream plus the favourite key.
 async function openEntry(addonId, it) {
   const stream = await addons.resolveItem(addonId, it);
-  return { item: { ...it, ...(stream.item || {}) }, stream, favEntry: { key: addonId + '|' + (it.path || it.url || it.id || it.label), addonId, item: it } };
+  return { item: { ...it, ...(stream.item || {}) }, stream, favEntry: favEntryOf(addonId, it) };
+}
+
+/** The favourite an entry of an add-on's list is saved as (none for search / settings entries). */
+function favEntryOf(addonId, it) {
+  if (!it || it.action) return null;
+  const item = {};
+  for (const k of Object.keys(it)) if (k[0] !== '_') item[k] = it[k]; // not the list's own marks (NUOVO…)
+  return { key: addonId + '|' + (it.path || it.url || it.id || it.label), addonId, item };
 }
 
 // Live channels of a listing, in order: the player zaps through them without closing.
@@ -720,7 +773,7 @@ async function pick(addonId, it, trail = [], channels) {
   // YouTube: straight into YouTube's own player, still inside the tap (sound on autoplay)
   if (yt.ytOf(it)) {
     if (player.isOpen()) player.close();
-    yt.play(it, yt.ytOf(it), { favEntry: { key: addonId + '|' + (it.path || it.url || it.id || it.label), addonId, item: it } });
+    yt.play(it, yt.ytOf(it), { favEntry: favEntryOf(addonId, it) });
     return;
   }
   toast('Apertura di «' + it.label + '»…', 1500);
@@ -760,7 +813,7 @@ async function renderFavourites() {
   const favs = store.getFavourites();
   if (favs.some(f => f.item?.live)) { const at = location.hash; await epg.ready(); if (location.hash !== at) return; }
   if (!favs.length) {
-    fill(view, h('div', { class: 'empty' }, 'Nessun preferito. Durante la riproduzione tocca ☆ per aggiungere un elemento.'));
+    fill(view, h('div', { class: 'empty' }, 'Nessun preferito. Tocca ☆ accanto a un canale o a un elemento di una lista (con il telecomando: tasto ☰), oppure ☆ durante la riproduzione.'));
     return;
   }
   // Favourites can be ordered like any list (by hand, by name, by number); "original" is the
@@ -776,6 +829,8 @@ async function renderFavourites() {
   fill(view, sortBadge(cfg), renderItems(items, {
     mode: 'list',
     onPick: (it, i) => openFavourite(ordered[i], ordered),
+    // ★ takes one off here too; it stays listed (☆) until the page is opened again, so it can be undone
+    favOf: (it, i) => ordered[i],
   }));
   focusFirst();
 }
@@ -1371,6 +1426,10 @@ document.addEventListener('keydown', (e) => {
   if (player.handleKey(e)) { e.preventDefault(); return; }
   const a = focused();
   const typing = a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !['checkbox', 'range', 'button'].includes(a.type)));
+  // ☰ on the TV remote (or * on a keyboard) on an entry of a list: add to / remove from favourites
+  if ((e.key === 'ContextMenu' || e.key === '*') && !typing && modalEl.hidden && a?._fav) {
+    listFavToggle(a._fav, true); e.preventDefault(); return;
+  }
   if ((e.key === 'Backspace' || e.key === 'Escape' || e.key === 'BrowserBack') && !typing && modalEl.hidden) {
     if (location.hash && location.hash !== '#/') { history.back(); e.preventDefault(); }
     return;
@@ -1386,6 +1445,7 @@ window.addEventListener('salotto:synced', (e) => {
   const ids = e.detail?.ids || [];
   const { parts } = parseRoute();
   const section = parts[0] || '';
+  if (ids.some(id => id.startsWith('fav/'))) repaintStars();
   if (player.isOpen() || yt.isOpen() || !$('modal').hidden || view.querySelector('.reorder-bar')) return;
   if (['', 'favourites'].includes(section)) { if (ids.some(id => /^(fav|addon|settings)\//.test(id))) route(); return; }
   // the add-on tiles (their order, added or removed add-ons) in the sections and the add-on list

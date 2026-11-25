@@ -62,6 +62,8 @@ export function toggleFavourite(entry) {
   const i = favs.findIndex(f => f.key === entry.key);
   if (i >= 0) favs.splice(i, 1); else favs.unshift(entry);
   save('favourites', favs);
+  // the ☆ in the lists follow what is done in the player (and the other way round)
+  try { window.dispatchEvent(new CustomEvent('salotto:favourites', { detail: { key: entry.key, on: i < 0 } })); } catch { /* no window */ }
   return i < 0;
 }
 

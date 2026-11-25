@@ -164,6 +164,18 @@ button { cursor: pointer; }
 .row-pair > .row:first-child { flex: 1; min-width: 0; }
 .row-pair > .row-side { flex: none; width: 64px; justify-content: center; font-size: 22px; color: var(--muted); }
 .row-pair > .row-side:hover, .row-pair > .row-side:focus { color: var(--text, #fff); }
+/* ☆ favourites straight from the lists */
+.fav-star.on { color: var(--accent-2) !important; }
+.card-wrap { position: relative; min-width: 0; display: flex; flex-direction: column; }
+.card-wrap > .card { flex: 1; }
+.card-star {
+  position: absolute; top: 6px; right: 6px; z-index: 1; width: 38px; height: 38px; padding: 0;
+  border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; font-size: 20px; line-height: 38px; text-align: center;
+  opacity: 0; transition: opacity .15s; cursor: pointer;
+}
+.card-star.on, .card-wrap:hover .card-star, .card-wrap:focus-within .card-star { opacity: 1; }
+@media (hover: none) { .card-star { opacity: .8; } }
+.row-pair > .fav-star.row-side { width: 56px; }
 .section-title.first { margin-top: 4px; }
 .row .row-thumb { width: 48px; height: 48px; border-radius: 8px; flex: none; background: var(--bg2) center / cover no-repeat; display: flex; align-items: center; justify-content: center; font-size: 22px; }
 .row .row-main { flex: 1; min-width: 0; }

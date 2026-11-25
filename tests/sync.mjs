@@ -143,7 +143,7 @@ async function ui() {
     await syncNow(a);
     assert.deepEqual(await favKeys(a), ['f2', 'f1']);
 
-    // ---- device B, new: gets all of it, keeps its own start page
+    // ---- device B, new: gets all of it, start page included
     const b = await device(browser, 'B');
     await waitFor(async () => (await favKeys(b)).length === 2, 10000, 'B favourites');
     assert.deepEqual(await favKeys(b), ['f2', 'f1'], 'same order');
@@ -151,11 +151,11 @@ async function ui() {
       const { store, addons } = window.salotto;
       return { key: addons.getAddonSettings('plugin.video.youtube').apiKey, podcast: addons.getInstalled('plugin.audio.podcast').enabled, view: store.getSettings().viewMode, start: store.getSettings().startPage, proxy: store.getSettings().proxyUrl, resume: store.getResume('plugin.video.demo|film') };
     });
-    assert.deepEqual(bState, { key: 'chiave-di-prova', podcast: false, view: 'list', start: '', proxy: RELAY, resume: 600 });
+    assert.deepEqual(bState, { key: 'chiave-di-prova', podcast: false, view: 'list', start: '#/live', proxy: RELAY, resume: 600 });
     assert.deepEqual(await b.evaluate(() => window.salotto.addons.readAddonStore('plugin.video.youtube', 'channels')), [{ id: 'UCprova', title: 'Canale di prova' }], 'YouTube saved channels');
     await b.goto(BASE + '#/favourites');
     await b.waitForSelector('#view :text("Secondo")');
-    console.log('✓ a new device gets favourites, resume points, settings, add-on settings and saved YouTube channels (not the start page)');
+    console.log('✓ a new device gets favourites, resume points, settings, add-on settings and saved YouTube channels and the start page (not the proxy)');
 
     // ---- changes go both ways; the Favourites page updates by itself
     await b.evaluate((f) => { window.salotto.store.toggleFavourite(f); window.salotto.addons.uninstall('plugin.video.archive'); }, fav('f1'));

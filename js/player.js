@@ -162,6 +162,8 @@ function showRoute(proxied, where = '') {
   el.route.hidden = false;
 }
 
+const RELINKER = /^https:\/\/mediapolis(vod)?\.rai\.it\/relinker\//i;
+
 function nativeWanted() {
   const avShift = !!avMs && hasMse() && !avNative;
   const subsMse = subs.wantsMse() && hasMse() && !subsNative;
@@ -184,10 +186,17 @@ async function attach(stream) {
   const native = nativeWanted();
   // hls.js needs the channel's site to allow it (CORS): ask once instead of waiting ~30 s for its
   // errors, and go through the proxy straight away when it doesn't
+  // Rai's relinker (live «Ⓖ» channels, RaiPlay) allows no other site, the stream it leads to does:
+  // in hls.js, ask the proxy where it leads and fetch the stream directly (from Italy, like Safari)
+  if (!native && !stream.proxy && !stream.resolvedFrom && getProxy() && RELINKER.test(stream.url)) {
+    const real = await resolveRedirect(stream.url);
+    if (real && /\.m3u8(\?|$)/i.test(real) && await corsOk(real)) return attach({ ...stream, url: real, resolvedFrom: stream.url });
+    stream = { ...stream, resolveTried: true };
+  }
   if (subsMse && !native && !stream.proxy && getProxy() && looksHls(stream.url, stream.mime) && !(await corsOk(stream.url))) {
     // a redirector without CORS (Rai «Ⓖ» relinker): the proxy only says where it leads, and the
     // real stream (which allows it) is then fetched from here, from Italy, like the system player
-    const real = !stream.resolvedFrom && !stream.headers ? await resolveRedirect(stream.url) : '';
+    const real = !stream.resolvedFrom && !stream.resolveTried && !stream.headers ? await resolveRedirect(stream.url) : '';
     if (real && real !== stream.url && /\.m3u8(\?|$)/i.test(real) && await corsOk(real)) {
       return attach({ ...stream, url: real, resolvedFrom: stream.url });
     }
@@ -241,13 +250,44 @@ async function attach(stream) {
     }
   }
   for (const t of [...v.querySelectorAll('track')]) t.remove();
-  if (stream.subtitles) {
-    for (const s of stream.subtitles) {
+  if (stream.subtitles?.length) addSubtitleFiles(stream.subtitles, ++trackToken);
+}
+
+// Subtitle files from the add-ons (WebVTT or SRT, e.g. RaiPlay's): read here and handed to the
+// video as WebVTT from memory, so other sites' files need no CORS setup on the <video>
+let trackToken = 0;
+const vttCache = new Map();
+async function addSubtitleFiles(list, token) {
+  for (const s of list) {
+    try {
+      if (!vttCache.has(s.url)) vttCache.set(s.url, fetchSubtitle(s.url).catch((e) => { vttCache.delete(s.url); throw e; }));
+      const blobUrl = await vttCache.get(s.url);
+      if (token !== trackToken) return; // another video started meanwhile
       const tr = document.createElement('track');
-      Object.assign(tr, { kind: 'subtitles', src: s.url, srclang: s.lang || 'it', label: s.label || s.lang || 'Sottotitoli' });
-      v.appendChild(tr);
-    }
+      Object.assign(tr, { kind: 'subtitles', src: blobUrl, srclang: s.lang || 'it', label: s.label || s.lang || 'Sottotitoli' });
+      el.video.appendChild(tr);
+    } catch (e) { console.warn('sottotitoli', s.url, e); }
   }
+}
+async function fetchSubtitle(url) {
+  let r;
+  try { r = await fetch(url); } catch (e) { if (!getProxy()) throw e; r = await fetch(proxify(url)); }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return URL.createObjectURL(new Blob([toVtt(await r.text())], { type: 'text/vtt' }));
+}
+/** SRT → WebVTT (WebVTT is left as it is); only the tags WebVTT knows are kept. */
+export function toVtt(text) {
+  text = String(text).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  if (/^WEBVTT/.test(text)) return text;
+  const blocks = text.split(/\n{2,}/).map((b) => {
+    const lines = b.split('\n').filter(Boolean);
+    const i = lines.findIndex(l => l.includes('-->'));
+    if (i < 0) return '';
+    const time = lines[i].replace(/(\d\d:\d\d:\d\d),(\d{3})/g, '$1.$2');
+    const body = lines.slice(i + 1).map(l => l.replace(/<\/?(?!\/?(i|b|u)>)[^>]*>/gi, '').replace(/\{\\[^}]*\}/g, '')).join('\n').trim();
+    return body ? time + '\n' + body : '';
+  }).filter(Boolean);
+  return 'WEBVTT\n\n' + blocks.join('\n\n') + '\n';
 }
 
 const corsCache = new Map();

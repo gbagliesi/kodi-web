@@ -137,6 +137,8 @@ async function ui() {
     await page.goto(BASE + '#/addons/repo');
     await page.waitForSelector('.section-title');
     assert.equal(await page.locator('.section-title').first().textContent(), 'Add-on privati');
+    // the local repository (served from ../salotto-addons) does not list the demo again
+    assert.equal(await page.locator('.row-label', { hasText: 'Video di prova' }).count(), 1, 'the demo is not listed twice');
     // a new token: the saved address is read with it
     await page.evaluate(() => window.salotto.store.setSettings({ proxyToken: 'owner-token-1234567890' }));
     await page.evaluate(() => window.salotto.addons.detectProxy());

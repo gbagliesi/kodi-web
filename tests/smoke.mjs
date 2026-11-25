@@ -317,10 +317,10 @@ async function uiTests() {
     await page.waitForSelector('.row:has-text("Digitale terrestre Italia")');
     await page.click('.row:has-text("TGR regionali")');
     await page.waitForSelector('.row:has-text("TGR Puglia")');
-    assert.match(await page.locator('.row:has-text("TGR Toscana")').first().textContent(), /In onda ora/);
+    assert.match(await page.locator('.row:has-text("TGR Toscana")').first().textContent(), /Acceso ora/);
     assert.match(await page.locator('.row:has-text("TGR Puglia")').first().textContent(), /Spento ora/);
     assert.match(await page.locator('.row:has-text("TGR Bolzano")').first().textContent(), /Sempre acceso/);
-    assert.match(await page.locator('.empty').first().textContent(), /In onda ora: 1 TG regionali/);
+    assert.match(await page.locator('.empty').first().textContent(), /Canali regionali accesi ora: 1/);
     await page.click('.row:has-text("TGR Puglia")');
     await page.waitForSelector('.toast:has-text("non è in onda adesso")');
     await page.click('.row:has-text("Ultime edizioni")');

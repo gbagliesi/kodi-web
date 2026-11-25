@@ -42,6 +42,14 @@
       "icon": "plugin.video.mediaset/icon.svg"
     },
     {
+      "id": "plugin.video.youtube",
+      "name": "YouTube",
+      "version": "1.0.0",
+      "description": "Ricerca, tendenze, dirette, canali e playlist di YouTube, con il lettore ufficiale",
+      "manifest": "plugin.video.youtube/addon.json",
+      "icon": "plugin.video.youtube/icon.svg"
+    },
+    {
       "id": "plugin.video.iptv",
       "name": "TV in diretta",
       "version": "1.5.0",

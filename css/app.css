@@ -475,3 +475,21 @@ body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); ga
   box-shadow: 0 12px 40px rgba(0, 0, 0, .6); }
 /* the Fire TV has its own remote, and its side menu must fit the screen: pairing stays in Settings */
 body.tv .menu-item[aria-label="Telecomando"] { display: none; }
+
+/* ---------- YouTube (official embedded player) ---------- */
+.yt-player { position: fixed; inset: 0; z-index: 55; background: #000; display: flex; flex-direction: column; }
+.yt-player[hidden] { display: none; }
+.yt-bar { display: flex; align-items: center; gap: 12px; padding: calc(8px + var(--safe-top)) calc(14px + var(--safe-right)) 8px calc(14px + var(--safe-left)); background: #0b0d10; }
+.yt-bar .icon-btn { background: rgba(255, 255, 255, .12); }
+.yt-bar .btn { white-space: nowrap; }
+#yt-fav.active { color: var(--accent-2); }
+.yt-title { flex: 1; min-width: 0; font-size: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yt-stage { position: relative; flex: 1; min-height: 0; padding-bottom: var(--safe-bottom); }
+.yt-stage iframe, .yt-stage > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.yt-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: min(560px, 86%); padding: 20px 24px; border-radius: 14px; background: rgba(20, 24, 30, .95); text-align: center; z-index: 2; }
+.yt-msg .actions { justify-content: center; margin-top: 14px; }
+/* TV: the video fills the screen, ▲ brings the bar over it */
+body.tv .yt-bar { position: absolute; left: 0; right: 0; top: 0; z-index: 2; background: linear-gradient(180deg, rgba(0, 0, 0, .85), rgba(0, 0, 0, .5)); transition: opacity .25s; }
+body.tv .yt-player.bar-hidden .yt-bar { opacity: 0; pointer-events: none; }
+.yt-player:focus { outline: none; }
+@media (max-width: 600px) { .yt-ext-long { display: none; } .yt-bar { gap: 8px; } .yt-title { font-size: 16px; } }

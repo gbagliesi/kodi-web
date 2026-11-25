@@ -6,7 +6,7 @@
 // The state is cut into small entries ("fav/<key>", "resume/<key>", "addon/<id>"…); each device
 // remembers a fingerprint of what it last agreed with the Worker, so it sends only what changed
 // here and receives only what changed elsewhere. The newest change of an entry wins.
-// Device-only things never travel: proxy address and token, start page, Android floating
+// Device-only things never travel: proxy address and token, Android floating
 // window, the phone remote's pairing, the last page visited.
 import { load, save, onChange } from './storage.js';
 import * as addons from './addons.js';
@@ -14,7 +14,7 @@ import * as addons from './addons.js';
 const CONF = 'sync';            // { on, group } – this device only
 const STATE = 'sync-state';     // { rev, joined, snap: { id: "hash.t" }, pending: { id: v } }
 const MAPS = ['resume', 'avsync', 'subsync'];
-const SETTINGS_KEYS = ['autoResume', 'viewMode', 'repositories'];
+const SETTINGS_KEYS = ['autoResume', 'viewMode', 'repositories', 'startPage', 'startLabel'];
 const WATCHED = new Set(['favourites', 'sort', 'settings', 'subs', 'addons', ...MAPS]);
 const PUSH_DELAY = 8000;        // changes are sent together, a few seconds after the first one
 const MAX_VALUE = 60000;        // per entry (the Worker takes up to 64 KB)

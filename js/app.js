@@ -1141,7 +1141,7 @@ function syncField() {
     groupRow,
     h('div', { class: 'actions' }, h('button', { class: 'btn focusable', id: 'sync-now', onclick: () => sync.syncNow() }, '⟳ Sincronizza adesso')),
     state,
-    h('div', { class: 'hint' }, 'Preferiti, punti di ripresa, ordine degli elenchi, sincronia audio e sottotitoli, add-on con le loro impostazioni e alcune opzioni passano dal tuo Worker Cloudflare a tutti i dispositivi dello stesso gruppo. Restano su ogni dispositivo: proxy e token, pagina iniziale, finestra mobile e telecomando. Usa un gruppo diverso (per esempio «bambini») per tenere separati preferiti e impostazioni di qualcuno.'));
+    h('div', { class: 'hint' }, 'Preferiti, punti di ripresa, ordine degli elenchi, sincronia audio e sottotitoli, add-on con le loro impostazioni, pagina iniziale e alcune opzioni passano dal tuo Worker Cloudflare a tutti i dispositivi dello stesso gruppo. Anche la pagina iniziale è la stessa ovunque. Restano su ogni dispositivo: proxy e token, finestra mobile e telecomando. Usa un gruppo diverso (per esempio «bambini») per tenere separati preferiti e impostazioni di qualcuno.'));
 }
 
 function renderSettings() {

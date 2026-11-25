@@ -202,7 +202,8 @@ account Cloudflare (piano gratuito), protetto dal TOKEN come il proxy.
 - **Gruppo**: i dispositivi con lo stesso gruppo (di serie `casa`) condividono
   tutto; con un gruppo diverso (per esempio `bambini`) hanno preferiti e
   impostazioni separati, sullo stesso Worker.
-- Restano su ogni dispositivo: indirizzo e token del proxy, pagina iniziale,
+- Anche la pagina iniziale (📌) è la stessa su tutti i dispositivi del gruppo.
+- Restano su ogni dispositivo: indirizzo e token del proxy,
   finestra mobile su Android, telecomando abbinato, add-on caricati da file.
 - Se lo stesso elemento cambia su due dispositivi, vale la modifica più
   recente. Le modifiche partono dopo pochi secondi; gli altri le vedono

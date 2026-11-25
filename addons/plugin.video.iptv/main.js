@@ -18,7 +18,7 @@ const PRESETS = [
 // 2026-11-25: Bolzano, Trento and Friuli Venezia Giulia (also the Slovenian «FJK» channel) are
 // on all day; the other regions are switched on only around their newscasts (~19:00 for the
 // 19:30 TG, carrying national Rai 3 until the regional edition starts) — the playlist stays,
-// but its chunk list answers 404 in between. Lazio has no stream of its own (scanned).
+// but its chunk list answers 404 in between. Lazio's id is outside the run: 2025147.
 // The past editions come from rainews.it (each region's «notiziari» page, through the proxy).
 const TGR_REGIONS = [
   // [label, rainews slug, live stream name, Akamai id]
@@ -30,7 +30,7 @@ const TGR_REGIONS = [
   ['Emilia-Romagna', 'emiliaromagna', 'emiliaromagna', 2025563],
   ['Friuli Venezia Giulia', 'fvg', 'friuli', 2025564, true],
   ['FJK (in sloveno)', 'fjk', 'friulibis', 2025579, true],
-  ['Lazio', 'lazio', '', 0],
+  ['Lazio', 'lazio', 'lazio', 2025147],  // out of the alphabetical run (found in a public list, checked live)
   ['Liguria', 'liguria', 'liguria', 2025565],
   ['Lombardia', 'lombardia', 'lombardia', 2025566],
   ['Marche', 'marche', 'marche', 2025567],

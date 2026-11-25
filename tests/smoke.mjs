@@ -317,6 +317,7 @@ async function uiTests() {
     await page.waitForSelector('.row:has-text("Digitale terrestre Italia")');
     await page.click('.row:has-text("TGR regionali")');
     await page.waitForSelector('.row:has-text("TGR Puglia")');
+    assert.ok(await page.locator('.row:has-text("TGR Lazio")').count(), 'Lazio has its live stream too');
     assert.match(await page.locator('.row:has-text("TGR Toscana")').first().textContent(), /Acceso ora/);
     assert.match(await page.locator('.row:has-text("TGR Puglia")').first().textContent(), /Spento ora/);
     assert.match(await page.locator('.row:has-text("TGR Bolzano")').first().textContent(), /Sempre acceso/);

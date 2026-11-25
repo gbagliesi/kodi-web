@@ -1,16 +1,19 @@
 {
   "id": "plugin.video.youtube",
   "name": "YouTube",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Salotto",
   "summary": "Cerca e guarda i video di YouTube con il lettore ufficiale",
   "description": "Ricerca di video, canali e playlist, video di tendenza in Italia, dirette e i tuoi canali preferiti. I video si guardano con il lettore ufficiale di YouTube incorporato (pubblicità comprese). Per cercare e sfogliare serve una chiave gratuita della YouTube Data API (vedi le impostazioni); senza chiave puoi aprire un link YouTube e vedere gli ultimi video dei canali salvati (questo passa dal proxy).",
   "provides": [
-    "video"
+    "video",
+    "tv"
   ],
   "icon": "icon.svg",
   "main": "main.js",
-  "syncStore": ["channels"],
+  "syncStore": [
+    "channels"
+  ],
   "settings": [
     {
       "id": "apiKey",

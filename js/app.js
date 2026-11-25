@@ -327,7 +327,7 @@ function renderTv() {
       ...live.map(a => addonTile(a, open(a))),
       h('button', { class: 'tile focusable', onclick: () => go('guide') },
         h('span', { class: 'tile-ico' }, '🗓'), h('span', { class: 'tile-name' }, 'Guida TV'), h('span', { class: 'tile-sub' }, 'Cosa c\'è adesso e dopo'))),
-    h('div', { class: 'section-title' }, 'Programmi delle reti TV'),
+    h('div', { class: 'section-title' }, 'Programmi e canali'),
     h('div', { class: 'tiles' },
       ...tv.map(a => addonTile(a, open(a))),
       h('button', { class: 'tile focusable', onclick: () => go('addons/repo') },

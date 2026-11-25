@@ -263,7 +263,7 @@ async function uiTests() {
     await page.goto(BASE + '#/live');
     await page.waitForSelector('.tile:has-text("Guida TV")');
     const tvTiles = await page.locator('#view .tile .tile-name').allTextContents();
-    for (const n of ['TV in diretta', 'Guida TV', 'RaiPlay', 'La7', 'Mediaset Infinity']) assert.ok(tvTiles.includes(n), 'TV section shows ' + n + ': ' + tvTiles);
+    for (const n of ['TV in diretta', 'Guida TV', 'RaiPlay', 'La7', 'Mediaset Infinity', 'YouTube']) assert.ok(tvTiles.includes(n), 'TV section shows ' + n + ': ' + tvTiles);
     assert.ok(!tvTiles.includes('Video di prova'), 'TV section has no plain video add-ons');
     await page.click('.tile:has-text("La7")');
     await waitFor(() => page.evaluate(() => location.hash.startsWith('#/browse/plugin.video.la7')));

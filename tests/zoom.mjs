@@ -19,6 +19,8 @@ try { execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' }); } catch { conso
 // 640×360 frame; the picture is 400×170 (2.35:1) in the middle, black all around
 const DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'salotto-zoom-'));
 const FILM = path.join(DIR, 'film.webm');
+const PLAIN = path.join(DIR, 'plain.webm'); // 16:9 with no bars at all
+execFileSync('ffmpeg', ['-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x808080:size=640x360:rate=25', '-t', '5', '-c:v', 'libvpx', PLAIN]);
 execFileSync('ffmpeg', ['-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=400x170:rate=25', '-t', '20',
   '-vf', 'pad=640:360:120:95:black', '-c:v', 'libvpx', '-b:v', '600k', FILM]);
 
@@ -37,12 +39,15 @@ const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gestur
 const errors = [];
 try {
   await waitFor(() => fetch(BASE + 'proxy/health').then(r => r.ok).catch(() => false));
-  // phone and tablet, in landscape
-  for (const name of ['Pixel 7', 'iPad Pro 11']) {
-    const pixel = devices[name];
-    const context = await browser.newContext({ ...pixel, viewport: { width: pixel.viewport.height, height: pixel.viewport.width }, serviceWorkers: 'block' });
+  // phone and tablet in landscape, phone held upright
+  for (const name of ['Pixel 7', 'iPad Pro 11', 'Pixel 7 verticale']) {
+    const portrait = name.endsWith('verticale');
+    const pixel = devices[name.replace(' verticale', '')];
+    const W = portrait ? pixel.viewport.width : pixel.viewport.height, H = portrait ? pixel.viewport.height : pixel.viewport.width;
+    const context = await browser.newContext({ ...pixel, viewport: { width: W, height: H }, serviceWorkers: 'block' });
     await context.route(/^https:\/\/(raw\.githubusercontent\.com|iptv-org\.github\.io|de1\.api\.radio-browser\.info|archive\.org)\//, r => r.fulfill({ status: 404, body: '' }));
     // served from the app's own origin, like the blob: pictures hls.js makes
+    await context.route(BASE + 'test/plain.webm', r => r.fulfill({ status: 200, contentType: 'video/webm', body: fs.readFileSync(PLAIN) }));
     await context.route(BASE + 'test/film.webm', r => r.fulfill({ status: 200, contentType: 'video/webm', body: fs.readFileSync(FILM) }));
     const page = await context.newPage();
     page.on('pageerror', e => errors.push(e.message));
@@ -65,11 +70,33 @@ try {
     async function tap(x, y) { await touch('touchStart', [[x, y]]); await sleep(30); await touch('touchEnd', []); }
     const scale = () => page.evaluate(() => { const t = getComputedStyle(document.getElementById('video')).transform; return t === 'none' ? 1 : new DOMMatrix(t).a; });
     const box = (sel) => page.evaluate((s) => { const r = document.querySelector(s).getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round).join(','); }, sel);
-    const W = pixel.viewport.height, H = pixel.viewport.width;
 
     await page.evaluate(() => import('/js/player.js').then(p => p.play({ label: 'Film con le bande', type: 'video' }, { url: '/test/film.webm' })));
     await waitFor(() => page.evaluate(() => { const v = document.getElementById('video'); return v.videoWidth && v.currentTime > 0.3; }), 10000, 'playing');
     const bottomBefore = await box('.player-bottom'), topBefore = await box('.player-top');
+
+    if (portrait) {
+      // upright: the double tap removes the bars but keeps the whole film on screen (fits the width)
+      await tap(W / 2, H / 2); await sleep(80); await tap(W / 2, H / 2);
+      await sleep(400);
+      const k = W / 640, whole = W / (400 * k);
+      const sp = await scale();
+      assert.ok(Math.abs(sp - whole) / whole < 0.06, `upright: whole film, as wide as the screen (got ${sp.toFixed(2)}, want ≈${whole.toFixed(2)})`);
+      const vr = await page.evaluate(() => document.getElementById('video').getBoundingClientRect().toJSON());
+      assert.ok(vr.width * 400 / 640 <= W * 1.07, 'upright: the film is not cut at the sides');
+      // a 16:9 picture with no bars: nothing sensible to enlarge
+      await page.evaluate(() => import('/js/player.js').then(p => p.play({ label: 'Senza bande', type: 'video' }, { url: '/test/plain.webm' })));
+      await waitFor(() => page.evaluate(() => { const v = document.getElementById('video'); return v.videoWidth && v.currentTime > 0.3; }), 10000, 'playing plain');
+      await sleep(500);
+      await tap(W / 2, H / 2); await sleep(80); await tap(W / 2, H / 2);
+      await sleep(400);
+      assert.equal(await scale(), 1, 'upright, no bars: the picture is not blown up');
+      assert.match(await page.textContent('.player-zoom'), /Ruota/);
+      await page.evaluate(() => import('/js/player.js').then(p => p.close()));
+      await context.close();
+      console.log('zoom ' + name + ': ok');
+      continue;
+    }
 
     // pinch out: bigger, the controls don't move
     await pinch(W / 2, H / 2, 100, 220);
@@ -94,7 +121,9 @@ try {
     const uiHidden = await page.evaluate(() => document.getElementById('player-ui').classList.contains('idle'));
     await tap(W / 2, H / 2); await sleep(80); await tap(W / 2, H / 2);
     await sleep(400);
-    const k = Math.min(W / 640, H / 360), want = Math.min(W / (400 * k), H / (170 * k));
+    // whole picture without bars, or no black at all if that cuts off at most 12% of it
+    const k = Math.min(W / 640, H / 360), whole = Math.min(W / (400 * k), H / (170 * k)), cover = Math.max(W / (400 * k), H / (170 * k));
+    const want = 1 - whole / cover <= 0.12 ? cover : whole;
     const s2 = await scale();
     assert.ok(Math.abs(s2 - want) / want < 0.06, `double tap fills without the bars (got ${s2.toFixed(2)}, want ≈${want.toFixed(2)})`);
     assert.equal(await page.evaluate(() => document.getElementById('player-ui').classList.contains('idle')), uiHidden, 'double tap leaves the controls as they were');

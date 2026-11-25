@@ -130,3 +130,10 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
 .r-name-input { width: 100%; background: var(--panel); color: var(--text); border: 0; border-radius: 12px; padding: 12px; font: inherit; font-size: 17px; margin-top: 6px; }
 .r-wide.danger { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1.5px var(--danger); }
 .r-version { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; }
+
+/* QR code reader */
+.r-scan { margin: 6px 0 14px; }
+.r-qr-view { position: relative; width: 100%; aspect-ratio: 1; max-height: 55vh; margin: 8px auto; border-radius: 14px; overflow: hidden; background: #000; }
+.r-qr-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.r-qr-frame { position: absolute; inset: 15%; border-radius: 12px; box-shadow: 0 0 0 2000px rgba(0,0,0,.35), inset 0 0 0 3px var(--accent); pointer-events: none; }
+.r-qr-view[hidden] { display: none; }

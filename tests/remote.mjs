@@ -455,6 +455,65 @@ async function uiTests() {
     await ph3.click('#r-addbtn0');
     await waitFor(() => ph3.getAttribute('#r-dot', 'class').then(c => /\bon\b/.test(c)), 8000, 'iphone paired by link');
     await fresh.close();
+
+    // QR reader: the camera (a canvas stream showing the screen's QR code) pairs the phone;
+    // a photo of some other QR code is refused. Chromium on Linux has no BarcodeDetector: jsQR reads it.
+    const camCtx = await browser.newContext({ ...devices['Pixel 7'], serviceWorkers: 'block' });
+    await mock(camCtx);
+    await camCtx.addInitScript(([text, base]) => {
+      navigator.mediaDevices.getUserMedia = async () => {
+        const { default: qrcode } = await import(base + 'js/vendor/qrcode.js');
+        const q = qrcode(0, 'M'); q.addData(text); q.make();
+        const n = q.getModuleCount(), cell = 6, pad = 24, size = n * cell + pad * 2;
+        const c = document.createElement('canvas'); c.width = 640; c.height = 480;
+        const g = c.getContext('2d');
+        const draw = () => {
+          g.fillStyle = '#888'; g.fillRect(0, 0, 640, 480);
+          const x0 = (640 - size) / 2, y0 = (480 - size) / 2;
+          g.fillStyle = '#fff'; g.fillRect(x0, y0, size, size); g.fillStyle = '#000';
+          for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) g.fillRect(x0 + pad + k * cell, y0 + pad + r * cell, cell, cell);
+        };
+        draw(); setInterval(draw, 100);
+        window.__camOn = true;
+        const st = c.captureStream(10);
+        for (const t of st.getTracks()) { const stop = t.stop.bind(t); t.stop = () => { window.__camOn = false; stop(); }; }
+        return st;
+      };
+    }, [cur, BASE]);
+    const ph4 = await camCtx.newPage();
+    ph4.on('pageerror', e => errors.push('phone4: ' + e.message));
+    await ph4.goto(BASE + 'remote/');
+    assert.equal(await ph4.evaluate(() => 'BarcodeDetector' in window), false);
+    // a photo of a QR code that is not Salotto's
+    await ph4.click('#r-scanbtn0');
+    await ph4.waitForSelector('.r-qr-video');
+    const png = await ph4.evaluate(async (base) => {
+      const { default: qrcode } = await import(base + 'js/vendor/qrcode.js');
+      const q = qrcode(0, 'M'); q.addData('https://example.org/altro'); q.make();
+      return q.createDataURL(8, 32);
+    }, BASE);
+    await ph4.setInputFiles('#r-sheet input[type=file]', { name: 'qr.gif', mimeType: 'image/gif', buffer: Buffer.from(png.split(',')[1], 'base64') });
+    // the camera may pair first: either the refusal note or the pairing is fine, both mean the reader works
+    await waitFor(() => ph4.getAttribute('#r-dot', 'class').then(c => /\bon\b/.test(c)), 10000, 'phone paired by the camera QR');
+    assert.equal(await ph4.isVisible('#r-sheet'), false);
+    assert.equal(await ph4.evaluate(() => window.__camOn), false, 'camera released');
+    assert.equal(await ph4.evaluate(() => !!window.jsQR), true);
+    await camCtx.close();
+
+    // photo only (no camera): a QR that is not Salotto's is refused with a note
+    const photoCtx = await browser.newContext({ ...devices['Pixel 7'], serviceWorkers: 'block' });
+    await mock(photoCtx);
+    await photoCtx.addInitScript(() => { navigator.mediaDevices.getUserMedia = () => Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })); });
+    const ph5 = await photoCtx.newPage();
+    ph5.on('pageerror', e => errors.push('phone5: ' + e.message));
+    await ph5.goto(BASE + 'remote/');
+    await ph5.click('#r-scanbtn0');
+    await waitFor(() => ph5.textContent('#r-sheet').then(t => /permesso/.test(t)), 4000, 'camera refused note');
+    await ph5.setInputFiles('#r-sheet input[type=file]', { name: 'qr.gif', mimeType: 'image/gif', buffer: Buffer.from(png.split(',')[1], 'base64') });
+    await waitFor(() => ph5.textContent('#r-sheet').then(t => /non è quello di Salotto/.test(t)), 8000, 'foreign QR refused');
+    assert.equal(await ph5.isVisible('#r-unpaired'), true);
+    await photoCtx.close();
+    console.log('✓ QR reader: camera pairs the phone (jsQR fallback), camera released, foreign QR refused, photo works without camera');
     assert.deepEqual(errors, []);
     console.log('✓ installable: manifest on Android, «Add to Home Screen» + paste link on iPhone');
     console.log('✓ no page errors');

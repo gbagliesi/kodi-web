@@ -82,6 +82,14 @@ const FAKE_YT = `(() => {
     this.seekTo = (x) => { t = x; window.__yt.calls.push('seek:' + x); };
     this.nextVideo = () => window.__yt.calls.push('next');
     this.previousVideo = () => window.__yt.calls.push('prev');
+    let rate = 1, mods = new Set();
+    this.getPlaybackRate = () => rate;
+    this.getAvailablePlaybackRates = () => [0.5, 1, 1.5, 2];
+    this.setPlaybackRate = (r) => { rate = r; window.__yt.calls.push('rate:' + r); };
+    this.loadModule = (m) => mods.add(m);
+    this.unloadModule = (m) => { mods.delete(m); window.__yt.calls.push('cc:off'); };
+    this.getOption = (m, o) => mods.has('captions') && o === 'tracklist' ? [{ languageCode: 'it', displayName: 'Italiano' }, { languageCode: 'en', displayName: 'Inglese', kind: 'asr' }] : undefined;
+    this.setOption = (m, o, v) => window.__yt.calls.push('cc:' + v.languageCode);
     this.destroy = () => { f.remove(); window.__yt.calls.push('destroy'); };
     setTimeout(() => opts.events.onReady({ target: this }), 10);
     if (opts.videoId === 'blocked-X01') setTimeout(() => opts.events.onError({ data: 150 }), 30);
@@ -128,6 +136,9 @@ try {
     assert.ok(await page.evaluate(() => window.salotto.addons.getInstalled('plugin.video.youtube')), 'YouTube add-on installed with the app');
     await page.goto(BASE + '#/browse/plugin.video.youtube');
     await page.waitForSelector('.row:has-text("Imposta la chiave API")');
+    // opening the add-on already loads YouTube's player API (the video starts sooner)
+    await waitFor(() => page.evaluate(() => !!window.YT?.Player), 5000, 'API preloaded');
+    assert.ok(await page.evaluate(() => !!document.querySelector('link[rel=preconnect][href="https://www.youtube.com"]')));
     await page.click('.row:has-text("Cerca su YouTube")');
     await page.fill('input[placeholder="Cerca…"]', 'https://youtu.be/Vid_Found01?si=abc');
     await page.keyboard.press('Enter');
@@ -252,18 +263,48 @@ try {
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter');
     assert.deepEqual(await page.evaluate(() => window.__yt.calls.slice(1)), ['seek:0', 'seek:10', 'pause']);
-    // ▲ shows the bar with the focus on ✕; → moves to ☆; Back hides the bar, Back again closes
+    // ◀▶ with the controls hidden: the progress bar peeks, quick presses add up
+    assert.ok(await page.evaluate(() => document.getElementById('yt-player').classList.contains('peek')), 'TV: progress shown after a skip');
+    await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+    assert.deepEqual(await page.evaluate(() => window.__yt.calls.slice(-3)), ['seek:20', 'seek:50', 'seek:80'], 'held → bigger steps from where the last aimed');
+    await waitFor(() => page.evaluate(() => document.getElementById('yt-cur').textContent === '1:20'));
+    // ▲ shows Salotto's controls with the focus on ⏯; → ⟳ skips; speed and subtitles menus
     await page.keyboard.press('ArrowUp');
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-close');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-play');
     await page.keyboard.press('ArrowRight');
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-fav');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-fwd');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => window.__yt.calls.at(-1)), 'seek:90');
+    await page.focus('#yt-rate'); await page.keyboard.press('Enter');
+    await page.waitForSelector('#yt-menu:not([hidden]) .row.on:has-text("Normale")');
+    assert.match(await page.evaluate(() => document.activeElement.textContent), /Normale/);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => window.__yt.calls.at(-1)), 'rate:1.5');
+    assert.equal(await page.isVisible('#yt-menu'), false);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'yt-rate');
+    await waitFor(() => page.evaluate(() => document.getElementById('yt-rate').textContent === 'Velocità 1,5×'));
+    await page.focus('#yt-cc'); await page.keyboard.press('Enter');
+    await page.waitForSelector('#yt-menu:not([hidden]) .row:has-text("Inglese (automatici)")');
+    await page.click('#yt-menu .row:has-text("Italiano")');
+    assert.equal(await page.evaluate(() => window.__yt.calls.at(-1)), 'cc:it');
+    await waitFor(() => page.evaluate(() => document.getElementById('yt-cc').textContent === 'Sottotitoli: IT'));
+    // Back closes an open menu first
+    await page.focus('#yt-cc'); await page.keyboard.press('Enter');
+    await page.waitForSelector('#yt-menu:not([hidden])');
+    assert.equal(await page.evaluate(() => window.salottoBack()), true);
+    assert.equal(await page.isVisible('#yt-menu'), false);
+    assert.equal(await page.isVisible('#yt-ctrl'), true);
+    // ▲ from the controls reaches the top bar
+    await page.focus('#yt-play'); await page.keyboard.press('ArrowUp');
+    assert.match(await page.evaluate(() => document.activeElement.id), /^yt-(close|fav|ext)$/);
     assert.equal(await page.evaluate(() => window.salottoBack()), true);
     assert.ok(await page.evaluate(() => document.getElementById('yt-player').classList.contains('bar-hidden')));
     assert.equal(await page.isVisible('#yt-player'), true);
     assert.equal(await page.evaluate(() => window.salottoBack()), true);
     assert.equal(await page.isVisible('#yt-player'), false);
     assert.match(await page.evaluate(() => document.activeElement.textContent), /Video di tendenza/, 'focus back on the tile');
-    console.log('✓ YouTube on the TV app: full screen, ◀▶ OK, ▲ bar, Back hides the bar then closes, focus back on the tile');
+    console.log('✓ YouTube on the TV app: full screen, ◀▶ with progress (held = bigger steps), OK, ▲ controls, speed and subtitles menus, Back closes menu → controls → player, focus back on the tile');
     await context.close();
   }
 

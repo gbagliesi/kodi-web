@@ -5,7 +5,7 @@
   "description": "Media center leggero per il browser (anche iPad) con sistema di add-on",
   "scripts": {
     "start": "node server.js",
-    "test": "node tests/smoke.mjs && node tests/remote.mjs && node tests/subtitles.mjs && node tests/raiplay.mjs"
+    "test": "node tests/smoke.mjs && node tests/remote.mjs && node tests/subtitles.mjs && node tests/raiplay.mjs && node tests/la7.mjs"
   },
   "engines": { "node": ">=18" }
 }

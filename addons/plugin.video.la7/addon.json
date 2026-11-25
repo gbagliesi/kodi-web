@@ -1,0 +1,13 @@
+{
+  "id": "plugin.video.la7",
+  "name": "La7",
+  "version": "1.0.0",
+  "author": "Salotto",
+  "summary": "Programmi e puntate on demand di La7 (la7play.it)",
+  "description": "Sfoglia e cerca il catalogo on demand di La7 su la7play.it: programmi, puntate intere e video. Le puntate libere si guardano in Salotto (La7 non pubblica sottotitoli: con CC li può generare il lettore). Film, documentari e serie protetti (DRM) si aprono sul sito la7play.it. La ricerca completa passa dal proxy delle Impostazioni.",
+  "provides": [
+    "video"
+  ],
+  "icon": "icon.svg",
+  "main": "main.js"
+}

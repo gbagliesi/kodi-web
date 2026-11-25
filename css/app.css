@@ -457,6 +457,9 @@ body.tv .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); ga
 .cc-model { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 6px; line-height: 1.2; }
 .cc-model small { font-size: 11px; opacity: .75; }
 .cc-model.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cc-sync .cc-model { padding: 8px 4px; }
+.cc-sync .cc-sval { flex: 1.2; display: flex; align-items: center; justify-content: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cc-sync .cc-mrow + .cc-mrow { margin-top: 8px; }
 
 /* ---------------------------------------------------------------- phone remote pairing */
 .remote-page .qr-box { background: #fff; border-radius: var(--radius); padding: 10px; width: min(300px, 80vw); aspect-ratio: 1; color: #222; display: grid; place-items: center; text-align: center; }

@@ -30,11 +30,49 @@ let genStatus = '';         // what the generated subtitles are doing (shown in 
 let genText = null;         // { pieces, from, dur }
 let lagShown = false;
 
+// ---- timing of the subtitles, per video: some files are out of step with the video (a delay), or
+// made for the TV version, which runs 4% faster than the film (PAL 25 fps): «ritmo film»
+const FILM = 25 / 24;
+let sync = { d: 0, f: false };
+const loadSync = (key) => ({ d: 0, f: false, ...((key && load('subsync', {})[key]) || {}) });
+function saveSync() {
+  if (!item?.key) return;
+  const all = load('subsync', {});
+  delete all[item.key];
+  if (sync.d || sync.f) all[item.key] = sync;
+  const keys = Object.keys(all);
+  for (const k of keys.slice(0, Math.max(0, keys.length - 200))) delete all[k];
+  save('subsync', all);
+}
+const toVideo = (t) => t * (sync.f ? FILM : 1) + sync.d;     // file time → video time
+const toFile = (t) => (t - sync.d) / (sync.f ? FILM : 1);    // video time → file time
+/** Tracks the browser holds (Safari may draw them): their cues are moved to the new times. */
+function retime(track, force = false) {
+  const list = track.cues;
+  if (!list || !list.length) return;
+  const sig = list.length + '|' + sync.d + '|' + sync.f;
+  if (!force && track.__salottoSync === sig) return;
+  track.__salottoSync = sig;
+  for (const c of list) {
+    if (c.__s0 === undefined) { c.__s0 = c.startTime; c.__e0 = c.endTime; }
+    c.endTime = toVideo(c.__e0); c.startTime = toVideo(c.__s0);
+  }
+}
+function setSync(next) {
+  sync = { d: Math.round(Math.max(-600, Math.min(600, next.d)) * 10) / 10, f: !!next.f };
+  saveSync();
+  const t = tracks.find(x => x.id === active);
+  if (t?.kind === 'tt') retime(t.ref, true);
+  tick(); render(); opts.changed();
+}
+export const syncState = () => ({ ...sync });
+export function syncStep(sec) { setSync({ ...sync, d: sync.d + sec }); }
+
 export function init(o) {
   opts = o;
   el = {
     btn: $('pl-cc'), box: $('pl-ccbox'), list: $('pl-cclist'), note: $('pl-ccnote'), close: $('pl-ccclose'),
-    models: $('pl-ccmodels'), overlay: $('pl-subs'), video: $('video'),
+    models: $('pl-ccmodels'), sync: $('pl-ccsync'), overlay: $('pl-subs'), video: $('video'),
   };
   whisper.checkSupport().then((s) => { support = s; render(); });
   el.btn.addEventListener('click', () => { whisper.prime(); toggleBox(); });
@@ -164,6 +202,7 @@ export function newItem(it) {
   clearTimeout(decideTimer); clearTimeout(emptyTimer);
   emptyIds = new Set();
   item = it;
+  sync = loadSync(it?.key);
   tracks = []; cues.clear(); active = null; noMse = false; lagShown = false;
   show('');
   genText = null; quiet = 0;
@@ -396,8 +435,8 @@ function tick() {
   }
   const t = tracks.find(x => x.id === active);
   if (!t) { show(''); return; }
-  if (t.kind === 'tt') { if (SAFARI_DRAWS) { show(''); return; } show([...(t.ref.activeCues || [])].map(c => cueText(c.text)).join('\n')); return; }
-  const now = el.video.currentTime, list = cues.get(active) || [];
+  if (t.kind === 'tt') { retime(t.ref); if (SAFARI_DRAWS) { show(''); return; } show([...(t.ref.activeCues || [])].map(c => cueText(c.text)).join('\n')); return; }
+  const now = toFile(el.video.currentTime), list = cues.get(active) || [];
   // old cues are not needed any more (live TV runs for hours)
   if (list.length > 400) cues.set(active, list.filter(c => c.end > now - 30));
   show(list.filter(c => c.start <= now && c.end > now).map(c => c.text).join('\n'));
@@ -480,12 +519,46 @@ function render() {
     }
     el.models.append(row);
   }
+  renderSync();
   let note = '';
   if (active === 'gen' || (prefs.mode !== 'off' && genStatus)) note = genStatus;
   else if (prefs.mode !== 'off' && !active && !genOk) note = 'Nessun sottotitolo per questo canale. ' + genWhy();
   el.note.textContent = note;
   el.note.hidden = !note;
   if (keep >= 0) el.box.querySelectorAll('button')[keep]?.focus({ preventScroll: true });
+}
+
+// out of step with the speech: earlier / later, and the film's pace (channel's or add-on's subtitles)
+function renderSync() {
+  const show = !!active && active !== 'gen';
+  el.sync.hidden = !show;
+  el.sync.textContent = '';
+  if (!show) return;
+  const btn = (label, title, fn, on = false) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn focusable cc-model' + (on ? ' on' : '');
+    b.innerHTML = '<b></b>'; b.querySelector('b').textContent = label; b.title = title;
+    b.addEventListener('click', fn);
+    return b;
+  };
+  const h = document.createElement('div'); h.className = 'cc-mhead';
+  h.textContent = 'Sincronia con il parlato (se le scritte arrivano prima, premi +)';
+  const row = document.createElement('div'); row.className = 'cc-mrow';
+  const val = document.createElement('span'); val.className = 'cc-sval';
+  val.textContent = (sync.d > 0 ? '+' : '') + sync.d.toFixed(1).replace('.', ',') + ' s';
+  row.append(
+    btn('−5 s', 'Scritte 5 secondi prima', () => syncStep(-5)),
+    btn('−0,5', 'Scritte mezzo secondo prima', () => syncStep(-0.5)),
+    val,
+    btn('+0,5', 'Scritte mezzo secondo dopo', () => syncStep(0.5)),
+    btn('+5 s', 'Scritte 5 secondi dopo', () => syncStep(5)),
+  );
+  const row2 = document.createElement('div'); row2.className = 'cc-mrow';
+  row2.append(
+    btn('Ritmo film ' + (sync.f ? '✓' : ''), 'Per i film con sottotitoli fatti per la TV: l\'anticipo cresce piano piano durante il film', () => setSync({ ...sync, f: !sync.f }), sync.f),
+    btn('Azzera', 'Torna ai tempi del file', () => setSync({ d: 0, f: false })),
+  );
+  el.sync.append(h, row, row2);
 }
 
 /** For the phone remote and the stream details. */

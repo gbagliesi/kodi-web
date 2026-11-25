@@ -1,5 +1,6 @@
 // Sync between devices: favourites, resume points, sync of audio and subtitles, list orders,
-// some settings and the installed add-ons (with their settings) travel through the Cloudflare
+// some settings and the installed add-ons (with their settings and the saved data their
+// manifest lists in "syncStore", e.g. YouTube's channels) travel through the Cloudflare
 // Worker set as proxy (POST /sync, one store per group, see cloudflare/worker.js).
 //
 // The state is cut into small entries ("fav/<key>", "resume/<key>", "addon/<id>"…); each device
@@ -63,8 +64,10 @@ function hash(v) {
 }
 const split = (id) => { const i = id.indexOf('/'); return i < 0 ? [id, ''] : [id.slice(0, i), id.slice(i + 1)]; };
 
+const syncedKeys = (rec) => (Array.isArray(rec?.manifest?.syncStore) ? rec.manifest.syncStore.filter(k => typeof k === 'string') : []);
+
 /** Everything that travels, as { id: value }. */
-export function entries() {
+export async function entries() {
   const out = {};
   for (const f of load('favourites', [])) if (f && f.key) out['fav/' + f.key] = f;
   for (const name of MAPS) for (const [k, v] of Object.entries(load(name, {}) || {})) out[name + '/' + k] = v;
@@ -80,6 +83,11 @@ export function entries() {
   for (const [id, rec] of Object.entries(load('addons', {}) || {})) {
     // add-ons loaded from a file on this device can't be installed elsewhere
     if (rec && rec.manifestUrl) out['addon/' + id] = { u: rec.manifestUrl, s: rec.source || 'url', e: rec.enabled !== false, c: rec.settings || {} };
+    // data an add-on keeps for the user (e.g. YouTube's saved channels), listed in its manifest
+    for (const key of syncedKeys(rec)) {
+      const v = await addons.readAddonStore(id, key);
+      if (v != null) out['astore/' + id + '/' + key] = v;
+    }
   }
   return out;
 }
@@ -122,6 +130,10 @@ async function apply(got, snapT) {
     }
     if (by.subs) { const [, v] = by.subs[0]; if (v == null) save('subs', {}); else save('subs', v); }
   } finally { applying = false; }
+  for (const [k, v, id] of by.astore || []) {
+    const i = k.indexOf('/');
+    try { await addons.writeAddonStore(k.slice(0, i), k.slice(i + 1), v); } catch (e) { console.warn('sync: add-on data', k, e); failed.add(id); }
+  }
   for (const [k, v, id] of by.addon || []) {
     try {
       const inst = addons.getInstalled(k);
@@ -152,7 +164,7 @@ async function round(keepalive) {
   const ep = endpoint();
   if (!ep) { setStatus({ state: 'noproxy', message: 'Serve il proxy Cloudflare (Impostazioni → Proxy)' }); return; }
   const st = { rev: 0, joined: false, snap: {}, pending: {}, ...load(STATE, {}) };
-  const local = entries();
+  const local = await entries();
   const now = Date.now();
   const changes = [];
   if (st.joined) {
@@ -177,7 +189,7 @@ async function round(keepalive) {
   for (const [id, v] of Object.entries(st.pending)) if (!(id in got)) { got[id] = v; wins[id] = { v, t: +(st.snap[id] || '').split('.')[1] || now }; }
 
   // something changed here while the answer travelled: keep it, it goes next time
-  const cur = entries();
+  const cur = await entries();
   for (const id of Object.keys(got)) {
     if (hash(cur[id] ?? null) !== hash(local[id] ?? null)) { delete got[id]; delete wins[id]; again = true; }
   }
@@ -227,6 +239,7 @@ export function start() {
   if (started) return;
   started = true;
   onChange((key) => { if (WATCHED.has(key)) scheduled(); });
+  addons.onAddonStored((id, key) => { if (syncedKeys(addons.getInstalled(id)).includes(key)) scheduled(); });
   setInterval(() => { if (document.visibilityState === 'visible' && config().on) syncNow(); }, POLL);
   document.addEventListener('visibilitychange', () => {
     if (!config().on) return;

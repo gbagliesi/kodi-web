@@ -186,7 +186,8 @@ chiave nuova.
 
 Preferiti, punti di ripresa dei video, ordine degli elenchi, sincronia audio
 e dei sottotitoli, add-on installati con le loro impostazioni (per esempio la
-chiave API di YouTube) e alcune opzioni passano da un Salotto all'altro
+chiave API di YouTube, le playlist M3U aggiunte a «TV in diretta») e i
+canali YouTube salvati, «Il mio ordine» degli elenchi e alcune opzioni passano da un Salotto all'altro
 attraverso lo stesso Worker. I dati stanno in un Durable Object del tuo
 account Cloudflare (piano gratuito), protetto dal TOKEN come il proxy.
 

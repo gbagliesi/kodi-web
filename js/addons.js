@@ -246,6 +246,19 @@ export function setAddonSettings(id, values) {
   writeInstalled(map);
 }
 
+// ---- an add-on's own saved data (ctx.store: Cache Storage, same addresses as addon-runtime.js)
+const storedListeners = new Set();
+export function onAddonStored(fn) { storedListeners.add(fn); return () => storedListeners.delete(fn); }
+const addonStoreUrl = (id, key) => new URL('__addon-store/' + encodeURIComponent(id) + '/' + encodeURIComponent(key), RUNTIME_URL).href;
+export async function readAddonStore(id, key) {
+  try { const r = self.caches && await (await caches.open(CODE_CACHE)).match(addonStoreUrl(id, key)); return r ? await r.json() : null; } catch { return null; }
+}
+export async function writeAddonStore(id, key, value) {
+  const c = await caches.open(CODE_CACHE);
+  if (value == null) await c.delete(addonStoreUrl(id, key));
+  else await c.put(addonStoreUrl(id, key), new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }));
+}
+
 /** Sync: enabled state and settings exactly as another device has them. */
 export function setSyncedState(id, enabled, settings) {
   const map = readInstalled();
@@ -340,6 +353,7 @@ class AddonHost {
       case 'ready': this.capabilities = msg.capabilities || {}; this._readyResolve(); break;
       case 'init-error': this._readyReject(new Error(msg.message)); break;
       case 'log': console[msg.level === 'error' ? 'error' : 'log'](`[${this.id}]`, ...msg.args); break;
+      case 'stored': for (const fn of storedListeners) { try { fn(this.id, msg.key); } catch (e) { console.error(e); } } break;
       case 'notify': if (typeof notifyHandler === 'function') notifyHandler(msg.message, this.record.manifest); break;
       case 'result':
       case 'error': {

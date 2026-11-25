@@ -124,6 +124,8 @@ const store = {
     try {
       if (self.caches) await (await caches.open('salotto-addon-data')).put(storeUrl(key), new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } }));
     } catch { /* memory only */ }
+    post({ type: 'stored', key }); // keys listed in the manifest's syncStore go to the other devices
+
   },
 };
 

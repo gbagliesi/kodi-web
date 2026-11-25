@@ -1,6 +1,9 @@
 # Publishes cloudflare/worker.js to the Cloudflare Worker whenever it changes on main.
 # Needs two repository secrets: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (see docs/CLOUDFLARE.md).
 # Optional repository variable CF_WORKER_NAME if the Worker is not called "salotto-proxy".
+# Optional secret PROXY_TOKEN: sets the Worker's TOKEN too (friends' forks: everything from GitHub).
+# In a fork (a friend's own proxy) it publishes the original repository's latest Worker every day,
+# so the fork never needs syncing.
 name: Aggiorna il Worker Cloudflare
 
 on:
@@ -10,6 +13,8 @@ on:
       - 'cloudflare/**'
       - '.github/workflows/worker.yml'
   workflow_dispatch:
+  schedule:
+    - cron: '41 4 * * *'
 
 permissions:
   contents: read
@@ -20,15 +25,21 @@ concurrency:
 
 jobs:
   deploy:
+    # the daily run is for forks only; the original repository publishes when the Worker changes
+    if: ${{ github.event_name != 'schedule' || github.event.repository.fork }}
     runs-on: ubuntu-latest
     env:
       HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+      HAS_PROXY_TOKEN: ${{ secrets.PROXY_TOKEN != '' }}
     steps:
       - name: Controlla i secret
         if: env.HAS_TOKEN != 'true'
         run: echo "::notice::Secret CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID non impostati, Worker non aggiornato (vedi docs/CLOUDFLARE.md)."
       - uses: actions/checkout@v4
         if: env.HAS_TOKEN == 'true'
+        with:
+          repository: ${{ github.event.repository.fork && 'gbagliesi/kodi-web' || github.repository }}
+          ref: ${{ github.event.repository.fork && 'main' || github.ref }}
       - name: Pubblica il Worker
         if: env.HAS_TOKEN == 'true'
         uses: cloudflare/wrangler-action@v3
@@ -37,3 +48,14 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: cloudflare
           command: deploy --name ${{ vars.CF_WORKER_NAME || 'salotto-proxy' }}
+      - name: Imposta il TOKEN del proxy (secret PROXY_TOKEN)
+        if: env.HAS_TOKEN == 'true' && env.HAS_PROXY_TOKEN == 'true'
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROXY_TOKEN: ${{ secrets.PROXY_TOKEN }}
+        run: printf '%s' "$PROXY_TOKEN" | npx --yes wrangler@3 secret put TOKEN --name "${{ vars.CF_WORKER_NAME || 'salotto-proxy' }}"
+      - name: Indirizzo del proxy
+        if: env.HAS_TOKEN == 'true'
+        run: echo "::notice::Proxy pubblicato. L'indirizzo è https://${{ vars.CF_WORKER_NAME || 'salotto-proxy' }}.<il-tuo-sottodominio>.workers.dev (lo vedi anche su Cloudflare → Workers & Pages)." 

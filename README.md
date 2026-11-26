@@ -27,7 +27,8 @@ JavaScript.
    con Downloader ([docs/FIRETV.md](docs/FIRETV.md)).
 2. **Crea il Worker Cloudflare** (gratuito, 15 minuti, una volta sola): fa da
    proxy, da relay per il telecomando e da archivio per la sincronizzazione
-   ([docs/CLOUDFLARE.md](docs/CLOUDFLARE.md)).
+   ([docs/CLOUDFLARE.md](docs/CLOUDFLARE.md); il codice, come riferimento, è in
+   [cloudflare/worker.js](cloudflare/worker.js)).
 3. **Su ogni dispositivo**: *Impostazioni* → indirizzo e token del Worker →
    *Salva* («proxy raggiungibile ✓»). Solo da qui in poi compaiono gli
    add-on: *Add-on → Sfoglia repository* → «Add-on del Worker». Preferiti,

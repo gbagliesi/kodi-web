@@ -17,6 +17,13 @@ Un solo Worker gratuito su Cloudflare fa quattro cose per Salotto:
 Gira sempre, senza computer acceso, ed è gratuito per l'uso personale. Tutto
 è protetto da un solo segreto, il **TOKEN**, che scegli tu.
 
+**Il codice del Worker** è pubblico in questo repository, da leggere come
+riferimento: [`cloudflare/worker.js`](../cloudflare/worker.js) (proxy,
+add-on, telecomando, sincronizzazione; in cima c'è l'elenco degli indirizzi e
+delle variabili) e [`cloudflare/wrangler.toml`](../cloudflare/wrangler.toml)
+(configurazione e Durable Object). Lo pubblica il workflow
+[`.github/workflows/worker.yml`](../.github/workflows/worker.yml).
+
 Servono circa 15 minuti, una volta sola: passi da 1 a 5. Per un amico che
 vuole un proxy suo, la strada più semplice è
 [più sotto](#il-proxy-per-un-amico-tutto-da-github-si-aggiorna-da-solo).
@@ -61,8 +68,8 @@ richieste finché non imposti `TOKEN`**.
 
 ## 4. Pubblica il Worker completo con GitHub
 
-Il codice del Worker (`cloudflare/worker.js`) e i collegamenti ai Durable
-Object del telecomando e della sincronizzazione (`cloudflare/wrangler.toml`)
+Il codice del Worker ([`cloudflare/worker.js`](../cloudflare/worker.js)) e i collegamenti ai Durable
+Object del telecomando e della sincronizzazione ([`cloudflare/wrangler.toml`](../cloudflare/wrangler.toml))
 li pubblica una GitHub Action del repository, ogni volta che cambiano. Va
 configurata una volta sola.
 
@@ -137,7 +144,7 @@ Con l'Action del passo 4 non devi fare nulla: a ogni modifica di
 `cloudflare/` il Worker si aggiorna da solo. Per forzare una pubblicazione:
 **Actions** → **Aggiorna il Worker Cloudflare** → **Run workflow**.
 
-Aggiornare **a mano** (Worker → **Edit code**, incollare `cloudflare/worker.js`,
+Aggiornare **a mano** (Worker → **Edit code**, incollare [`cloudflare/worker.js`](../cloudflare/worker.js),
 **Deploy**) aggiorna il proxy ma non crea i collegamenti ai Durable Object:
 telecomando e sincronizzazione non funzionerebbero. Meglio usare l'Action.
 

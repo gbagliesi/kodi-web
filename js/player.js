@@ -486,6 +486,7 @@ export function close() {
     // automatic mode: the whole app stays full screen, so Chrome's "full screen" notice
     // appears once instead of at every video; just give the lists their orientation back
     autoFs = true;
+    cancelRelease();
     try { screen.orientation?.unlock(); } catch { /* ignore */ }
   } else if (document.fullscreenElement || document.webkitFullscreenElement) {
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
@@ -540,7 +541,9 @@ function toggleFullscreen() {
     updateFsBtn();
     // if the browser dropped full screen behind our back, the lock fails: enter full screen again
     const target = wantsAutoFs() ? document.documentElement : r;
-    screen.orientation.lock(want).catch(() => target.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation.lock(want)).catch(() => {}));
+    cancelRelease();
+    const after = () => { if (want === 'portrait') releaseWhenUpright(); };
+    screen.orientation.lock(want).then(after, () => target.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation.lock(want)).then(after).catch(() => {}));
     return;
   }
   if (document.fullscreenElement || document.webkitFullscreenElement) {
@@ -554,6 +557,35 @@ function toggleFullscreen() {
   }
 }
 
+// Back to portrait from the button: the lock is only needed while the phone is still held
+// sideways. Kept on, it froze the screen in portrait for the rest of the video (no auto-rotate,
+// no Android rotate suggestion icon) until the player was closed. So it is released as soon as
+// the phone is held upright (or after a moment if there is no motion sensor): from then on the
+// system decides again, as in the automatic mode.
+let releaseOrient = null;
+function cancelRelease() { if (releaseOrient) releaseOrient(); }
+function releaseWhenUpright() {
+  cancelRelease();
+  let since = 0, sensor = false;
+  const done = () => {
+    cancelRelease();
+    if (!autoFs || !(document.fullscreenElement || document.webkitFullscreenElement)) return;
+    try { screen.orientation.unlock(); } catch { /* ignore */ }
+  };
+  const onMotion = (e) => {
+    const g = e.accelerationIncludingGravity;
+    if (!g || g.x == null || g.y == null) return;
+    sensor = true;
+    const upright = Math.abs(g.y) > 6 && Math.abs(g.y) > 2 * Math.abs(g.x);
+    if (!upright) { since = 0; return; }
+    if (!since) since = e.timeStamp || performance.now();
+    if ((e.timeStamp || performance.now()) - since >= 300) done();
+  };
+  window.addEventListener('devicemotion', onMotion);
+  const timer = setTimeout(() => { if (!sensor) done(); }, 2500);
+  releaseOrient = () => { window.removeEventListener('devicemotion', onMotion); clearTimeout(timer); releaseOrient = null; };
+}
+
 // Phones: full screen video goes landscape, leaving full screen goes back to portrait.
 // Screen Orientation lock works on Android (Chrome, Edge, Samsung Internet) while
 // in full screen; on iPhone the system player rotates by itself.
@@ -561,7 +593,7 @@ const isPhone = () => matchMedia('(pointer: coarse)').matches && Math.min(screen
 
 function onFullscreenChange() {
   const fs = document.fullscreenElement || document.webkitFullscreenElement;
-  if (!fs) { autoFs = false; remoteFs = false; }
+  if (!fs) { autoFs = false; remoteFs = false; cancelRelease(); }
   changed();
   updateFsBtn();
   const o = screen.orientation;

@@ -607,6 +607,25 @@ function onFullscreenChange() {
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
+// Back from the floating window (or from another app): Android may have dropped full screen
+// while the page was in the background, when an orientation change is ignored. A lock from
+// before could then outlive it and keep the screen in portrait, with no rotate button (that
+// shows only in full screen). So the orientation is set again from the state found on return.
+function resyncOrientation() {
+  if (document.visibilityState !== 'visible' || inPip() || !isPhone()) return;
+  const o = screen.orientation;
+  const fs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (!fs) { autoFs = false; remoteFs = false; }
+  updateFsBtn();
+  changed();
+  if (!o) return;
+  if (fs && !autoFs && current && !current.audio && typeof o.lock === 'function') {
+    o.lock('landscape').catch(() => {});
+  } else if (!releaseOrient && typeof o.unlock === 'function') {
+    try { o.unlock(); } catch { /* ignore */ }
+  }
+}
+
 /** Keyboard / remote handling while the player is open. Returns true if handled. */
 export function handleKey(e) {
   if (!isOpen()) return false;
@@ -1318,7 +1337,10 @@ function resumeAfterPip() {
 function pipChanged() {
   const on = inPip();
   el.pip.classList.toggle('active', on);
-  if (wasInPip && !on) { pipLeftAt = Date.now(); setTimeout(resumeAfterPip, 300); setTimeout(resumeAfterPip, 1200); }
+  if (wasInPip && !on) {
+    pipLeftAt = Date.now(); setTimeout(resumeAfterPip, 300); setTimeout(resumeAfterPip, 1200);
+    setTimeout(resyncOrientation, 300); setTimeout(resyncOrientation, 1200);
+  }
   wasInPip = on;
 }
 v.addEventListener('enterpictureinpicture', pipChanged);
@@ -1327,7 +1349,7 @@ v.addEventListener('webkitpresentationmodechanged', pipChanged);
 // Leaving the app (home button, app switcher) while a video plays: try to keep it in a floating
 // window. Safari does this by itself (autopictureinpicture); Chrome allows it only in some cases.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') setTimeout(resumeAfterPip, 200);
+  if (document.visibilityState === 'visible') { setTimeout(resumeAfterPip, 200); setTimeout(resyncOrientation, 300); }
   if (document.visibilityState === 'hidden' && isOpen() && !casting && !current?.audio && !v.paused && !inPip()) enterPip();
 });
 el.fav.addEventListener('click', () => {

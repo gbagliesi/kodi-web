@@ -1008,6 +1008,10 @@ async function uiTests() {
         await pp.evaluate(() => { window.__orient = []; });
         await pp.evaluate(() => document.exitFullscreen());
         await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
+        // back from another app / the floating window: the orientation is set again (no stale lock)
+        await pp.evaluate(() => { window.__orient = []; document.dispatchEvent(new Event('visibilitychange')); });
+        await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
+        assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Schermo intero');
         // full screen lost: a tap on the picture brings the automatic full screen back
         await pp.touchscreen.tap(180, 300);
         await waitFor(() => pp.evaluate(() => document.fullscreenElement === document.documentElement));

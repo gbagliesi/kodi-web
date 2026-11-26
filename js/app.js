@@ -380,12 +380,15 @@ function repaintStars(root = view) {
   root.querySelectorAll('.fav-star').forEach(s => { if (s._fav) paintStar(s, store.isFavourite(s._fav.key)); });
 }
 window.addEventListener('salotto:favourites', () => repaintStars());
+// a favourite that could not be saved: say so instead of pretending (the star stays as it was)
+window.addEventListener('salotto:storage-full', () => toast('Preferito non salvato: ' + addons.storageFullMessage(), 8000));
 
 let favKeyAt = 0; // the menu key of a PC keyboard also opens a context menu: one toggle only
 function listFavToggle(entry, byKey = false) {
   if (!byKey && Date.now() - favKeyAt < 800) return;
   if (byKey) favKeyAt = Date.now();
   const on = store.toggleFavourite(entry);
+  if (on === null) return; // not saved: the storage-full toast says why
   const name = entry.item?.label || 'Elemento';
   toast(on ? `★ «${name}» aggiunto ai preferiti` : `«${name}» tolto dai preferiti`, 2000);
 }

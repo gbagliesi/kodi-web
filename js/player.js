@@ -336,7 +336,7 @@ function setupMediaSession(item) {
       artist: item.subtitle || item.info?.artist || '',
       artwork: item.thumb ? [{ src: item.thumb, sizes: '512x512' }] : [],
     });
-    navigator.mediaSession.setActionHandler('play', () => el.video.play());
+    navigator.mediaSession.setActionHandler('play', () => { pipDismissed = false; return el.video.play(); });
     navigator.mediaSession.setActionHandler('pause', () => el.video.pause());
     navigator.mediaSession.setActionHandler('seekbackward', () => skip(-10));
     navigator.mediaSession.setActionHandler('seekforward', () => skip(30));
@@ -1348,9 +1348,26 @@ function resumeAfterPip() {
   if (document.visibilityState !== 'visible' || !isOpen() || casting || !v.paused) return;
   if (now - pipLeftAt < 2500 && now - pausedAt < 2500) v.play().catch(() => {});
 }
+// Floating window closed with its ✕ (or swiped away) while the app is in the background: the
+// video must stay stopped. Android otherwise resumed it by itself later (e.g. at the end of a
+// phone or intercom call that had taken the audio), sound only, with no window and no way back.
+// Going back to the app from the window also closes it, but the page turns visible at once.
+let pipDismissed = false, dismissTimer = 0;
+function hiddenNoPip() { return document.visibilityState === 'hidden' && !inPip(); }
+function checkDismissed() {
+  if (!hiddenNoPip() || !isOpen() || casting || current?.audio) return;
+  pipDismissed = true;
+  if (!v.paused) v.pause();
+}
+v.addEventListener('play', () => {
+  if (pipDismissed && hiddenNoPip() && !casting) v.pause();
+});
 function pipChanged() {
   const on = inPip();
   el.pip.classList.toggle('active', on);
+  clearTimeout(dismissTimer);
+  if (on) pipDismissed = false;
+  if (wasInPip && !on && document.visibilityState === 'hidden') dismissTimer = setTimeout(checkDismissed, 1000);
   if (wasInPip && !on) {
     pipLeftAt = Date.now(); setTimeout(resumeAfterPip, 300); setTimeout(resumeAfterPip, 1200);
     setTimeout(resyncOrientation, 300); setTimeout(resyncOrientation, 1200);
@@ -1363,7 +1380,7 @@ v.addEventListener('webkitpresentationmodechanged', pipChanged);
 // Leaving the app (home button, app switcher) while a video plays: try to keep it in a floating
 // window. Safari does this by itself (autopictureinpicture); Chrome allows it only in some cases.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { setTimeout(resumeAfterPip, 200); setTimeout(resyncOrientation, 300); }
+  if (document.visibilityState === 'visible') { pipDismissed = false; clearTimeout(dismissTimer); setTimeout(resumeAfterPip, 200); setTimeout(resyncOrientation, 300); }
   if (document.visibilityState === 'hidden' && isOpen() && !casting && !current?.audio && !v.paused && !inPip()) enterPip();
 });
 el.fav.addEventListener('click', () => {

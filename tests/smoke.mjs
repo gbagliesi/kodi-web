@@ -1015,6 +1015,13 @@ async function uiTests() {
         // full screen lost: a tap on the picture brings the automatic full screen back
         await pp.touchscreen.tap(180, 300);
         await waitFor(() => pp.evaluate(() => document.fullscreenElement === document.documentElement));
+        // …and so does a tap on a player button (needed for the automatic floating window)
+        await pp.evaluate(() => document.exitFullscreen());
+        await waitFor(() => pp.evaluate(() => !document.fullscreenElement));
+        await pp.evaluate(() => document.getElementById('player-ui').classList.remove('idle'));
+        const pb = await pp.locator('#pl-play').boundingBox();
+        await pp.touchscreen.tap(pb.x + pb.width / 2, pb.y + pb.height / 2);
+        await waitFor(() => pp.evaluate(() => document.fullscreenElement === document.documentElement));
         await pp.click('#pl-close');
         // automatic mode: the app stays full screen after closing the video (Chrome's notice shows once)
         assert.equal(await pp.evaluate(() => document.fullscreenElement === document.documentElement), true, 'stays full screen between videos');

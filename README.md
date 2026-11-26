@@ -7,6 +7,18 @@ JavaScript.
 
 **Apri Salotto: https://gbagliesi.github.io/kodi-web/**
 
+> **Gli add-on sono disponibili solo con il token del Worker Cloudflare.**
+> Da Salotto v0.27 gli add-on (TV in diretta, RaiPlay, La7, YouTube, radio…)
+> stanno in un repository privato e li distribuisce il Worker Cloudflare, solo
+> a chi ha un token valido: quello del proprietario o un token personale dato
+> a un amico ([docs/CLOUDFLARE.md](docs/CLOUDFLARE.md#add-on-privati-e-token-per-gli-amici)).
+> Senza token Salotto si apre lo stesso, ma resta solo «Video di prova».
+>
+> **Vuoi costruire i tuoi add-on e il tuo repository?** Tutte le istruzioni
+> sono in **[docs/ADDON_API.md](docs/ADDON_API.md)**: com'è fatto un add-on,
+> come pubblicare un repository tuo (pubblico su GitHub Pages o privato
+> dietro il tuo Worker) e come aggiungerlo a Salotto.
+
 ## Per iniziare
 
 1. **Installa Salotto** sui tuoi dispositivi come app: iPad/iPhone con Safari
@@ -17,8 +29,9 @@ JavaScript.
    proxy, da relay per il telecomando e da archivio per la sincronizzazione
    ([docs/CLOUDFLARE.md](docs/CLOUDFLARE.md)).
 3. **Su ogni dispositivo**: *Impostazioni* → indirizzo e token del Worker →
-   *Salva* («proxy raggiungibile ✓»). Preferiti, add-on e impostazioni
-   arrivano poi da soli dagli altri dispositivi.
+   *Salva* («proxy raggiungibile ✓»). Solo da qui in poi compaiono gli
+   add-on: *Add-on → Sfoglia repository* → «Add-on del Worker». Preferiti,
+   add-on e impostazioni arrivano poi da soli dagli altri dispositivi.
 4. Per YouTube crea una **chiave API** gratuita
    ([docs/GUIDA.md, punto 6](docs/GUIDA.md#6-youtube-la-chiave-api)).
 
@@ -27,10 +40,10 @@ JavaScript.
 | Guida | Contenuto |
 |---|---|
 | [docs/GUIDA.md](docs/GUIDA.md) | **Come si usa**: installazione per dispositivo, add-on, TV in diretta e TGR, YouTube, preferiti, ordinare elenchi e add-on, lettore (zoom, sottotitoli, sincronia audio, Chromecast/AirPlay), sincronizzazione, problemi comuni |
-| [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md) | Creare e aggiornare il Worker (proxy, telecomando, sincronizzazione), cambiare il token, il proxy per un amico |
+| [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md) | Creare e aggiornare il Worker (proxy, add-on, telecomando, sincronizzazione), cambiare il token, token e proxy per gli amici |
 | [docs/TELECOMANDO.md](docs/TELECOMANDO.md) | Il cellulare come telecomando: abbinamento con QR, schede, installazione come app |
 | [docs/FIRETV.md](docs/FIRETV.md) | L'app per Fire TV Stick e l'uso con il telecomando |
-| [docs/ADDON_API.md](docs/ADDON_API.md) | Scrivere un add-on |
+| [docs/ADDON_API.md](docs/ADDON_API.md) | **Costruire i tuoi add-on e il tuo repository**: manifest, codice, repository pubblico o privato |
 
 ## Funzioni
 
@@ -70,11 +83,17 @@ JavaScript.
   di 30 giorni sul Worker
 - File locali (app File di iPad, iCloud, chiavette USB) senza caricarli da
   nessuna parte, e URL diretti di stream
-- Add-on con repository, aggiornamento automatico di quelli inclusi,
-  installazione da URL, impostazioni per add-on ed esecuzione isolata in Web
-  Worker
+- Add-on con repository (quello privato del Worker o repository tuoi),
+  aggiornamento automatico, installazione da URL, impostazioni per add-on ed
+  esecuzione isolata in Web Worker
 
-## Add-on inclusi
+## Gli add-on (solo con il token del Worker)
+
+Tutti gli add-on qui sotto, tranne «Video di prova», arrivano dal repository
+privato attraverso il Worker Cloudflare e si vedono **solo con indirizzo e
+token del Worker** impostati in *Impostazioni*. Si scelgono da *Add-on →
+Sfoglia repository* e poi si aggiornano da soli. Per scriverne di tuoi:
+[docs/ADDON_API.md](docs/ADDON_API.md).
 
 | Add-on | Contenuto |
 |---|---|
@@ -87,7 +106,7 @@ JavaScript.
 | **Radio dal mondo** | Migliaia di radio da radio-browser.info, per paese e genere |
 | **Internet Archive** | Film di pubblico dominio, noir, fantascienza, cartoni d'epoca, documentari da archive.org |
 | **Podcast** | Ricerca nel catalogo Apple Podcasts e feed RSS personali |
-| **Video di prova** | Cortometraggi open source e stream HLS di test; anche l'esempio più semplice di add-on |
+| **Video di prova** | Cortometraggi open source e stream HLS di test; anche l'esempio più semplice di add-on. È l'unico pubblico, disponibile anche senza token |
 
 ## Pubblicazione e sviluppo
 
@@ -136,14 +155,18 @@ l'app pubblicata online serve il Worker Cloudflare.
 ### Versioni
 
 La versione è in `js/version.js` e si vede in *Impostazioni → Informazioni*.
-Gli add-on inclusi si aggiornano da soli quando aumenta la loro `version` in
-`addons/<id>/addon.json` e in `addons/repository.json`.
+Gli add-on stanno nel repository privato `gbagliesi/salotto-addons` (qui in
+`addons/` resta solo «Video di prova»): si aggiornano da soli quando aumenta
+la loro `version` in `<id>/addon.json` e in `repository.json`.
 
 ### Test
 
 ```bash
 npm test     # richiede il pacchetto playwright
 ```
+
+I test leggono gli add-on da `../salotto-addons`: clona il repository privato
+accanto a `kodi-web` prima di lanciarli.
 
 `npm test` lancia la prova generale (`smoke.mjs`: avvia `server.js`, apre
 l'app in Chromium con dimensioni da iPad e simula le API esterne) e poi

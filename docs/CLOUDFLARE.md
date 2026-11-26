@@ -1,7 +1,11 @@
 # Il Worker Cloudflare: proxy, telecomando e sincronizzazione
 
-Un solo Worker gratuito su Cloudflare fa tre cose per Salotto:
+Un solo Worker gratuito su Cloudflare fa quattro cose per Salotto:
 
+- **add-on**: da Salotto v0.27 gli add-on stanno in un repository privato e
+  sono **disponibili solo attraverso il Worker, con un token valido**
+  ([più sotto](#add-on-privati-e-token-per-gli-amici)); senza token resta
+  solo «Video di prova»;
 - **proxy** per gli stream e i siti che il browser blocca (CORS), per esempio
   i canali Rai in Chrome e sulla Fire TV, il catalogo Mediaset, le edizioni
   TGR di rainews.it;
@@ -183,9 +187,15 @@ il Worker gira sul tuo account.
 
 ## Add-on privati e token per gli amici
 
-Gli add-on possono stare in un repository GitHub **privato**: il Worker li
-legge con un token GitHub di sola lettura e li dà solo a chi ha un token del
-proxy. Il sito pubblico resta un guscio vuoto.
+Gli add-on di Salotto stanno nel repository GitHub **privato**
+`gbagliesi/salotto-addons`: il Worker li legge con un token GitHub di sola
+lettura e li dà **solo a chi ha un token del proxy** (il `TOKEN` del
+proprietario o un `TOKEN_<NOME>` di un amico). Il sito pubblico resta un
+guscio vuoto, con il solo «Video di prova».
+
+Per costruire add-on tuoi e metterli in un repository tuo (pubblico, oppure
+privato dietro il tuo Worker con `ADDONS_REPO`) segui
+[ADDON_API.md](ADDON_API.md#il-tuo-repository).
 
 1. **Repository.** Su GitHub crea un repository privato (per esempio
    `salotto-addons`) con `repository.json` e una cartella per add-on, come

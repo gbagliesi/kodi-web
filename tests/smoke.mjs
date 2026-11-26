@@ -1011,7 +1011,8 @@ async function uiTests() {
         // back from another app / the floating window: the orientation is set again (no stale lock)
         await pp.evaluate(() => { window.__orient = []; document.dispatchEvent(new Event('visibilitychange')); });
         await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
-        assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Schermo intero');
+        // the rotate sign stays out of full screen too (e.g. back from the floating window)
+        assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Ruota in orizzontale');
         // full screen lost: a tap on the picture brings the automatic full screen back
         await pp.touchscreen.tap(180, 300);
         await waitFor(() => pp.evaluate(() => document.fullscreenElement === document.documentElement));
@@ -1022,6 +1023,13 @@ async function uiTests() {
         const pb = await pp.locator('#pl-play').boundingBox();
         await pp.touchscreen.tap(pb.x + pb.width / 2, pb.y + pb.height / 2);
         await waitFor(() => pp.evaluate(() => document.fullscreenElement === document.documentElement));
+        // out of full screen the rotate button enters full screen in landscape
+        await pp.evaluate(() => document.exitFullscreen());
+        await waitFor(() => pp.evaluate(() => !document.fullscreenElement));
+        await pp.evaluate(() => { window.__orient = []; });
+        await pp.click('#pl-fs');
+        await waitFor(() => pp.evaluate(() => document.fullscreenElement === document.documentElement && window.__orient.includes('lock:landscape')));
+        assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Ruota in verticale');
         await pp.click('#pl-close');
         // automatic mode: the app stays full screen after closing the video (Chrome's notice shows once)
         assert.equal(await pp.evaluate(() => document.fullscreenElement === document.documentElement), true, 'stays full screen between videos');

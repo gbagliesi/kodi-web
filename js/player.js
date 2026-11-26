@@ -528,9 +528,11 @@ const ROTATE_ICON = '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden
 /** Phones in full screen: the button rotates (portrait ⇄ landscape) instead of leaving full screen. */
 function updateFsBtn() {
   const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-  const rotate = fs && isPhone() && typeof screen.orientation?.lock === 'function';
+  // also out of full screen (e.g. back from the floating window, which leaves it): the button
+  // then enters full screen in landscape, so the rotate sign never disappears on a phone
+  const rotate = isPhone() && typeof screen.orientation?.lock === 'function' && (fs || !!el.root.requestFullscreen);
   el.fs.innerHTML = rotate ? ROTATE_ICON : FS_ICON;
-  el.fs.setAttribute('aria-label', rotate ? (autoFs ? 'Ruota in orizzontale' : 'Ruota in verticale') : 'Schermo intero');
+  el.fs.setAttribute('aria-label', rotate ? (autoFs || !fs ? 'Ruota in orizzontale' : 'Ruota in verticale') : 'Schermo intero');
   el.fs.title = el.fs.getAttribute('aria-label');
 }
 
@@ -546,6 +548,15 @@ function toggleFullscreen() {
     cancelRelease();
     const after = () => { if (want === 'portrait') releaseWhenUpright(); };
     screen.orientation.lock(want).then(after, () => target.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation.lock(want)).then(after).catch(() => {}));
+    return;
+  }
+  if (!document.fullscreenElement && isPhone() && typeof screen.orientation?.lock === 'function' && r.requestFullscreen) {
+    // phone out of full screen: full screen in landscape (the fullscreenchange handler locks it);
+    // the whole page in automatic mode, so it stays full screen between videos
+    cancelRelease();
+    autoFs = false;
+    const target = wantsAutoFs() ? document.documentElement : r;
+    target.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
     return;
   }
   if (document.fullscreenElement || document.webkitFullscreenElement) {
@@ -608,6 +619,7 @@ function onFullscreenChange() {
 }
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+updateFsBtn();
 
 // Back from the floating window (or from another app): Android may have dropped full screen
 // while the page was in the background, when an orientation change is ignored. A lock from

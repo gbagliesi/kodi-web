@@ -997,8 +997,21 @@ async function uiTests() {
         await pp.click('#pl-fs');
         await waitFor(() => pp.evaluate(() => window.__orient.includes('lock:portrait')));
         assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Ruota in orizzontale');
+        // the portrait lock does not stay: once the phone is held upright the system rotates it again
+        const upright = () => pp.evaluate(() => window.dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x: 0.3, y: 9.7, z: 0.5 } })));
+        await pp.evaluate(() => window.dispatchEvent(new DeviceMotionEvent('devicemotion', { accelerationIncludingGravity: { x: 9.7, y: 0.3, z: 0.5 } })));
+        await pp.waitForTimeout(400);
+        assert.equal(await pp.evaluate(() => window.__orient.at(-1)), 'lock:portrait', 'still sideways: portrait lock kept');
+        await upright(); await pp.waitForTimeout(350); await upright();
+        await waitFor(() => pp.evaluate(() => window.__orient.at(-1) === 'unlock'));
+        assert.equal(await pp.evaluate(() => !!document.fullscreenElement), true, 'still full screen after releasing the lock');
+        await pp.evaluate(() => { window.__orient = []; });
         await pp.evaluate(() => document.exitFullscreen());
         await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
+        // back from another app / the floating window: the orientation is set again (no stale lock)
+        await pp.evaluate(() => { window.__orient = []; document.dispatchEvent(new Event('visibilitychange')); });
+        await waitFor(() => pp.evaluate(() => window.__orient.includes('unlock')));
+        assert.equal(await pp.getAttribute('#pl-fs', 'aria-label'), 'Schermo intero');
         // full screen lost: a tap on the picture brings the automatic full screen back
         await pp.touchscreen.tap(180, 300);
         await waitFor(() => pp.evaluate(() => document.fullscreenElement === document.documentElement));

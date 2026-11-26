@@ -68,6 +68,43 @@ try {
   await page.goto(BASE + '#/browse/plugin.video.demo');
   await page.waitForSelector('.row, .card');
   console.log('✓ code of add-ons from older versions moved out of localStorage; add-on still runs');
+  await ctx.close();
+
+  // 3) localStorage completely full: the ☆ of a list says the favourite was not saved (no
+  // «aggiunto» toast with a star that stays empty); when Salotto can make room it is saved
+  ctx = await browser.newContext({ serviceWorkers: 'block' });
+  await block(ctx);
+  page = await ctx.newPage();
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(BASE + '#/browse/plugin.video.demo');
+  await page.waitForSelector('.fav-star');
+  const fillUp = () => page.evaluate(() => {
+    localStorage.removeItem('altra-app');
+    let n = 2600 * 1024;
+    for (;;) { try { localStorage.setItem('altra-app', 'x'.repeat(n)); break; } catch { n -= 4096; } }
+    for (let i = 0; ; i++) { try { localStorage.setItem('pad' + i, 'x'.repeat(64)); } catch { break; } }
+  });
+  await fillUp();
+  const star = page.locator('.fav-star').first();
+  await star.click();
+  await page.waitForSelector('.toast:has-text("Preferito non salvato"), #toast:has-text("Preferito non salvato")');
+  assert.equal(await star.textContent(), '☆', 'the star stays empty');
+  assert.deepEqual(await page.evaluate(() => window.salotto.store.getFavourites()), []);
+  assert.doesNotMatch(await page.textContent('body'), /aggiunto ai preferiti/);
+  // memories of list changes are what Salotto can drop to make room
+  await page.evaluate(() => {
+    for (const k of Object.keys(localStorage)) if (k.startsWith('pad')) localStorage.removeItem(k);
+    const seen = {}; for (let i = 0; i < 1500; i++) seen['canale-' + i] = Date.now();
+    localStorage.setItem('salotto:sort', JSON.stringify({ 'plugin.video.iptv|p/0': { mode: 'custom', order: ['a'], seen } }));
+    for (let i = 0; ; i++) { try { localStorage.setItem('pad' + i, 'x'.repeat(64)); } catch { break; } }
+  });
+  await page.waitForTimeout(2100);
+  await star.click();
+  await waitFor(async () => (await star.textContent()) === '★');
+  assert.equal(await page.evaluate(() => window.salotto.store.getFavourites().length), 1, 'saved after making room');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('salotto:sort'))['plugin.video.iptv|p/0'].seen), undefined);
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('salotto:sort'))['plugin.video.iptv|p/0'].order), ['a'], 'the custom order stays');
+  console.log('✓ favourites with localStorage full: no false «aggiunto», room made by dropping list memories');
   assert.deepEqual(errors, [], 'no page errors');
 } finally {
   await browser.close();

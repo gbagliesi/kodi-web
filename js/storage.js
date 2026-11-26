@@ -57,11 +57,31 @@ export function getFavourites() { return load('favourites', []); }
 
 export function isFavourite(key) { return getFavourites().some(f => f.key === key); }
 
+/** Frees what Salotto can do without: memories of list changes, old resume points. */
+export function trimStorage() {
+  const sort = load('sort', null);
+  if (sort) { for (const k of Object.keys(sort)) { delete sort[k].seen; delete sort[k].gone; } save('sort', sort); }
+  const resume = load('resume', null);
+  if (resume) { const keys = Object.keys(resume); for (const k of keys.slice(0, Math.max(0, keys.length - 50))) delete resume[k]; save('resume', resume); }
+}
+
+/** Saves; when the browser storage is full, makes room once and tries again. */
+export function saveOrTrim(key, value) {
+  if (save(key, value)) return true;
+  trimStorage();
+  return save(key, value);
+}
+
+/** Adds or removes a favourite: true = added, false = removed, null = could not be saved
+ *  (browser storage full: the "salotto:storage-full" event says so to the app). */
 export function toggleFavourite(entry) {
   const favs = getFavourites();
   const i = favs.findIndex(f => f.key === entry.key);
   if (i >= 0) favs.splice(i, 1); else favs.unshift(entry);
-  save('favourites', favs);
+  if (!saveOrTrim('favourites', favs)) {
+    try { window.dispatchEvent(new CustomEvent('salotto:storage-full', { detail: { key: 'favourites' } })); } catch { /* no window */ }
+    return null;
+  }
   // the ☆ in the lists follow what is done in the player (and the other way round)
   try { window.dispatchEvent(new CustomEvent('salotto:favourites', { detail: { key: entry.key, on: i < 0 } })); } catch { /* no window */ }
   return i < 0;

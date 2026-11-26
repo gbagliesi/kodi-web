@@ -1,5 +1,5 @@
 // Add-on manager: install / uninstall / settings / sandboxed execution.
-import { load, save, getSettings } from './storage.js';
+import { load, save, getSettings, trimStorage } from './storage.js';
 
 const RUNTIME_URL = new URL('./addon-runtime.js', import.meta.url).href;
 const CALL_TIMEOUT = 60000;
@@ -136,14 +136,6 @@ export function storageFullMessage() {
   const u = storageUsage();
   return `Spazio di archiviazione del browser esaurito (Salotto ${kb(u.salotto)}, altre pagine dello stesso sito ${kb(u.other)}). Più grandi: ` +
     u.biggest.map(([k, n]) => k + ' ' + kb(n)).join(', ');
-}
-
-/** Frees what Salotto can do without: memories of list changes, old resume points. */
-function trimStorage() {
-  const sort = load('sort', null);
-  if (sort) { for (const k of Object.keys(sort)) { delete sort[k].seen; delete sort[k].gone; } save('sort', sort); }
-  const resume = load('resume', null);
-  if (resume) { const keys = Object.keys(resume); for (const k of keys.slice(0, Math.max(0, keys.length - 50))) delete resume[k]; save('resume', resume); }
 }
 
 function readInstalled() { return load('addons', {}); }

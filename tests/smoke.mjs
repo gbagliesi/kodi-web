@@ -868,6 +868,23 @@ async function uiTests() {
     // back to the app from the window: the browser pauses the video, the app resumes it
     const plays0 = await p3.evaluate(() => { const v = document.getElementById('video'); v.pause(); document.exitPictureInPicture(); return window.__plays; });
     await waitFor(() => p3.evaluate((n) => window.__plays > n && !document.getElementById('pl-pip').classList.contains('active'), plays0));
+    // floating window closed with its ✕ while the app is in the background: the video stays
+    // stopped, even if the system tries to resume it later (end of a phone / intercom call)
+    await p3.click('#pl-pip');
+    await waitFor(() => p3.evaluate(() => !!document.pictureInPictureElement));
+    await p3.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { get: () => window.__vis || 'visible', configurable: true });
+      window.__vis = 'hidden'; document.dispatchEvent(new Event('visibilitychange'));
+      document.exitPictureInPicture();
+    });
+    await p3.waitForTimeout(1300);
+    assert.equal(await p3.evaluate(() => document.getElementById('video').paused), true, 'window closed in the background: paused');
+    await p3.evaluate(() => { document.getElementById('video').play().catch(() => {}); });
+    await p3.waitForTimeout(200);
+    assert.equal(await p3.evaluate(() => document.getElementById('video').paused), true, 'no resume in the background without the window');
+    await p3.evaluate(() => { window.__vis = 'visible'; document.dispatchEvent(new Event('visibilitychange')); });
+    await p3.evaluate(() => { document.getElementById('video').play().catch(() => {}); });
+    await waitFor(() => p3.evaluate(() => !document.getElementById('video').paused));
     await p3.click('#pl-pip');
     await p3.click('#pl-pip');
     await waitFor(() => p3.evaluate(() => !document.pictureInPictureElement && !document.getElementById('pl-pip').classList.contains('active')));

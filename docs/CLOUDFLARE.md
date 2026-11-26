@@ -34,9 +34,8 @@ Non serve un dominio né una carta di credito.
 2. Clicca **Create** → **Create Worker** (modello «Hello World»).
 3. Come nome scrivi **`salotto-proxy`** e clicca **Deploy**.
 
-In alto vedrai l'indirizzo del Worker, simile a
-`https://salotto-proxy.<tuo-sottodominio>.workers.dev`. Copialo: è
-l'indirizzo da mettere in Salotto.
+In alto vedrai l'indirizzo del Worker (finisce con `.workers.dev`).
+Copialo: è l'indirizzo da mettere in Salotto.
 
 Il codice vero lo pubblica GitHub al passo 4; per ora il Worker contiene solo
 «Hello World».
@@ -171,8 +170,8 @@ Servono circa 15 minuti, una volta sola.
    **I understand my workflows, go ahead and enable them** → a sinistra
    **Aggiorna il Worker Cloudflare** → **Run workflow** → **Run workflow**.
    Dopo un minuto deve comparire la spunta verde.
-8. **Salotto.** L'indirizzo è `https://salotto-proxy.<sottodominio>.workers.dev`
-   (lo trovi anche su Cloudflare → **Workers & Pages** → `salotto-proxy`). In
+8. **Salotto.** L'indirizzo del Worker lo trovi su Cloudflare →
+   **Workers & Pages** → `salotto-proxy` (finisce con `.workers.dev`). In
    Salotto → **Impostazioni** incolla l'indirizzo e, come token, il
    `PROXY_TOKEN`. Deve comparire «proxy raggiungibile ✓».
 
@@ -210,8 +209,8 @@ privato dietro il tuo Worker con `ADDONS_REPO`) segui
    - solo se il repository non è `gbagliesi/salotto-addons`: tipo **Text**,
      nome `ADDONS_REPO`, valore `proprietario/nome` (ramo: `ADDONS_REF`,
      di solito non serve).
-4. **Prova.** `https://salotto-proxy.<sottodominio>.workers.dev/addons/health`
-   risponde `ok`.
+4. **Prova.** Apri l'indirizzo del tuo Worker seguito da `/addons/health`:
+   deve rispondere `ok`.
 
 In Salotto → **🧩 Add-on** → **Sfoglia repository** compaiono per primi gli
 «add-on del Worker»: si sceglie quali installare; poi si aggiornano da soli.

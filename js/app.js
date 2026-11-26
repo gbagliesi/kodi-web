@@ -1295,7 +1295,7 @@ function syncField() {
 function renderSettings() {
   setCrumbs(['Impostazioni']);
   const s = store.getSettings();
-  const proxy = h('input', { type: 'url', id: 'proxy', value: s.proxyUrl, placeholder: 'es. https://salotto-proxy.tuonome.workers.dev', autocapitalize: 'off', spellcheck: 'false' });
+  const proxy = h('input', { type: 'url', id: 'proxy', value: s.proxyUrl, placeholder: 'indirizzo del tuo Worker (…workers.dev)', autocapitalize: 'off', spellcheck: 'false' });
   const token = h('input', { type: 'text', id: 'proxy-token', value: s.proxyToken, placeholder: 'facoltativo', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false' });
   const resume = h('input', { type: 'checkbox', id: 'resume', checked: s.autoResume });
   const autoPip = h('input', { type: 'checkbox', id: 'autopip', checked: s.autoPip });

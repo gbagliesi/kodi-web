@@ -90,8 +90,8 @@ una volta sola).
 
 1. Apri Salotto → **⚙ Impostazioni** (sull'iPad in verticale e sul telefono:
    **Opzioni** nella barra in basso).
-2. In **Proxy per add-on e stream** incolla l'indirizzo del Worker, per
-   esempio `https://salotto-proxy.<tuo-sottodominio>.workers.dev`.
+2. In **Proxy per add-on e stream** incolla l'indirizzo del tuo Worker
+   (finisce con `.workers.dev`).
 3. In **Token del proxy** incolla il tuo token.
 4. Premi **Salva**. Deve comparire «Salvato · proxy raggiungibile ✓». Da
    questo momento compaiono anche gli add-on (punto 4), che senza token non

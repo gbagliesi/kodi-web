@@ -509,15 +509,17 @@ export function close() {
 // but only if the video is full screen. So on Android videos open full screen (keeping the
 // current orientation; the full screen button then turns to landscape). Needs the tap that
 // opened the video, which is why it runs before anything is awaited.
-let autoFs = false;
+let autoFs = false, fsPending = false;
 const wantsAutoFs = () => /Android/i.test(navigator.userAgent) && !/SalottoTV/.test(navigator.userAgent) && getSettings().autoPip && isOpen() && current && !current.audio && !casting;
 function autoFullscreen() {
   const doc = document.documentElement;
   if (!wantsAutoFs() || document.fullscreenElement || !doc.requestFullscreen) return false;
   if (navigator.userActivation && !navigator.userActivation.isActive) return false;
+  if (fsPending) return true;
   autoFs = true;
+  fsPending = true;
   // the whole page (not just the player) so it can stay full screen between videos
-  doc.requestFullscreen({ navigationUI: 'hide' }).catch(() => { autoFs = false; });
+  doc.requestFullscreen({ navigationUI: 'hide' }).catch(() => { autoFs = false; }).finally(() => { fsPending = false; });
   return true;
 }
 
@@ -1428,6 +1430,16 @@ function onBackgroundTap() {
   if (hidden) wake(); else hideControls();
 }
 el.root.querySelector('.player-stage').addEventListener('click', onBackgroundTap);
+// Android opens the floating window by itself only for a full screen video. If full screen got
+// lost (back from the floating window or another app, notification shade…) leaving the app only
+// left the media notification. So any tap in the player, on its buttons too, brings the automatic
+// full screen back, except the buttons that decide about full screen themselves.
+el.root.addEventListener('click', (e) => {
+  if (lastPointer !== 'touch' || document.fullscreenElement) return;
+  if (e.target.closest && e.target.closest('#pl-fs, #pl-pip, #pl-close, #pl-cast')) return;
+  if (e.target.closest && !e.target.closest('.player-top, .player-bottom, .player-channels, .player-epg, .player-sync, .player-cc')) return; // the picture: onBackgroundTap
+  autoFullscreen();
+}, true);
 zoom.init({ root: el.root, video: el.video, enabled: () => isOpen() && !!current && !current.audio && !casting });
 el.ui.addEventListener('click', (e) => { if (e.target === el.ui) onBackgroundTap(); });
 window.addEventListener('pagehide', () => saveResume(true));

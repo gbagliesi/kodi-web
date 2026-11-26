@@ -93,7 +93,9 @@ una volta sola).
 2. In **Proxy per add-on e stream** incolla l'indirizzo del Worker, per
    esempio `https://salotto-proxy.<tuo-sottodominio>.workers.dev`.
 3. In **Token del proxy** incolla il tuo token.
-4. Premi **Salva**. Deve comparire «Salvato · proxy raggiungibile ✓».
+4. Premi **Salva**. Deve comparire «Salvato · proxy raggiungibile ✓». Da
+   questo momento compaiono anche gli add-on (punto 4), che senza token non
+   sono disponibili.
    - «il token del proxy è sbagliato»: ricopialo (attenzione agli spazi).
    - «il proxy rifiuta tutto»: nel Worker manca il `TOKEN`
      ([CLOUDFLARE.md, punto 3](CLOUDFLARE.md#3-proteggilo-con-un-token-obbligatorio)).
@@ -148,11 +150,18 @@ WebM, MP3, HLS `.m3u8`).
 
 ## 4. Gli add-on
 
-Gli add-on stanno in un repository privato e arrivano dal Worker: si vedono
-solo con indirizzo e token del proxy impostati (punto 2). In **🧩 Add-on** →
-**Sfoglia repository** scegli quali installare («Add-on del Worker», in cima);
-quelli installati si aggiornano da soli quando esce una versione nuova. Senza
-token resta solo «Video di prova».
+> **Gli add-on sono disponibili solo con il token del Worker Cloudflare.**
+> Stanno in un repository privato e li distribuisce il Worker: si vedono solo
+> con indirizzo e token del proxy impostati (punto 2), il tuo o quello
+> personale che ti ha dato il proprietario del Worker. Senza token resta solo
+> «Video di prova».
+>
+> Vuoi **costruire i tuoi add-on e un tuo repository**? Le istruzioni sono in
+> [ADDON_API.md](ADDON_API.md).
+
+In **🧩 Add-on** → **Sfoglia repository** scegli quali installare («Add-on
+del Worker», in cima); quelli installati si aggiornano da soli quando esce una
+versione nuova. Ecco cosa fa ciascuno:
 
 | Add-on | Sezione | Cosa fa | Proxy |
 |---|---|---|---|
@@ -173,8 +182,8 @@ Nella pagina **🧩 Add-on**:
   **Disattiva/Attiva**, **Ricarica / aggiorna** e **Disinstalla**;
 - **Sfoglia repository** mostra gli add-on disponibili, anche quelli che hai
   disinstallato;
-- **Installa da URL** e **Aggiungi repository** servono per add-on di altri
-  (come scriverne uno: [ADDON_API.md](ADDON_API.md));
+- **Installa da URL** e **Aggiungi repository** servono per add-on tuoi o di
+  altri (come costruire add-on e repository: [ADDON_API.md](ADDON_API.md));
 - **Riordina** cambia l'ordine delle icone (punto 8).
 
 ---

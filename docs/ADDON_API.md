@@ -1,4 +1,9 @@
-# Scrivere un add-on per Salotto
+# Costruire i tuoi add-on e il tuo repository
+
+Gli add-on ufficiali di Salotto sono disponibili solo con il token del Worker
+Cloudflare ([CLOUDFLARE.md](CLOUDFLARE.md#add-on-privati-e-token-per-gli-amici)).
+Chiunque però può scrivere add-on suoi e pubblicarli in un repository suo:
+questa pagina spiega come ([il tuo repository](#il-tuo-repository) in fondo).
 
 Un add-on è una cartella con due file, pubblicata su un qualsiasi server web
 (GitHub Pages va benissimo):
@@ -147,8 +152,37 @@ Un repository è un file JSON che elenca più add-on:
 }
 ```
 
-Aggiungilo da **Add-on → Aggiungi repository**. Quando aumenti `version`,
-l'app propone l'aggiornamento.
+Aggiungilo da **Add-on → Aggiungi repository**. Quando aumenti `version`
+(sia in `addon.json` sia in `repository.json`), l'app propone
+l'aggiornamento.
+
+## Il tuo repository
+
+Due strade, a seconda di chi deve vedere i tuoi add-on.
+
+**Pubblico, con GitHub Pages** (chiunque abbia l'indirizzo):
+
+1. Crea un repository GitHub pubblico con `repository.json` nella radice e una
+   cartella per add-on (`plugin.video.mio/addon.json`, `main.js`, icona). Il
+   modo più rapido: copia la cartella `addons/` di questo progetto, che
+   contiene «Video di prova» come esempio.
+2. *Settings → Pages → Deploy from a branch* → `main`, cartella `/`.
+3. In Salotto: **🧩 Add-on → Aggiungi repository** →
+   `https://<utente>.github.io/<repository>/repository.json`.
+
+**Privato, dietro il tuo Worker** (solo chi ha un tuo token):
+
+1. Crea il tuo Worker ([CLOUDFLARE.md](CLOUDFLARE.md), passi 1-5).
+2. Crea un repository GitHub **privato** con la stessa struttura.
+3. Nel Worker aggiungi il secret `ADDONS_GITHUB_TOKEN` (token GitHub di sola
+   lettura su quel repository) e la variabile `ADDONS_REPO` =
+   `<utente>/<repository>`
+   ([CLOUDFLARE.md](CLOUDFLARE.md#add-on-privati-e-token-per-gli-amici)).
+4. In Salotto metti indirizzo e token del tuo Worker: i tuoi add-on compaiono
+   in **Sfoglia repository** come «Add-on del Worker».
+
+Per provare un add-on mentre lo scrivi basta **Installa da URL** con
+l'indirizzo del suo `addon.json`.
 
 ## CORS
 

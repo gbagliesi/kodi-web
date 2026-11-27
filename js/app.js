@@ -2,6 +2,7 @@ import { focused, hooks as focusHooks } from './focus.js';
 import * as store from './storage.js';
 import * as addons from './addons.js';
 import * as player from './player.js';
+import './floating.js';
 import * as yt from './youtube.js';
 import * as epg from './epg.js';
 import { handleNavKey, focusables } from './nav.js';

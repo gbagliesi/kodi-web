@@ -306,6 +306,32 @@ Qui i dettagli tecnici.
 - Se Salotto dice che il Worker «non ha ancora la sincronizzazione», apri
   **Actions** → **Aggiorna il Worker Cloudflare** → **Run workflow**.
 
+## Registro degli accessi
+
+**Impostazioni → 👥 Chi si collega** mostra chi usa Salotto con il tuo Worker:
+chi è collegato adesso e, per gli ultimi giorni, per ogni persona (tu o un
+amico, dal nome del suo `TOKEN_<NOME>`) quanti dispositivi, quante visite,
+quanto tempo in tutto e quanto davanti a un video, l'ultima volta e da dove;
+poi l'elenco delle visite.
+
+- Ogni Salotto aperto (sullo schermo o nella finestra mobile) manda al Worker
+  un segnale ogni 2 minuti circa (`POST /access?token=…`); i segnali di uno
+  stesso dispositivo a meno di 6 minuti l'uno dall'altro sono una visita sola.
+  Le durate quindi sono approssimate di un paio di minuti.
+- Il dispositivo è riconosciuto da un numero casuale creato da Salotto la
+  prima volta (non è sincronizzato), con il nome dello schermo (quello del
+  telecomando), il tipo (es. «Mac Safari (app)», «Fire TV») e la versione.
+- Il luogo (paese, regione, città) e la rete (es. il nome dell'operatore) sono
+  quelli che Cloudflare ricava dalla connessione: la città è spesso
+  approssimata, e con la rete mobile o una VPN può risultare lontana.
+- **Non** vengono salvati indirizzi IP né cosa si guarda. Le visite più vecchie
+  di 180 giorni si cancellano da sole.
+- I dati stanno in un Durable Object `AccessLog` (SQLite) del tuo account,
+  pubblicato dall'Action del passo 4 (collegamento `ACCESS`). Li legge solo il
+  token del proprietario (`TOKEN`); con il token di un amico la pagina dice che
+  non è permesso.
+- Se usi questa funzione con gli amici, è corretto dirglielo.
+
 ## Da sapere
 
 - **Chromecast**: la TV scarica lo stream passando dal tuo Worker. Se sulla

@@ -35,6 +35,17 @@
  *                                             is in the path so the relative links of
  *                                             repository.json and addon.json keep it.
  *
+ * Access log (only here, not in server.js):
+ *   GET  /access/health                     -> "ok" when the access log is set up
+ *   POST /access?token=…                     -> body {device, name, platform, version, watch}: the
+ *                                             app says "I am here" every couple of minutes while it
+ *                                             is on screen (watch = seconds of video since the last
+ *                                             time). Who (owner or friend's name), country, region,
+ *                                             city and network come from Cloudflare; no IP address
+ *                                             is kept. Beats less than ACCESS_GAP apart are one visit.
+ *   GET  /access?token=<TOKEN>&days=30       -> {now, sessions:[…]}: the visits, owner only.
+ *   One Durable Object (AccessLog, SQLite); needs the ACCESS binding of wrangler.toml.
+ *
  * Settings (Worker → Settings → Variables and Secrets):
  *   TOKEN   secret, REQUIRED: every call must carry ?token=<TOKEN>. Without it the Worker
  *           refuses everything (503), so a fresh deploy is never an open proxy.
@@ -350,6 +361,79 @@ async function handleAddons(request, env, u) {
   return new Response(request.method === 'HEAD' ? null : res.body, { status: 200, headers: out });
 }
 
+// ---------------------------------------------------------------- access log
+// Who uses this Salotto, from where, with how many devices and for how long. Each open app sends a
+// beat every couple of minutes while it is on screen; beats of one device less than ACCESS_GAP
+// apart make one visit (start, last beat, seconds of video watched). Only what Cloudflare already
+// knows about the request is added: country, region, city, network name (no IP address).
+const ACCESS_GAP = 6 * 60000;
+const ACCESS_DAYS = 180;
+const DEVICE_RE = /^[A-Za-z0-9_-]{8,64}$/;
+const short = (v, n = 40) => String(v ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, n);
+
+export class AccessLog {
+  constructor(ctx) {
+    this.ctx = ctx;
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS visits (id INTEGER PRIMARY KEY AUTOINCREMENT, device TEXT NOT NULL, who TEXT NOT NULL,
+      name TEXT, platform TEXT, version TEXT, country TEXT, region TEXT, city TEXT, net TEXT,
+      start INTEGER NOT NULL, last INTEGER NOT NULL, watch INTEGER NOT NULL, beats INTEGER NOT NULL)`);
+    this.sql.exec('CREATE INDEX IF NOT EXISTS visits_device ON visits (device, last)');
+    this.sql.exec('CREATE INDEX IF NOT EXISTS visits_last ON visits (last)');
+  }
+
+  async fetch(request) {
+    const u = new URL(request.url);
+    const now = Date.now();
+    if (request.method === 'GET') {
+      const days = Math.min(ACCESS_DAYS, Math.max(1, Math.floor(+u.searchParams.get('days') || 30)));
+      const rows = this.sql.exec('SELECT * FROM visits WHERE last > ? ORDER BY last DESC LIMIT 2000', now - days * 86400000).toArray();
+      return json({ now, gap: ACCESS_GAP, sessions: rows });
+    }
+    let b;
+    try { const raw = await request.text(); if (raw.length > 4096) return text('troppi dati', 413); b = JSON.parse(raw || '{}'); } catch { return text('JSON non valido', 400); }
+    const device = String(b.device || '');
+    if (!DEVICE_RE.test(device)) return text('dispositivo non valido', 400);
+    const who = short(request.headers.get('X-Salotto-Who'), 30);
+    const watch = Math.max(0, Math.min(600, Math.round(+b.watch || 0)));
+    const info = [short(b.name), short(b.platform), short(b.version, 30)];
+    const dec = (v) => { try { return decodeURIComponent(v || ''); } catch { return ''; } };
+    const place = ['country', 'region', 'city', 'net'].map(k => short(dec(request.headers.get('X-Salotto-' + k)), 60));
+    const cur = this.sql.exec('SELECT id FROM visits WHERE device = ? AND who = ? AND last > ? ORDER BY last DESC LIMIT 1', device, who, now - ACCESS_GAP).toArray()[0];
+    if (cur) {
+      this.sql.exec('UPDATE visits SET last = ?, watch = watch + ?, beats = beats + 1, name = ?, platform = ?, version = ?, country = ?, region = ?, city = ?, net = ? WHERE id = ?',
+        now, watch, ...info, ...place, cur.id);
+    } else {
+      this.sql.exec('INSERT INTO visits (device, who, name, platform, version, country, region, city, net, start, last, watch, beats) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+        device, who, ...info, ...place, now, now, watch);
+      // forget old visits now and then
+      if (Math.random() < 0.05) this.sql.exec('DELETE FROM visits WHERE last < ?', now - ACCESS_DAYS * 86400000);
+    }
+    return json({ ok: true });
+  }
+}
+
+async function handleAccess(request, env, u) {
+  if (!env.ACCESS) return text('registro degli accessi non configurato: pubblica il Worker con wrangler (docs/CLOUDFLARE.md)', 501);
+  if (u.pathname.endsWith('/access/health')) return text('ok');
+  const no = refuse(env, u);
+  if (no) return no;
+  const who = caller(env, u.searchParams.get('token'));
+  const log = env.ACCESS.get(env.ACCESS.idFromName('log'));
+  if (request.method === 'GET') {
+    if (who !== '') return text('solo con il token del proprietario', 403);
+    return log.fetch(new Request('https://access.log/?' + u.searchParams.toString()));
+  }
+  if (request.method !== 'POST') return text('metodo non consentito', 405);
+  const raw = await request.text();
+  if (raw.length > 4096) return text('troppi dati', 413);
+  const cf = request.cf || {};
+  const headers = new Headers({ 'X-Salotto-Who': who });
+  const put = (k, v) => { if (v) headers.set('X-Salotto-' + k, encodeURIComponent(String(v)).slice(0, 180)); };
+  put('country', cf.country); put('region', cf.region); put('city', cf.city); put('net', cf.asOrganization);
+  return log.fetch(new Request('https://access.log/', { method: 'POST', headers, body: raw }));
+}
+
 async function handle(request, env) {
   const u = new URL(request.url);
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -373,6 +457,7 @@ async function handle(request, env) {
   if (/\/remote\/(health|ws|status)$/.test(u.pathname)) return handleRemote(request, env, u);
   if (/\/sync(\/health)?$/.test(u.pathname)) return handleSync(request, env, u);
   if (/\/addons\//.test(u.pathname)) return handleAddons(request, env, u);
+  if (/\/access(\/health)?$/.test(u.pathname)) return handleAccess(request, env, u);
   // /proxy/<name> (e.g. /proxy/live.m3u8) works too: some native players pick the format from the extension
   if (!/\/proxy(\/[\w.-]+)?$/.test(u.pathname)) return text('Salotto proxy: usa /proxy?url=…', 404);
   if (request.method !== 'GET' && request.method !== 'HEAD') return text('metodo non consentito', 405);

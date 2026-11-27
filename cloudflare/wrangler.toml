@@ -25,3 +25,12 @@ new_sqlite_classes = ["RemoteRoom"]
 [[migrations]]
 tag = "sync-v1"
 new_sqlite_classes = ["SyncStore"]
+
+# Access log: one Durable Object keeps who used Salotto, from where and for how long.
+[[durable_objects.bindings]]
+name = "ACCESS"
+class_name = "AccessLog"
+
+[[migrations]]
+tag = "access-v1"
+new_sqlite_classes = ["AccessLog"]

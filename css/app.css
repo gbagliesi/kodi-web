@@ -533,3 +533,11 @@ body.tv .yt-player.bar-hidden .yt-bar { opacity: 0; pointer-events: none; }
 .yt-loading { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: 12px; background: rgba(0, 0, 0, .7); pointer-events: none; z-index: 1; }
 .yt-stage > .yt-loading { inset: auto; left: 50%; top: 50%; width: auto; height: auto; }
 .yt-loading .spinner { width: 22px; height: 22px; margin: 0; border-width: 3px; }
+
+/* access log (Impostazioni → Chi si collega) */
+.access-page { max-width: none; }
+.access-wrap { overflow-x: auto; }
+table.access { border-collapse: collapse; font-size: 14px; min-width: 100%; }
+table.access th, table.access td { text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
+table.access th { color: var(--muted); font-weight: 600; }
+table.access td.num { text-align: right; font-variant-numeric: tabular-nums; }

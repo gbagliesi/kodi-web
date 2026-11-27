@@ -82,6 +82,9 @@ JavaScript.
   la chiave di YouTube), canali YouTube salvati e opzioni. Gruppi separati
   (per esempio `bambini`), possibilità di scollegare un dispositivo, storico
   di 30 giorni sul Worker
+- **Registro degli accessi** (Impostazioni → Chi si collega, solo per il
+  proprietario del Worker): chi si collega, da dove, con quanti dispositivi e
+  per quanto tempo; senza indirizzi IP né titoli guardati
 - File locali (app File di iPad, iCloud, chiavette USB) senza caricarli da
   nessuna parte, e URL diretti di stream
 - Add-on con repository (quello privato del Worker o repository tuoi),
@@ -173,7 +176,7 @@ accanto a `kodi-web` prima di lanciarli.
 l'app in Chromium con dimensioni da iPad e simula le API esterne) e poi
 `remote.mjs` (telecomando, con uno schermo e un cellulare collegati al relay
 del Worker), `subtitles.mjs`, `raiplay.mjs`, `la7.mjs`, `storage.mjs` e
-`sync.mjs` (tre Salotto e lo store del Worker). Altri test si lanciano a
+`sync.mjs` (tre Salotto e lo store del Worker), `access.mjs` (registro degli accessi). Altri test si lanciano a
 parte con `node tests/<nome>.mjs`: `zoom.mjs`, `mediaset.mjs`, `youtube.mjs`.
 
 ## Perché add-on JavaScript e non quelli di Kodi?

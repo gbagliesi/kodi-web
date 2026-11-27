@@ -8,6 +8,7 @@ import { handleNavKey, focusables } from './nav.js';
 import { versionLabel } from './version.js';
 import * as remote from './remote-host.js';
 import * as sync from './sync.js';
+import * as presence from './presence.js';
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -193,7 +194,7 @@ async function route() {
   // pages that can be the start page (📌): sections and add-on folders
   pinBtn.hidden = !['video', 'music', 'live', 'guide', 'files', 'favourites', 'browse'].includes(section);
   updatePinBtn();
-  if (section !== 'settings' && section !== 'remote') store.save('lastPage', location.hash);
+  if (section !== 'settings' && section !== 'remote' && section !== 'access') store.save('lastPage', location.hash);
   try {
     switch (section) {
       case '': renderHome(); break;
@@ -206,6 +207,7 @@ async function route() {
       case 'addons': rest[0] === 'repo' ? await renderRepo() : rest[0] ? renderAddonInfo(rest[0]) : renderAddons(); break;
       case 'settings': renderSettings(); break;
       case 'remote': await renderRemote(); break;
+      case 'access': await renderAccess(params); break;
       case 'browse': await renderBrowse(rest[0], params.get('p') || '', params); break;
       default: renderHome();
     }
@@ -1318,6 +1320,9 @@ function renderSettings() {
       h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => go('remote') }, '📱 Collega il cellulare')),
       h('div', { class: 'hint' }, 'Usa il cellulare come telecomando di questo schermo: canali, volume, pausa, sincronia audio e guida TV. Serve il proxy Cloudflare.')),
     syncField(),
+    h('div', { class: 'field' }, h('label', {}, 'Accessi al tuo Salotto'),
+      h('div', { class: 'actions' }, h('button', { class: 'btn focusable', id: 'access-btn', onclick: () => go('access') }, '👥 Chi si collega')),
+      h('div', { class: 'hint' }, 'Chi usa Salotto con il tuo Worker (tu o gli amici con il loro token), da dove, con quanti dispositivi e per quanto tempo. Solo con il token del proprietario.')),
     h('div', { class: 'field check' }, resume, h('label', { for: 'resume' }, 'Riprendi i video dal punto in cui li hai lasciati')),
     /Android/i.test(navigator.userAgent) && !isTvApp ? h('div', { class: 'field check' }, autoPip, h('label', { for: 'autopip' }, 'Finestra mobile automatica: i video si aprono a schermo intero, così uscendo dall\'app continuano in una finestra mobile')) : null,
     h('div', { class: 'field' }, h('label', { for: 'startpage' }, 'Pagina iniziale'), startSel,
@@ -1384,6 +1389,65 @@ remote.onStatus((st) => {
 });
 const remoteLine = (st) => !st.enabled ? 'Telecomando spento.' : !st.connected ? 'Collegamento al server…'
   : st.remotes ? `Collegato: ${st.remotes === 1 ? '1 cellulare' : st.remotes + ' cellulari'} ✓` : 'Pronto: in attesa del cellulare.';
+
+// ---------------------------------------------------------------- access log (owner only)
+const fmtDur = (ms) => {
+  const m = Math.round(ms / 60000);
+  return m < 1 ? '<1 min' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0');
+};
+const fmtSeen = (t) => {
+  const d = new Date(t), today = new Date();
+  const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === today.toDateString()) return 'oggi ' + time;
+  if (d.toDateString() === new Date(Date.now() - 86400000).toDateString()) return 'ieri ' + time;
+  return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' }) + ' ' + time;
+};
+const placeOf = (v) => [v.city, v.region && v.region !== v.city ? v.region : '', v.country].filter(Boolean).join(', ') || '—';
+const whoOf = (v) => v.who ? v.who : 'tu';
+
+async function renderAccess(params) {
+  setCrumbs(['Impostazioni', 'Accessi']);
+  backBtn.hidden = false;
+  const days = [1, 7, 30, 90].includes(+params.get('days')) ? +params.get('days') : 7;
+  loading('Leggo il registro degli accessi…');
+  const at = location.hash;
+  let data;
+  try { data = await presence.visits(days); } catch (e) {
+    if (location.hash !== at) return;
+    fill(view, h('div', { class: 'form' }, h('p', {}, e.message), h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => route() }, '⟳ Riprova'))));
+    focusFirst();
+    return;
+  }
+  if (location.hash !== at) return;
+  const now = data.now, gap = data.gap || 360000;
+  const list = data.sessions || [];
+  const live = list.filter(v => now - v.last < gap);
+  // one line per person: devices, visits, time
+  const people = new Map();
+  for (const v of list) {
+    const p = people.get(whoOf(v)) || { who: whoOf(v), devices: new Set(), visits: 0, time: 0, watch: 0, last: 0, places: new Set() };
+    p.devices.add(v.device); p.visits++; p.time += v.last - v.start; p.watch += v.watch * 1000; p.last = Math.max(p.last, v.last);
+    p.places.add(placeOf(v));
+    people.set(p.who, p);
+  }
+  const td = (x, cls) => h('td', cls ? { class: cls } : {}, x);
+  const table = (head, rows) => h('div', { class: 'access-wrap' }, h('table', { class: 'access' }, h('thead', {}, h('tr', {}, ...head.map(x => h('th', {}, x)))), h('tbody', {}, ...rows)));
+  const devLabel = (v) => (v.name && !String(v.platform || '').startsWith(v.name) ? v.name + ' · ' : '') + (v.platform || '');
+  fill(view, h('div', { class: 'form access-page' },
+    h('div', { class: 'actions' }, ...[[1, 'Oggi e ieri'], [7, '7 giorni'], [30, '30 giorni'], [90, '90 giorni']].map(([d, l]) =>
+      h('button', { class: 'btn focusable' + (d === days ? ' primary' : ''), onclick: () => { location.hash = '#/access?days=' + d; } }, l)),
+      h('button', { class: 'btn focusable', onclick: () => route() }, '⟳')),
+    h('div', { class: 'section-title' }, 'Collegati adesso: ' + live.length),
+    live.length ? table(['Chi', 'Dispositivo', 'Da dove', 'Da'], live.map(v => h('tr', {}, td(whoOf(v)), td(devLabel(v)), td(placeOf(v)), td(fmtDur(now - v.start))))) : h('div', { class: 'hint' }, 'Nessuno in questo momento.'),
+    h('div', { class: 'section-title' }, 'Per persona'),
+    people.size ? table(['Chi', 'Dispositivi', 'Visite', 'Tempo', 'Video', 'Ultima volta', 'Da dove'], [...people.values()].sort((a, b) => b.last - a.last).map(p =>
+      h('tr', {}, td(p.who), td(String(p.devices.size), 'num'), td(String(p.visits), 'num'), td(fmtDur(p.time), 'num'), td(p.watch ? fmtDur(p.watch) : '—', 'num'), td(fmtSeen(p.last)), td([...p.places].join(' · '))))) : h('div', { class: 'hint' }, 'Nessun accesso in questo periodo.'),
+    list.length ? h('div', { class: 'section-title' }, 'Visite (' + list.length + ')') : null,
+    list.length ? table(['Inizio', 'Durata', 'Video', 'Chi', 'Dispositivo', 'Da dove', 'Rete', 'Versione'], list.map(v =>
+      h('tr', {}, td(fmtSeen(v.start)), td(fmtDur(v.last - v.start), 'num'), td(v.watch ? fmtDur(v.watch * 1000) : '—', 'num'), td(whoOf(v)), td(devLabel(v)), td(placeOf(v)), td(v.net || '—'), td(v.version || '')))) : null,
+    h('div', { class: 'hint' }, 'Ogni Salotto aperto lo segnala al tuo Worker ogni 2 minuti circa: la durata è quindi approssimata. «Video» è il tempo passato a guardare. Il luogo è quello che Cloudflare deduce dalla connessione (città spesso approssimata, con la VPN o la rete mobile può essere lontana). Non vengono salvati indirizzi IP né cosa si guarda; le visite più vecchie di 180 giorni si cancellano da sole.')));
+  focusFirst();
+}
 
 async function renderRemote() {
   setCrumbs(['Telecomando']);
@@ -1509,6 +1573,7 @@ console.info('Salotto', versionLabel());
   if (start) { history.replaceState(null, '', '#/'); history.pushState(null, '', start); }
   route();
   sync.start();
+  presence.start();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
   }

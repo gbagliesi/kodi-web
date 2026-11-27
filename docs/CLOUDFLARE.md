@@ -328,8 +328,8 @@ poi l'elenco delle visite.
   di 180 giorni si cancellano da sole.
 - I dati stanno in un Durable Object `AccessLog` (SQLite) del tuo account,
   pubblicato dall'Action del passo 4 (collegamento `ACCESS`). Li legge solo il
-  token del proprietario (`TOKEN`); con il token di un amico la pagina dice che
-  non è permesso.
+  token del proprietario (`TOKEN`): con il token di un amico il pulsante in
+  Impostazioni non compare e la pagina dice che non è permesso.
 - Se usi questa funzione con gli amici, è corretto dirglielo.
 
 ## Da sapere

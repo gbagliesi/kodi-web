@@ -44,6 +44,7 @@
  *                                             city and network come from Cloudflare; no IP address
  *                                             is kept. Beats less than ACCESS_GAP apart are one visit.
  *   GET  /access?token=<TOKEN>&days=30       -> {now, sessions:[…]}: the visits, owner only.
+ *   GET  /access?token=…&check=1             -> "ok" for the owner, 403 otherwise (show the page?).
  *   One Durable Object (AccessLog, SQLite); needs the ACCESS binding of wrangler.toml.
  *
  * Settings (Worker → Settings → Variables and Secrets):
@@ -422,6 +423,7 @@ async function handleAccess(request, env, u) {
   const log = env.ACCESS.get(env.ACCESS.idFromName('log'));
   if (request.method === 'GET') {
     if (who !== '') return text('solo con il token del proprietario', 403);
+    if (u.searchParams.get('check') === '1') return text('ok'); // the app asks whether to show the page
     return log.fetch(new Request('https://access.log/?' + u.searchParams.toString()));
   }
   if (request.method !== 'POST') return text('metodo non consentito', 405);

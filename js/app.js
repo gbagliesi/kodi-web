@@ -1427,8 +1427,8 @@ async function renderAccess(params) {
   // one line per person: devices, visits, time
   const people = new Map();
   for (const v of list) {
-    const p = people.get(whoOf(v)) || { who: whoOf(v), devices: new Set(), visits: 0, time: 0, watch: 0, last: 0, places: new Set() };
-    p.devices.add(v.device); p.visits++; p.time += v.last - v.start; p.watch += v.watch * 1000; p.last = Math.max(p.last, v.last);
+    const p = people.get(whoOf(v)) || { who: whoOf(v), devices: new Set(), visits: 0, time: 0, watch: 0, proxy: 0, last: 0, places: new Set() };
+    p.devices.add(v.device); p.visits++; p.time += v.last - v.start; p.watch += v.watch * 1000; p.proxy += (v.proxy || 0) * 1000; p.last = Math.max(p.last, v.last);
     p.places.add(placeOf(v));
     people.set(p.who, p);
   }
@@ -1442,12 +1442,12 @@ async function renderAccess(params) {
     h('div', { class: 'section-title' }, 'Collegati adesso: ' + live.length),
     live.length ? table(['Chi', 'Dispositivo', 'Da dove', 'Da'], live.map(v => h('tr', {}, td(whoOf(v)), td(devLabel(v)), td(placeOf(v)), td(fmtDur(now - v.start))))) : h('div', { class: 'hint' }, 'Nessuno in questo momento.'),
     h('div', { class: 'section-title' }, 'Per persona'),
-    people.size ? table(['Chi', 'Dispositivi', 'Visite', 'Tempo', 'Video', 'Ultima volta', 'Da dove'], [...people.values()].sort((a, b) => b.last - a.last).map(p =>
-      h('tr', {}, td(p.who), td(String(p.devices.size), 'num'), td(String(p.visits), 'num'), td(fmtDur(p.time), 'num'), td(p.watch ? fmtDur(p.watch) : '—', 'num'), td(fmtSeen(p.last)), td([...p.places].join(' · '))))) : h('div', { class: 'hint' }, 'Nessun accesso in questo periodo.'),
+    people.size ? table(['Chi', 'Dispositivi', 'Visite', 'Tempo', 'Video', 'Via proxy', 'Diretta', 'Ultima volta', 'Da dove'], [...people.values()].sort((a, b) => b.last - a.last).map(p =>
+      h('tr', {}, td(p.who), td(String(p.devices.size), 'num'), td(String(p.visits), 'num'), td(fmtDur(p.time), 'num'), td(p.watch ? fmtDur(p.watch) : '—', 'num'), td(p.proxy ? fmtDur(p.proxy) : '—', 'num'), td(p.watch - p.proxy > 0 ? fmtDur(p.watch - p.proxy) : '—', 'num'), td(fmtSeen(p.last)), td([...p.places].join(' · '))))) : h('div', { class: 'hint' }, 'Nessun accesso in questo periodo.'),
     list.length ? h('div', { class: 'section-title' }, 'Visite (' + list.length + ')') : null,
-    list.length ? table(['Inizio', 'Durata', 'Video', 'Chi', 'Dispositivo', 'Da dove', 'Rete', 'Versione'], list.map(v =>
-      h('tr', {}, td(fmtSeen(v.start)), td(fmtDur(v.last - v.start), 'num'), td(v.watch ? fmtDur(v.watch * 1000) : '—', 'num'), td(whoOf(v)), td(devLabel(v)), td(placeOf(v)), td(v.net || '—'), td(v.version || '')))) : null,
-    h('div', { class: 'hint' }, 'Ogni Salotto aperto lo segnala al tuo Worker ogni 2 minuti circa: la durata è quindi approssimata. «Video» è il tempo passato a guardare. Il luogo è quello che Cloudflare deduce dalla connessione (città spesso approssimata, con la VPN o la rete mobile può essere lontana). Non vengono salvati indirizzi IP né cosa si guarda; le visite più vecchie di 180 giorni si cancellano da sole.')));
+    list.length ? table(['Inizio', 'Durata', 'Video', 'Via proxy', 'Chi', 'Dispositivo', 'Da dove', 'Rete', 'Versione'], list.map(v =>
+      h('tr', {}, td(fmtSeen(v.start)), td(fmtDur(v.last - v.start), 'num'), td(v.watch ? fmtDur(v.watch * 1000) : '—', 'num'), td(v.proxy ? fmtDur(v.proxy * 1000) : '—', 'num'), td(whoOf(v)), td(devLabel(v)), td(placeOf(v)), td(v.net || '—'), td(v.version || '')))) : null,
+    h('div', { class: 'hint' }, 'Ogni Salotto aperto lo segnala al tuo Worker ogni 2 minuti circa: la durata è quindi approssimata. «Video» è il tempo passato a guardare; «Via proxy» la parte arrivata attraverso il tuo Worker (consuma la sua quota giornaliera), «Diretta» quella arrivata dal sito del canale. Il luogo è quello che Cloudflare deduce dalla connessione (città spesso approssimata, con la VPN o la rete mobile può essere lontana). Non vengono salvati indirizzi IP né cosa si guarda; le visite più vecchie di 180 giorni si cancellano da sole.')));
   focusFirst();
 }
 

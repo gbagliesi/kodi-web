@@ -311,7 +311,8 @@ Qui i dettagli tecnici.
 **Impostazioni → 👥 Chi si collega** mostra chi usa Salotto con il tuo Worker:
 chi è collegato adesso e, per gli ultimi giorni, per ogni persona (tu o un
 amico, dal nome del suo `TOKEN_<NOME>`) quanti dispositivi, quante visite,
-quanto tempo in tutto e quanto davanti a un video, l'ultima volta e da dove;
+quanto tempo in tutto e quanto davanti a un video (diviso tra «via proxy»,
+che consuma la quota giornaliera del Worker, e «diretta»), l'ultima volta e da dove;
 poi l'elenco delle visite.
 
 - Ogni Salotto aperto (sullo schermo o nella finestra mobile) manda al Worker

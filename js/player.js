@@ -48,6 +48,8 @@ let avNative = false;     // hls.js failed with the sync on: back to the native 
 let subsNative = false;   // hls.js (needed on Safari to hear the sound for generated subtitles) failed
 
 export const isOpen = () => !el.root.hidden;
+/** Is the video on screen coming through the proxy? (the route badge: Proxy / Diretto) */
+export const viaProxy = () => isOpen() && !el.route.hidden && el.route.classList.contains('proxy');
 
 function fmt(t) {
   if (!isFinite(t) || t < 0) return '0:00';

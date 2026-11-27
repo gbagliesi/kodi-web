@@ -37,10 +37,10 @@
  *
  * Access log (only here, not in server.js):
  *   GET  /access/health                     -> "ok" when the access log is set up
- *   POST /access?token=…                     -> body {device, name, platform, version, watch}: the
+ *   POST /access?token=…                     -> body {device, name, platform, version, watch, proxy}: the
  *                                             app says "I am here" every couple of minutes while it
  *                                             is on screen (watch = seconds of video since the last
- *                                             time). Who (owner or friend's name), country, region,
+ *                                             time; proxy = how many of them came through here). Who (owner or friend's name), country, region,
  *                                             city and network come from Cloudflare; no IP address
  *                                             is kept. Beats less than ACCESS_GAP apart are one visit.
  *   GET  /access?token=<TOKEN>&days=30       -> {now, sessions:[…]}: the visits, owner only.
@@ -381,6 +381,8 @@ export class AccessLog {
       start INTEGER NOT NULL, last INTEGER NOT NULL, watch INTEGER NOT NULL, beats INTEGER NOT NULL)`);
     this.sql.exec('CREATE INDEX IF NOT EXISTS visits_device ON visits (device, last)');
     this.sql.exec('CREATE INDEX IF NOT EXISTS visits_last ON visits (last)');
+    // v0.28.2: seconds of video that came through the proxy (the rest was direct)
+    try { this.sql.exec('ALTER TABLE visits ADD COLUMN proxy INTEGER NOT NULL DEFAULT 0'); } catch { /* already there */ }
   }
 
   async fetch(request) {
@@ -397,16 +399,17 @@ export class AccessLog {
     if (!DEVICE_RE.test(device)) return text('dispositivo non valido', 400);
     const who = short(request.headers.get('X-Salotto-Who'), 30);
     const watch = Math.max(0, Math.min(600, Math.round(+b.watch || 0)));
+    const proxy = Math.max(0, Math.min(watch, Math.round(+b.proxy || 0)));
     const info = [short(b.name), short(b.platform), short(b.version, 30)];
     const dec = (v) => { try { return decodeURIComponent(v || ''); } catch { return ''; } };
     const place = ['country', 'region', 'city', 'net'].map(k => short(dec(request.headers.get('X-Salotto-' + k)), 60));
     const cur = this.sql.exec('SELECT id FROM visits WHERE device = ? AND who = ? AND last > ? ORDER BY last DESC LIMIT 1', device, who, now - ACCESS_GAP).toArray()[0];
     if (cur) {
-      this.sql.exec('UPDATE visits SET last = ?, watch = watch + ?, beats = beats + 1, name = ?, platform = ?, version = ?, country = ?, region = ?, city = ?, net = ? WHERE id = ?',
-        now, watch, ...info, ...place, cur.id);
+      this.sql.exec('UPDATE visits SET last = ?, watch = watch + ?, proxy = proxy + ?, beats = beats + 1, name = ?, platform = ?, version = ?, country = ?, region = ?, city = ?, net = ? WHERE id = ?',
+        now, watch, proxy, ...info, ...place, cur.id);
     } else {
-      this.sql.exec('INSERT INTO visits (device, who, name, platform, version, country, region, city, net, start, last, watch, beats) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
-        device, who, ...info, ...place, now, now, watch);
+      this.sql.exec('INSERT INTO visits (device, who, name, platform, version, country, region, city, net, start, last, watch, proxy, beats) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+        device, who, ...info, ...place, now, now, watch, proxy);
       // forget old visits now and then
       if (Math.random() < 0.05) this.sql.exec('DELETE FROM visits WHERE last < ?', now - ACCESS_DAYS * 86400000);
     }

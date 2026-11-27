@@ -87,6 +87,19 @@ export function start() {
   setTimeout(() => beat(), 3000); // after the proxy has been found
 }
 
+/** Is this device's token the Worker owner's (TOKEN)? Only then Settings shows the access log. */
+const ownerCache = new Map();
+export function isOwner() {
+  const ep = endpoint();
+  if (!ep) return Promise.resolve(false);
+  const key = ep.base + '|' + ep.token;
+  if (!ownerCache.has(key)) {
+    ownerCache.set(key, fetch(ep.base + '/access?check=1&token=' + encodeURIComponent(ep.token), { cache: 'no-store' })
+      .then(r => r.ok).catch(() => { ownerCache.delete(key); return false; }));
+  }
+  return ownerCache.get(key);
+}
+
 /** The owner's view: visits of the last days, or throws with a message to show. */
 export async function visits(days = 30) {
   const ep = endpoint();

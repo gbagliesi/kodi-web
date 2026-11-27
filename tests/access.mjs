@@ -37,7 +37,7 @@ const W = 'https://salotto-proxy.example.workers.dev';
 const cfReq = (url, init, cf) => { const r = new Request(url, init); Object.defineProperty(r, 'cf', { value: cf }); return r; };
 const beat = (token, body, cf = { country: 'IT', region: 'Tuscany', city: 'Pisa', asOrganization: 'Telecom Italia' }) =>
   worker.fetch(cfReq(W + '/access?token=' + token, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'text/plain' } }, cf), env);
-const read = async (token, q = '') => { const r = await worker.fetch(new Request(W + '/access?token=' + token + q), env); return { status: r.status, body: r.status === 200 ? await r.json() : await r.text() }; };
+const read = async (token, q = '') => { const r = await worker.fetch(new Request(W + '/access?token=' + token + q), env); return { status: r.status, body: r.status === 200 && !q.includes('check') ? await r.json() : await r.text() }; };
 
 async function unit() {
   log = new AccessLog(fakeCtx());
@@ -53,6 +53,8 @@ async function unit() {
     { country: 'IT', region: 'Lazio', city: 'Roma', asOrganization: 'Vodafone Italia S.p.A.' });
 
   assert.equal((await read(env.TOKEN_MARCO)).status, 403, 'a friend cannot read the log');
+  assert.equal((await read(env.TOKEN_MARCO, '&check=1')).status, 403);
+  assert.equal((await read(env.TOKEN, '&check=1')).status, 200);
   let r = await read(env.TOKEN);
   assert.equal(r.status, 200);
   const s = r.body.sessions;
@@ -120,6 +122,7 @@ async function ui() {
     await beat(env.TOKEN_MARCO, { device: 'marco-phone', name: 'Android', platform: 'Android Chrome', version: '0.28.0' }, { country: 'IT', region: 'Lazio', city: 'Roma', asOrganization: 'Vodafone' });
 
     await page.goto(BASE + '#/settings');
+    await page.waitForSelector('#access-btn', { state: 'visible' });
     await page.click('#access-btn');
     await page.waitForSelector('table.access');
     const txt = await page.textContent('#view');
@@ -132,8 +135,11 @@ async function ui() {
 
     // with a friend's token the page explains it is the owner's
     await page.evaluate((t) => { const s = JSON.parse(localStorage.getItem('salotto:settings')); s.proxyToken = t; localStorage.setItem('salotto:settings', JSON.stringify(s)); }, env.TOKEN_MARCO);
-    await page.goto(BASE + '#/access');
+    await page.goto(BASE + '#/settings');
     await page.reload();
+    await page.waitForTimeout(1500);
+    assert.equal(await page.isVisible('#access-btn'), false, 'friends do not see the button');
+    await page.goto(BASE + '#/access');
     await page.waitForFunction(() => /solo il proprietario/.test(document.getElementById('view').textContent));
     console.log('✓ app: beats sent, «Chi si collega» lists visits, friends are refused');
     assert.deepEqual(errors, []);

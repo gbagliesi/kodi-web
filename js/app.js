@@ -1320,9 +1320,9 @@ function renderSettings() {
       h('div', { class: 'actions' }, h('button', { class: 'btn focusable', onclick: () => go('remote') }, '📱 Collega il cellulare')),
       h('div', { class: 'hint' }, 'Usa il cellulare come telecomando di questo schermo: canali, volume, pausa, sincronia audio e guida TV. Serve il proxy Cloudflare.')),
     syncField(),
-    h('div', { class: 'field' }, h('label', {}, 'Accessi al tuo Salotto'),
+    h('div', { class: 'field', id: 'access-field', hidden: true }, h('label', {}, 'Accessi al tuo Salotto'),
       h('div', { class: 'actions' }, h('button', { class: 'btn focusable', id: 'access-btn', onclick: () => go('access') }, '👥 Chi si collega')),
-      h('div', { class: 'hint' }, 'Chi usa Salotto con il tuo Worker (tu o gli amici con il loro token), da dove, con quanti dispositivi e per quanto tempo. Solo con il token del proprietario.')),
+      h('div', { class: 'hint' }, 'Chi usa Salotto con il tuo Worker (tu o gli amici con il loro token), da dove, con quanti dispositivi e per quanto tempo. Lo vedi solo tu, con il token principale.')),
     h('div', { class: 'field check' }, resume, h('label', { for: 'resume' }, 'Riprendi i video dal punto in cui li hai lasciati')),
     /Android/i.test(navigator.userAgent) && !isTvApp ? h('div', { class: 'field check' }, autoPip, h('label', { for: 'autopip' }, 'Finestra mobile automatica: i video si aprono a schermo intero, così uscendo dall\'app continuano in una finestra mobile')) : null,
     h('div', { class: 'field' }, h('label', { for: 'startpage' }, 'Pagina iniziale'), startSel,
@@ -1356,6 +1356,8 @@ function renderSettings() {
     h('p', { class: 'hint' }, 'Salotto è un media center leggero ispirato ai media center da salotto, che gira interamente nel browser. Gli add-on sono script JavaScript eseguiti in isolamento (Web Worker). Usa solo fonti di cui hai i diritti.'),
   ));
   focusFirst();
+  // the access log is the owner's: shown only with the Worker's main token
+  presence.isOwner().then((ok) => { const f = $('access-field'); if (f && ok) f.hidden = false; });
 }
 
 // ---------------------------------------------------------------- phone remote

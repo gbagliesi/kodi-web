@@ -246,6 +246,7 @@ button { cursor: pointer; }
 #pl-vol { width: 120px; }
 input[type=range] { accent-color: var(--accent); height: 32px; }
 .player-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 80%; padding: 16px 22px; border-radius: 14px; background: rgba(0, 0, 0, .75); text-align: center; }
+.unmute-btn { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 5; padding: 12px 20px; border: 0; border-radius: 999px; background: var(--accent); color: #000; font: inherit; font-weight: 600; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
 .player-stage, .player-ui { touch-action: none; } /* vertical swipes change channel */
 #pl-cast.active, #pl-pip.active { color: var(--accent); }
 #pin-btn { filter: grayscale(1) opacity(.55); }

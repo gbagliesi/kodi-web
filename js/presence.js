@@ -4,14 +4,16 @@
 // (country, region, city, network); beats a few minutes apart make one visit, so the owner sees
 // who used Salotto, from where, on how many devices and for how long.
 // Sent: a random id of this device (made here, never synced), its screen name and kind, the app
-// version and how many seconds of video were watched since the last beat. No titles, no IP.
+// version and how many seconds of video were watched since the last beat (and how many of them
+// came through the proxy, which uses the Worker's daily quota). No titles, no IP.
 import { load, save } from './storage.js';
 import * as addons from './addons.js';
 import { VERSION } from './version.js';
+import { viaProxy } from './player.js';
 
 const BEAT = 120000;     // the Worker joins beats less than 6 minutes apart into one visit
 const TICK = 10000;      // how often the watching time is counted
-let started = false, watch = 0, lastBeat = 0;
+let started = false, watch = 0, watchProxy = 0, lastBeat = 0;
 
 /** Base address and token of the Worker set as proxy, or null. */
 export function endpoint() {
@@ -56,8 +58,8 @@ function watching() {
 
 function body() {
   const name = (load('remote', null) || {}).name || '';
-  const b = JSON.stringify({ device: deviceId(), name, platform: platform(), version: VERSION, watch: Math.round(watch) });
-  watch = 0;
+  const b = JSON.stringify({ device: deviceId(), name, platform: platform(), version: VERSION, watch: Math.round(watch), proxy: Math.round(watchProxy) });
+  watch = 0; watchProxy = 0;
   return b;
 }
 
@@ -77,7 +79,7 @@ export function start() {
   if (started) return;
   started = true;
   setInterval(() => {
-    if (watching()) watch += TICK / 1000;
+    if (watching()) { watch += TICK / 1000; if (viaProxy()) watchProxy += TICK / 1000; }
     if (active() && Date.now() - lastBeat >= BEAT) beat();
   }, TICK);
   document.addEventListener('visibilitychange', () => {

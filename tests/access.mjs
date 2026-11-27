@@ -46,10 +46,10 @@ async function unit() {
   assert.equal((await beat('wrong', { device: 'devdevdev1' })).status, 401, 'token required');
   assert.equal((await beat(env.TOKEN, { device: 'x' })).status, 400, 'device id checked');
 
-  assert.equal((await beat(env.TOKEN, { device: 'mac-0000001', name: 'Mac', platform: 'Mac Safari (app)', version: '0.28.0', watch: 30 })).status, 200);
+  assert.equal((await beat(env.TOKEN, { device: 'mac-0000001', name: 'Mac', platform: 'Mac Safari (app)', version: '0.28.0', watch: 30, proxy: 20 })).status, 200);
   await beat(env.TOKEN, { device: 'mac-0000001', name: 'Mac', platform: 'Mac Safari (app)', version: '0.28.0', watch: 100 });
   await beat(env.TOKEN, { device: 'tv-00000001', name: 'TV', platform: 'Fire TV', version: '0.28.0' });
-  await beat(env.TOKEN_MARCO, { device: 'marco-phone', name: 'Android', platform: 'Android Chrome', version: '0.27.8', watch: 9999 },
+  await beat(env.TOKEN_MARCO, { device: 'marco-phone', name: 'Android', platform: 'Android Chrome', version: '0.27.8', watch: 9999, proxy: 99999 },
     { country: 'IT', region: 'Lazio', city: 'Roma', asOrganization: 'Vodafone Italia S.p.A.' });
 
   assert.equal((await read(env.TOKEN_MARCO)).status, 403, 'a friend cannot read the log');
@@ -62,6 +62,7 @@ async function unit() {
   const mac = s.find(v => v.device === 'mac-0000001');
   assert.equal(mac.beats, 2);
   assert.equal(mac.watch, 130);
+  assert.equal(mac.proxy, 20, 'seconds through the proxy');
   assert.equal(mac.who, '');
   assert.equal(mac.city, 'Pisa');
   assert.equal(mac.net, 'Telecom Italia');
@@ -69,6 +70,7 @@ async function unit() {
   assert.ok(marco, 'friend named from TOKEN_MARCO');
   assert.equal(marco.city, 'Roma');
   assert.equal(marco.watch, 600, 'watching time capped per beat');
+  assert.equal(marco.proxy, 600, 'proxy time never more than watching time');
   assert.ok(!JSON.stringify(r.body).includes('127.0.0.1'), 'no IP kept');
 
   // a beat after a long pause opens a new visit
@@ -127,6 +129,7 @@ async function ui() {
     await page.waitForSelector('table.access');
     const txt = await page.textContent('#view');
     assert.match(txt, /Collegati adesso: 2/);
+    assert.match(txt, /Via proxy/);
     assert.match(txt, /marco/);
     assert.match(txt, /Pisa, Tuscany, IT/);
     assert.match(txt, /Roma, Lazio, IT/);

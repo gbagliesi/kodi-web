@@ -360,6 +360,18 @@ I video on demand riprendono dal punto in cui li hai lasciati (si può
 spegnere in **Impostazioni**). Il punto di ripresa passa agli altri
 dispositivi.
 
+### Più video insieme: «Stacca»
+
+Il pulsante «Stacca» (quadrato con la freccia, in basso a destra nel lettore) sposta il video, o la radio, in una finestra sopra la pagina: il lettore grande si chiude e puoi continuare a usare l'app, aprire un altro canale e staccare anche quello.
+
+- **Quante finestre**: fino a 4 sul computer, 2 su iPad/tablet, 1 sul telefono (un mini‑lettore). Aprendone una in più, la più vecchia si chiude. Sulla Fire TV il pulsante non c'è.
+- **Audio**: si sente un solo video alla volta. Tocca 🔊 su una finestra per sentire quella; le altre (e il lettore grande) si zittiscono. Il lettore grande mostra «Audio su …, tocca per sentire questo» per riprenderlo.
+- **Spostare e ridimensionare**: trascina la barra del titolo; l'angolo in basso a destra cambia la grandezza (il video resta 16:9). Con due o più finestre compare in basso «▦ Affianca» (le dispone una accanto all'altra, grandi quanto possibile) e «✕ Chiudi tutte».
+- **⤢** (o doppio clic sul video) riporta il video nel lettore grande; se nel lettore c'era già un video, i due si scambiano di posto.
+- **Fuori dal browser**: in Chrome e Edge sul computer il pulsante con il riquadro sposta la finestra in una finestra di sistema sempre in primo piano, anche sopra altre app (una alla volta). Altrove usa la finestra mobile del sistema, se c'è.
+- **Proxy**: ogni finestra scarica il proprio stream. Una finestra che passa dal proxy (bollino «Proxy») conta nella quota Cloudflare come uno spettatore in più. Nel registro degli accessi il tempo di visione conta una volta sola anche con più video insieme.
+- Nelle finestre non ci sono sottotitoli, sincronia audio né cambio canale: riportale nel lettore grande per usarli.
+
 ### Cambiare canale
 
 - **CH ▲ ▼**, oppure scorri in verticale con un dito (in su = canale

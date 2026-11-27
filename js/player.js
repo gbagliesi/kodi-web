@@ -25,6 +25,7 @@ const el = {
   cast: $('pl-cast'), route: $('pl-route'), stats: $('pl-stats'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
   osdName: $('pl-osd-name'), osdProg: $('pl-osd-prog'), prog: $('pl-prog'), info: $('pl-info'), epg: $('pl-epg'), epgCh: $('pl-epg-ch'), epgBody: $('pl-epg-body'), epgClose: $('pl-epgclose'), sync: $('pl-sync'), syncBadge: $('pl-syncbadge'), syncBox: $('pl-syncbox'), syncVal: $('pl-syncval'), syncNote: $('pl-syncnote'),
   syncEarlier: $('pl-syncearlier'), syncLater: $('pl-synclater'), syncReset: $('pl-syncreset'), syncClose: $('pl-syncclose'),
+  detach: $('pl-detach'),
   panel: $('pl-channels'), chNum: $('pl-chnum'), chItems: $('pl-chitems'), chClose: $('pl-chclose'),
 };
 
@@ -413,6 +414,7 @@ export async function play(item, stream, opts = {}) {
   updateChannelUi();
   const audio = item.type === 'audio' || /^audio\//.test(stream.mime || '');
   current = { item, stream, key: stream.url, audio, favEntry: opts.favEntry };
+  if (yielded) { yielded = false; el.unmute.hidden = true; el.unmute.innerHTML = '&#128263; Tocca per l\'audio'; el.video.muted = false; }
   avMs = audio ? 0 : getAvSync(avKey());
   avNative = false; subsNative = false;
   clearTimeout(avTimer);
@@ -495,6 +497,7 @@ export function close() {
   }
   el.root.hidden = true;
   current = null;
+  if (yielded) { yielded = false; el.unmute.hidden = true; el.unmute.innerHTML = '&#128263; Tocca per l\'audio'; v.muted = false; }
   channels = null;
   clearTimeout(zapTimer); clearTimeout(digitTimer); digits = ''; zapToken++;
   el.osd.hidden = true; el.panel.hidden = true; el.epg.hidden = true; el.syncBox.hidden = true;
@@ -779,7 +782,45 @@ const pipSupported = () => !!((document.pictureInPictureEnabled && !el.video.dis
   || (typeof el.video.webkitSupportsPresentationMode === 'function' && el.video.webkitSupportsPresentationMode('picture-in-picture')));
 const inPip = () => document.pictureInPictureElement === el.video || el.video.webkitPresentationMode === 'picture-in-picture';
 
-function updatePipBtn() { el.pip.hidden = !pipSupported() || !!current?.audio; }
+function updatePipBtn() { el.pip.hidden = !pipSupported() || !!current?.audio; updateDetachBtn(); }
+
+// ---------------------------------------------------------------- detached windows (see floating.js)
+// «Stacca»: the video goes on in a window of its own over the page, and the page is free again.
+// Radio too (a small bar). Not on the TV (one window, as before), not while casting.
+function updateDetachBtn() {
+  el.detach.hidden = TV_APP || document.body.classList.contains('tv') || !current || casting;
+}
+/** What a detached window needs to go on with the video on screen (null: nothing to detach). */
+export function detachInfo() {
+  if (!isOpen() || !current || casting || !playing) return null;
+  const v = el.video;
+  return {
+    item: current.item, stream: current.stream, favEntry: current.favEntry, key: current.key,
+    channels: channels ? { list: channels.list, index: channels.index, numbers: channels.numbers } : null,
+    audio: !!current.audio, url: buildUrl(playing), useHls: !!hls, proxied: isProxied(buildUrl(playing)),
+    time: isLive() ? 0 : v.currentTime, live: isLive(), muted: v.muted || yielded, paused: v.paused,
+  };
+}
+// Only one video has the sound: the one chosen last (this player or a detached window).
+// 'salotto-audio' { from: 'main' | window id, label } says who took it.
+let yielded = false;
+const claimAudio = () => document.dispatchEvent(new CustomEvent('salotto-audio', { detail: { from: 'main' } }));
+function yieldAudio(label) {
+  if (!isOpen()) return;
+  if (!el.video.muted) { el.video.muted = true; }
+  yielded = true;
+  el.unmute.textContent = '\u{1F507} Audio su «' + label + '» · tocca per sentire questo';
+  el.unmute.hidden = false;
+}
+function takeAudioBack() {
+  yielded = false;
+  el.unmute.hidden = true;
+  el.unmute.innerHTML = '&#128263; Tocca per l\'audio';
+  el.video.muted = false;
+  claimAudio();
+}
+document.addEventListener('salotto-audio', (e) => { if (e.detail.from !== 'main') yieldAudio(e.detail.label || 'un\'altra finestra'); });
+
 
 async function enterPip(fromButton = false) {
   const v = el.video;
@@ -862,6 +903,7 @@ cast.initCast({
   onSession: (active) => {
     casting = active;
     updateCastBtn();
+    updateDetachBtn();
     updateSyncBtn();
     subs.setCasting(active);
     if (active) zoom.reset();
@@ -1519,7 +1561,10 @@ function unmuteNow(e) {
   changed();
 }
 for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) document.addEventListener(ev, unmuteNow, true);
-el.unmute.addEventListener('click', (e) => { e.stopPropagation(); unmuteNow(e); });
+el.unmute.addEventListener('click', (e) => { e.stopPropagation(); if (yielded) takeAudioBack(); else unmuteNow(e); });
+// this player plays with its sound (opened, or sound turned back on): the detached windows go quiet
+v.addEventListener('playing', () => { if (!v.muted && !yielded) claimAudio(); });
+v.addEventListener('volumechange', () => { if (isOpen() && !v.muted && v.volume > 0) { if (yielded) { yielded = false; el.unmute.hidden = true; el.unmute.innerHTML = '&#128263; Tocca per l\'audio'; } claimAudio(); } });
 // iPhone/iPad: the video only gets sound if it was touched by a tap. Opening a video waits for the
 // add-on (a network request), and by then Safari no longer counts the tap, so the first video of a
 // visit started muted or not at all. Unlocking the (still empty) video on the first tap of the

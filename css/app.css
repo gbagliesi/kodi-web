@@ -542,3 +542,30 @@ table.access { border-collapse: collapse; font-size: 14px; min-width: 100%; }
 table.access th, table.access td { text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,.08); white-space: nowrap; }
 table.access th { color: var(--muted); font-weight: 600; }
 table.access td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Detached windows («Stacca», js/floating.js) ---------- */
+.fw-layer { position: fixed; inset: 0; z-index: 55; pointer-events: none; }
+.fw { position: fixed; display: flex; flex-direction: column; pointer-events: auto; background: #000; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .65), 0 0 0 1px rgba(255, 255, 255, .12); touch-action: none; }
+.fw.has-audio { box-shadow: 0 10px 40px rgba(0, 0, 0, .65), 0 0 0 2px var(--accent, #3ea6ff); }
+.fw.dragging { opacity: .92; user-select: none; }
+.fw-bar { flex: 0 0 34px; display: flex; align-items: center; gap: 2px; padding: 0 4px 0 10px; background: rgba(22, 27, 34, .96); cursor: move; user-select: none; -webkit-user-select: none; }
+.fw-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fw-proxy { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: #7a4b00; color: #ffd28a; margin-right: 2px; }
+.fw-btn { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: inherit; font-size: 14px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.fw-btn:hover, .fw-btn:focus-visible { background: rgba(255, 255, 255, .14); }
+.fw-stage { position: relative; flex: 1; min-height: 0; background: #000; cursor: pointer; }
+.fw-stage video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.fw-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 90%; padding: 6px 10px; border-radius: 8px; background: rgba(0, 0, 0, .7); font-size: 12px; text-align: center; pointer-events: none; }
+.fw-grip { position: absolute; right: 0; bottom: 0; width: 22px; height: 22px; cursor: nwse-resize; touch-action: none;
+  background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, .45) 50%, rgba(255, 255, 255, .45) 60%, transparent 60%, transparent 72%, rgba(255, 255, 255, .45) 72%, rgba(255, 255, 255, .45) 82%, transparent 82%); }
+.fw-audio .fw-stage { display: flex; align-items: center; gap: 10px; padding: 0 10px; background: radial-gradient(circle at 20% 50%, #1f3b4d, #0d1117 80%); }
+.fw-audio .fw-stage video { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.fw-art { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; background: var(--panel); }
+.fw-audio .fw-grip { display: none; }
+.fw-dock { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 6px; padding: 4px; border-radius: 999px; background: rgba(22, 27, 34, .92); pointer-events: auto; box-shadow: 0 6px 24px rgba(0, 0, 0, .5); z-index: 100000; }
+.fw-dock .fw-btn { width: auto; padding: 0 12px; height: 30px; border-radius: 999px; font-size: 13px; }
+.fw.in-pip { position: static; width: 100vw !important; height: 100vh !important; border-radius: 0; box-shadow: none; }
+.fw.in-pip .fw-grip { display: none; }
+body.fw-pipbody { margin: 0; background: #000; overflow: hidden; }
+@media (pointer: coarse) { .fw-btn { width: 34px; height: 34px; font-size: 16px; } .fw-bar { flex-basis: 40px; } .fw-grip { width: 30px; height: 30px; } }

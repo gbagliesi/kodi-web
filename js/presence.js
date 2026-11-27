@@ -10,6 +10,7 @@ import { load, save } from './storage.js';
 import * as addons from './addons.js';
 import { VERSION } from './version.js';
 import { viaProxy } from './player.js';
+import { anyPlaying, anyProxyPlaying } from './floating.js';
 
 const BEAT = 120000;     // the Worker joins beats less than 6 minutes apart into one visit
 const TICK = 10000;      // how often the watching time is counted
@@ -52,6 +53,7 @@ const active = () => document.visibilityState === 'visible' || !!document.pictur
 function watching() {
   const v = document.getElementById('video');
   if (v && !v.paused && !v.ended && v.readyState > 2) return true;
+  if (anyPlaying()) return true; // detached windows (several at once count once)
   const y = document.getElementById('yt-player');
   return !!y && !y.hidden;
 }
@@ -79,7 +81,7 @@ export function start() {
   if (started) return;
   started = true;
   setInterval(() => {
-    if (watching()) { watch += TICK / 1000; if (viaProxy()) watchProxy += TICK / 1000; }
+    if (watching()) { watch += TICK / 1000; if (viaProxy() || anyProxyPlaying()) watchProxy += TICK / 1000; }
     if (active() && Date.now() - lastBeat >= BEAT) beat();
   }, TICK);
   document.addEventListener('visibilitychange', () => {

@@ -21,7 +21,7 @@ const el = {
   root: $('player'), video: $('video'), ui: $('player-ui'), title: $('pl-title'),
   close: $('pl-close'), fav: $('pl-fav'), play: $('pl-play'), rew: $('pl-rew'), fwd: $('pl-fwd'),
   seek: $('pl-seek'), cur: $('pl-cur'), dur: $('pl-dur'), vol: $('pl-vol'), fs: $('pl-fs'), pip: $('pl-pip'),
-  msg: $('pl-msg'), art: $('audio-art'), artImg: $('audio-art-img'),
+  msg: $('pl-msg'), unmute: $('pl-unmute'), art: $('audio-art'), artImg: $('audio-art-img'),
   cast: $('pl-cast'), route: $('pl-route'), stats: $('pl-stats'), chUp: $('pl-chup'), chDown: $('pl-chdown'), chList: $('pl-chlist'), osd: $('pl-osd'), osdNum: $('pl-osd-num'),
   osdName: $('pl-osd-name'), osdProg: $('pl-osd-prog'), prog: $('pl-prog'), info: $('pl-info'), epg: $('pl-epg'), epgCh: $('pl-epg-ch'), epgBody: $('pl-epg-body'), epgClose: $('pl-epgclose'), sync: $('pl-sync'), syncBadge: $('pl-syncbadge'), syncBox: $('pl-syncbox'), syncVal: $('pl-syncval'), syncNote: $('pl-syncnote'),
   syncEarlier: $('pl-syncearlier'), syncLater: $('pl-synclater'), syncReset: $('pl-syncreset'), syncClose: $('pl-syncclose'),
@@ -1501,13 +1501,39 @@ let unmuteOnTouch = false;
 function mutedFallback(err) {
   if (!remoteActive || !err || err.name !== 'NotAllowedError' || el.video.muted) return false;
   el.video.muted = true;
-  unmuteOnTouch = true;
+  setUnmuteOnTouch(true);
   el.video.play().then(() => showMsg('Il browser ha tolto l\'audio: tocca lo schermo una volta per riattivarlo', 6000)).catch(() => showMsg('Tocca ▶ per avviare'));
   changed();
   return true;
 }
-document.addEventListener('pointerdown', () => { if (unmuteOnTouch) { unmuteOnTouch = false; el.video.muted = false; } }, true);
-document.addEventListener('keydown', (e) => { if (unmuteOnTouch && e.isTrusted) { unmuteOnTouch = false; el.video.muted = false; } }, true);
+function setUnmuteOnTouch(on) {
+  unmuteOnTouch = !!on;
+  el.unmute.hidden = !unmuteOnTouch;
+}
+// iPhone/iPad (WebKit) count only a tap's end, a click or a key as a real gesture, not pointerdown
+function unmuteNow(e) {
+  if (!unmuteOnTouch || !e.isTrusted) return;
+  setUnmuteOnTouch(false);
+  el.video.muted = false;
+  if (el.video.paused && isOpen() && !casting) el.video.play().catch(() => {});
+  changed();
+}
+for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) document.addEventListener(ev, unmuteNow, true);
+el.unmute.addEventListener('click', (e) => { e.stopPropagation(); unmuteNow(e); });
+// iPhone/iPad: the video only gets sound if it was touched by a tap. Opening a video waits for the
+// add-on (a network request), and by then Safari no longer counts the tap, so the first video of a
+// visit started muted or not at all. Unlocking the (still empty) video on the first tap of the
+// visit lets every later play() have its sound.
+let mediaUnlocked = false;
+function unlockMedia(e) {
+  if (mediaUnlocked || !e.isTrusted) return;
+  const v = el.video;
+  if (v.currentSrc || v.src || isOpen()) return;
+  mediaUnlocked = true;
+  try { v.load(); } catch { /* ignore */ }
+  for (const ev of ['touchend', 'click', 'keydown']) document.removeEventListener(ev, unlockMedia, true);
+}
+for (const ev of ['touchend', 'click', 'keydown']) document.addEventListener(ev, unlockMedia, true);
 export function setRemoteActive(on) { remoteActive = !!on; }
 
 /** The player as the remote shows it. */
@@ -1548,10 +1574,10 @@ export function setVolume(pct) {
   if (casting) return;
   const v = el.video;
   v.volume = Math.max(0, Math.min(100, Math.round(pct))) / 100;
-  if (v.volume > 0 && v.muted) { v.muted = false; unmuteOnTouch = false; }
+  if (v.volume > 0 && v.muted) { v.muted = false; setUnmuteOnTouch(false); }
   if (isOpen()) wake();
 }
-export function toggleMute() { el.video.muted = !el.video.muted; unmuteOnTouch = false; }
+export function toggleMute() { el.video.muted = !el.video.muted; setUnmuteOnTouch(false); }
 export function avStep(dir) { if (current && !avBlocked()) setAv(avMs + Math.sign(dir) * AV_STEP); }
 export function avReset() { setAv(0); }
 export function toggleSync() { if (el.syncBox.hidden) openSync(); else closeSync(); }
